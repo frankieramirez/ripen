@@ -1,0 +1,30 @@
+mode: monitor
+max_updates_per_run: 1
+verification_timeout_seconds: 300
+candidate_min_age_seconds: 86400
+lease_ttl_seconds: 1800
+check_interval_seconds: 86400
+state_file: /data/updater.db
+
+portainer:
+  base_url: https://portainer:9443
+  api_key_file: /run/secrets/portainer_api_key
+  expected_username: nas-stack-updater
+  # Use one trust mechanism. The private-network certificate will be captured
+  # during deployment staging; never set a global "insecure" flag.
+  tls_fingerprint_sha256: REPLACE_DURING_STAGING
+
+stacks:
+  example-app:
+    enabled: true
+    auto_apply: false
+    expected_services: [example-app]
+    health:
+      type: http
+      url: http://example-app:8080/health
+      accepted_status: [200]
+      timeout_seconds: 5
+
+exclude:
+  - infrastructure
+  - multi-service-stack

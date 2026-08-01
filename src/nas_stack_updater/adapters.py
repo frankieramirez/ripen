@@ -1,0 +1,591 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+import http.client
+import json
+import re
+import secrets
+import socket
+import sqlite3
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+from .models import (
+    CandidateObservation,
+    HealthPolicy,
+    ImageReference,
+    PortainerStack,
+    UpdaterStatus,
+)
+
+
+class AdapterError(RuntimeError):
+    pass
+
+
+class PortainerError(AdapterError):
+    def __init__(self, status: int, detail: str) -> None:
+        super().__init__(f"Portainer HTTP {status}: {detail}")
+        self.status = status
+
+
+_REPOSITORY_PATTERN = re.compile(
+    r"^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
+    r"(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$"
+)
+_TAG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$")
+
+
+class JsonHttpsClient:
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        ca_file: str | None = None,
+        fingerprint_sha256: str | None = None,
+        timeout: float = 20,
+    ) -> None:
+        parsed = urllib.parse.urlsplit(base_url)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError("Portainer base_url must use https")
+        self.host = parsed.hostname
+        self.port = parsed.port or 443
+        self.base_path = parsed.path.rstrip("/")
+        self.ca_file = ca_file
+        self.fingerprint = fingerprint_sha256
+        self.timeout = timeout
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        headers: dict[str, str],
+        body: dict[str, object] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> tuple[int, object]:
+        if self.fingerprint:
+            context = ssl._create_unverified_context()  # noqa: SLF001 - verified below
+            check_hostname = False
+        else:
+            context = ssl.create_default_context(cafile=self.ca_file)
+            check_hostname = True
+        context.check_hostname = check_hostname
+        connection = http.client.HTTPSConnection(
+            self.host,
+            self.port,
+            timeout=self.timeout if timeout is None else timeout,
+            context=context,
+        )
+        encoded = None
+        request_headers = {"Accept": "application/json", **headers}
+        if body is not None:
+            encoded = json.dumps(body, separators=(",", ":")).encode()
+            request_headers["Content-Type"] = "application/json"
+        try:
+            connection.connect()
+            if self.fingerprint:
+                if connection.sock is None:
+                    raise AdapterError("TLS socket unavailable")
+                peer = connection.sock.getpeercert(binary_form=True)
+                actual = hashlib.sha256(peer).hexdigest().lower().replace(":", "")
+                expected = self.fingerprint.lower().replace(":", "")
+                if not hmac.compare_digest(actual, expected):
+                    raise AdapterError("Portainer TLS fingerprint mismatch")
+            target = f"{self.base_path}{path}"
+            connection.request(method, target, body=encoded, headers=request_headers)
+            response = connection.getresponse()
+            raw = response.read()
+        finally:
+            connection.close()
+        if not raw:
+            payload: object = None
+        else:
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"message": "non-JSON response"}
+        return response.status, payload
+
+
+class PortainerHttpAdapter:
+    def __init__(
+        self,
+        base_url: str,
+        api_key_file: str,
+        *,
+        ca_file: str | None = None,
+        fingerprint_sha256: str | None = None,
+        timeout: float = 20,
+        update_timeout: float = 600,
+    ) -> None:
+        key = Path(api_key_file).read_text(encoding="utf-8").strip()
+        if not key or any(character.isspace() for character in key):
+            raise ValueError("Portainer API key file is empty or contains whitespace")
+        self._headers = {"X-API-Key": key}
+        self._client = JsonHttpsClient(
+            base_url,
+            ca_file=ca_file,
+            fingerprint_sha256=fingerprint_sha256,
+            timeout=timeout,
+        )
+        self._update_timeout = update_timeout
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, object] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> object:
+        status, payload = self._client.request(
+            method, path, self._headers, body, timeout=timeout
+        )
+        if status < 200 or status >= 300:
+            detail = "request failed"
+            if isinstance(payload, dict):
+                detail = str(payload.get("message", payload.get("details", detail)))
+            raise PortainerError(status, detail)
+        return payload
+
+    def current_username(self) -> str:
+        payload = self._request("GET", "/api/users/me")
+        if not isinstance(payload, dict) or not isinstance(payload.get("Username"), str):
+            raise AdapterError("unexpected Portainer user response")
+        return payload["Username"]
+
+    def list_stacks(self) -> tuple[PortainerStack, ...]:
+        payload = self._request("GET", "/api/stacks")
+        if not isinstance(payload, list):
+            raise AdapterError("unexpected Portainer stacks response")
+        stacks: list[PortainerStack] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            raw_env = item.get("Env") or []
+            if not isinstance(raw_env, list):
+                raise AdapterError("unexpected Portainer stack entry")
+            env = tuple(
+                {"name": str(pair.get("name", "")), "value": str(pair.get("value", ""))}
+                for pair in raw_env
+                if isinstance(pair, dict)
+            )
+            try:
+                stacks.append(
+                    PortainerStack(
+                        id=int(item["Id"]),
+                        endpoint_id=int(item["EndpointId"]),
+                        name=str(item["Name"]),
+                        status=int(item["Status"]),
+                        env=env,
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise AdapterError("unexpected Portainer stack entry") from error
+        return tuple(stacks)
+
+    def get_stack_file(self, stack_id: int) -> str:
+        payload = self._request("GET", f"/api/stacks/{stack_id}/file")
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("StackFileContent"), str
+        ):
+            raise AdapterError("unexpected Portainer stack file response")
+        return payload["StackFileContent"]
+
+    def get_image_status(self, stack_id: int) -> str:
+        payload = self._request("GET", f"/api/stacks/{stack_id}/images_status")
+        if not isinstance(payload, dict) or not isinstance(payload.get("Status"), str):
+            raise AdapterError("unexpected Portainer image status response")
+        return payload["Status"].lower()
+
+    def update_stack(
+        self,
+        stack: PortainerStack,
+        compose: str,
+        env: tuple[dict[str, str], ...],
+        *,
+        repull: bool,
+    ) -> None:
+        body: dict[str, object] = {
+            "Env": list(env),
+            "Prune": False,
+            "RepullImageAndRedeploy": repull,
+            "StackFileContent": compose,
+        }
+        self._request(
+            "PUT",
+            f"/api/stacks/{stack.id}?endpointId={stack.endpoint_id}",
+            body,
+            timeout=self._update_timeout,
+        )
+
+
+def parse_image_reference(value: str) -> ImageReference:
+    original = value.strip()
+    if not original or "@" in original:
+        raise ValueError("image must be a mutable tagged reference")
+    last_segment = original.rsplit("/", 1)[-1]
+    if ":" in last_segment:
+        repository_part, tag = original.rsplit(":", 1)
+    else:
+        repository_part, tag = original, "latest"
+    first = repository_part.split("/", 1)[0]
+    if "." in first or ":" in first or first == "localhost":
+        registry, repository = repository_part.split("/", 1)
+    else:
+        registry = "registry-1.docker.io"
+        repository = repository_part
+        if "/" not in repository:
+            repository = f"library/{repository}"
+    if not _REPOSITORY_PATTERN.fullmatch(repository):
+        raise ValueError("image repository is not a valid OCI reference")
+    if not _TAG_PATTERN.fullmatch(tag):
+        raise ValueError("image tag is not a valid OCI tag")
+    return ImageReference(
+        registry=registry,
+        repository=repository,
+        tag=tag,
+        original=original,
+    )
+
+
+class OciRegistryAdapter:
+    _ACCEPT = ", ".join(
+        (
+            "application/vnd.oci.image.index.v1+json",
+            "application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.docker.distribution.manifest.list.v2+json",
+            "application/vnd.docker.distribution.manifest.v2+json",
+        )
+    )
+
+    def __init__(self, timeout: float = 20) -> None:
+        self.timeout = timeout
+
+    def resolve_digest(self, image: ImageReference) -> str:
+        url = f"https://{image.registry}/v2/{image.repository}/manifests/{image.tag}"
+        request = urllib.request.Request(url, method="HEAD", headers={"Accept": self._ACCEPT})
+        try:
+            response = urllib.request.urlopen(request, timeout=self.timeout)
+        except urllib.error.HTTPError as error:
+            if error.code != 401:
+                raise AdapterError(f"registry HTTP {error.code}") from error
+            challenge = error.headers.get("WWW-Authenticate", "")
+            token = self._bearer_token(challenge)
+            request.add_header("Authorization", f"Bearer {token}")
+            try:
+                response = urllib.request.urlopen(request, timeout=self.timeout)
+            except urllib.error.HTTPError as second_error:
+                raise AdapterError(f"registry HTTP {second_error.code}") from second_error
+            except (urllib.error.URLError, TimeoutError) as second_error:
+                raise AdapterError("registry request failed") from second_error
+        except (urllib.error.URLError, TimeoutError) as error:
+            raise AdapterError("registry request failed") from error
+        with response:
+            digest = response.headers.get("Docker-Content-Digest")
+        if not digest or not digest.startswith("sha256:"):
+            raise AdapterError("registry did not return a sha256 digest")
+        return digest
+
+    def _bearer_token(self, challenge: str) -> str:
+        if not challenge.lower().startswith("bearer "):
+            raise AdapterError("unsupported registry authentication challenge")
+        values: dict[str, str] = {}
+        for item in challenge[7:].split(","):
+            key, separator, value = item.strip().partition("=")
+            if separator:
+                values[key] = value.strip().strip('"')
+        realm = values.pop("realm", None)
+        if not realm:
+            raise AdapterError("registry bearer challenge missing realm")
+        parsed_realm = urllib.parse.urlsplit(realm)
+        if parsed_realm.scheme != "https" or not parsed_realm.hostname:
+            raise AdapterError("registry bearer realm must use https")
+        query = dict(urllib.parse.parse_qsl(parsed_realm.query, keep_blank_values=True))
+        query.update(values)
+        url = urllib.parse.urlunsplit(
+            parsed_realm._replace(query=urllib.parse.urlencode(query))
+        )
+        try:
+            with urllib.request.urlopen(url, timeout=self.timeout) as response:
+                payload = json.load(response)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            raise AdapterError("registry token request failed") from error
+        token = payload.get("token") or payload.get("access_token")
+        if not isinstance(token, str) or not token:
+            raise AdapterError("registry token response missing token")
+        return token
+
+
+class FunctionalHealthAdapter:
+    def check(self, policy: HealthPolicy) -> bool:
+        if policy.type == "http":
+            request = urllib.request.Request(policy.target, method="GET")
+            try:
+                with urllib.request.urlopen(
+                    request, timeout=policy.timeout_seconds
+                ) as response:
+                    return response.status in policy.accepted_status
+            except urllib.error.HTTPError as error:
+                return error.code in policy.accepted_status
+            except (urllib.error.URLError, TimeoutError):
+                return False
+        if policy.type == "tcp":
+            host, separator, port = policy.target.rpartition(":")
+            if not separator:
+                raise ValueError("TCP health target must be host:port")
+            try:
+                with socket.create_connection(
+                    (host, int(port)), timeout=policy.timeout_seconds
+                ):
+                    return True
+            except OSError:
+                return False
+        raise ValueError(f"unsupported health type: {policy.type}")
+
+
+class SqliteStateStore:
+    def __init__(self, path: str | Path) -> None:
+        self.path = str(path)
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        self._initialize()
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.path, timeout=10)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        return connection
+
+    def _initialize(self) -> None:
+        with self._connect() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS accepted_digests (
+                    stack TEXT PRIMARY KEY,
+                    digest TEXT NOT NULL,
+                    accepted_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS candidates (
+                    stack TEXT NOT NULL,
+                    digest TEXT NOT NULL,
+                    first_seen TEXT NOT NULL,
+                    last_seen TEXT NOT NULL,
+                    observation_count INTEGER NOT NULL,
+                    PRIMARY KEY (stack, digest)
+                );
+                CREATE TABLE IF NOT EXISTS attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stack TEXT NOT NULL,
+                    old_digest TEXT NOT NULL,
+                    new_digest TEXT NOT NULL,
+                    result TEXT NOT NULL,
+                    attempted_at TEXT NOT NULL,
+                    detail TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS breaker (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    is_open INTEGER NOT NULL,
+                    reason TEXT,
+                    changed_at TEXT NOT NULL,
+                    clear_reason TEXT
+                );
+                CREATE TABLE IF NOT EXISTS lease (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    acquired_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    owner_token TEXT NOT NULL
+                );
+                """
+            )
+            lease_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(lease)")
+            }
+            if "owner_token" not in lease_columns:
+                connection.execute(
+                    "ALTER TABLE lease ADD COLUMN owner_token TEXT NOT NULL DEFAULT ''"
+                )
+
+    def acquire_lease(self, now: datetime, ttl_seconds: int) -> str | None:
+        expires = now + timedelta(seconds=ttl_seconds)
+        owner_token = secrets.token_urlsafe(32)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT expires_at FROM lease WHERE singleton = 1"
+            ).fetchone()
+            if row and datetime.fromisoformat(row["expires_at"]) > now:
+                return None
+            connection.execute("DELETE FROM lease WHERE singleton = 1")
+            connection.execute(
+                "INSERT INTO lease(singleton, acquired_at, expires_at, owner_token) VALUES(1, ?, ?, ?)",
+                (now.isoformat(), expires.isoformat(), owner_token),
+            )
+            return owner_token
+
+    def release_lease(self, owner_token: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM lease WHERE singleton = 1 AND owner_token = ?",
+                (owner_token,),
+            )
+
+    def get_status(self, now: datetime) -> UpdaterStatus:
+        with self._connect() as connection:
+            breaker = connection.execute(
+                "SELECT is_open, reason FROM breaker WHERE singleton = 1"
+            ).fetchone()
+            digests = {
+                row["stack"]: row["digest"]
+                for row in connection.execute(
+                    "SELECT stack, digest FROM accepted_digests ORDER BY stack"
+                )
+            }
+            lease = connection.execute(
+                "SELECT expires_at FROM lease WHERE singleton = 1"
+            ).fetchone()
+        return UpdaterStatus(
+            breaker_open=bool(breaker and breaker["is_open"]),
+            breaker_reason=(breaker["reason"] if breaker and breaker["is_open"] else None),
+            accepted_digests=digests,
+            lease_active=bool(lease and datetime.fromisoformat(lease["expires_at"]) > now),
+        )
+
+    def get_accepted_digest(self, stack: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT digest FROM accepted_digests WHERE stack = ?", (stack,)
+            ).fetchone()
+        return row["digest"] if row else None
+
+    def set_accepted_digest(self, stack: str, digest: str, now: datetime) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO accepted_digests(stack, digest, accepted_at) VALUES(?, ?, ?)
+                ON CONFLICT(stack) DO UPDATE SET digest=excluded.digest, accepted_at=excluded.accepted_at
+                """,
+                (stack, digest, now.isoformat()),
+            )
+            connection.execute("DELETE FROM candidates WHERE stack = ?", (stack,))
+
+    def observe_candidate(
+        self, stack: str, digest: str, now: datetime
+    ) -> CandidateObservation:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM candidates WHERE stack = ? AND digest = ?",
+                (stack, digest),
+            ).fetchone()
+            if row:
+                count = int(row["observation_count"]) + 1
+                first_seen = datetime.fromisoformat(row["first_seen"])
+                connection.execute(
+                    "UPDATE candidates SET last_seen = ?, observation_count = ? WHERE stack = ? AND digest = ?",
+                    (now.isoformat(), count, stack, digest),
+                )
+            else:
+                count = 1
+                first_seen = now
+                connection.execute("DELETE FROM candidates WHERE stack = ?", (stack,))
+                connection.execute(
+                    "INSERT INTO candidates VALUES(?, ?, ?, ?, ?)",
+                    (stack, digest, now.isoformat(), now.isoformat(), count),
+                )
+        return CandidateObservation(digest, first_seen, now, count)
+
+    def record_attempt(
+        self,
+        stack: str,
+        old_digest: str,
+        new_digest: str,
+        result: str,
+        now: datetime,
+        detail: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO attempts(stack, old_digest, new_digest, result, attempted_at, detail) VALUES(?, ?, ?, ?, ?, ?)",
+                (stack, old_digest, new_digest, result, now.isoformat(), detail),
+            )
+
+    def open_breaker(self, reason: str, now: datetime) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO breaker(singleton, is_open, reason, changed_at, clear_reason)
+                VALUES(1, 1, ?, ?, NULL)
+                ON CONFLICT(singleton) DO UPDATE SET
+                    is_open=1, reason=excluded.reason, changed_at=excluded.changed_at, clear_reason=NULL
+                """,
+                (reason, now.isoformat()),
+            )
+
+    def clear_breaker(self, reason: str, now: datetime) -> None:
+        if not reason.strip():
+            raise ValueError("a clear-breaker reason is required")
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO breaker(singleton, is_open, reason, changed_at, clear_reason)
+                VALUES(1, 0, NULL, ?, ?)
+                ON CONFLICT(singleton) DO UPDATE SET
+                    is_open=0, reason=NULL, changed_at=excluded.changed_at, clear_reason=excluded.clear_reason
+                """,
+                (now.isoformat(), reason.strip()),
+            )
+
+
+class JsonLogNotifier:
+    _SECRET_MARKERS = (
+        "token",
+        "password",
+        "api_key",
+        "apikey",
+        "secret",
+        "authorization",
+        "credential",
+        "cookie",
+    )
+
+    @classmethod
+    def _redact(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: (
+                    "[redacted]"
+                    if any(marker in str(key).lower() for marker in cls._SECRET_MARKERS)
+                    else cls._redact(item)
+                )
+                for key, item in value.items()
+            }
+        if isinstance(value, (list, tuple)):
+            return [cls._redact(item) for item in value]
+        return value
+
+    def emit(self, event: str, fields: dict[str, object]) -> None:
+        safe_fields = self._redact(fields)
+        if not isinstance(safe_fields, dict):  # fields is typed as a dictionary
+            raise TypeError("notification fields must be a dictionary")
+        print(
+            json.dumps({"event": event, **safe_fields}, sort_keys=True, default=str),
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+class SystemClock:
+    def now(self) -> datetime:
+        return datetime.now(UTC)
+
+    def sleep(self, seconds: float) -> None:
+        time.sleep(seconds)

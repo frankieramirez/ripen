@@ -1,0 +1,27 @@
+services:
+  nas-stack-updater:
+    build:
+      context: .
+    image: nas-stack-updater:0.1.1
+    container_name: nas-stack-updater
+    user: "1031:1031"
+    command: ["--config", "/config/policy.yaml", "daemon", "--mode", "monitor"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    volumes:
+      - ./policy.yaml:/config/policy.yaml:ro
+      - ./data:/data
+      - ./secrets/portainer-api-key:/run/secrets/portainer_api_key:ro
+    networks:
+      - stack-control
+
+networks:
+  stack-control:
+    external: true

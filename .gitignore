@@ -1,0 +1,21 @@
+.pytest_cache/
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+policy.yaml
+policy.*.yaml
+updater.db*
+*.tar
+.DS_Store
+data/
+secrets/
+*.key
+*.pem
+*.crt
+
+# Local deployment records and one-off NAS diagnostics
+compose.portainer.backup-*.yaml
+scripts/
