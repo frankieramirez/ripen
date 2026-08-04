@@ -282,6 +282,7 @@ def make_multi_updater(
     *,
     auto_apply: bool = False,
     sonarr_auto_apply: bool = False,
+    sonarr_enabled: bool = True,
     health_outcomes: list[bool] | None = None,
 ) -> tuple[
     Updater, FakePortainer, FakeRegistry, FakeState, FakeClock, FakeHealth
@@ -322,6 +323,7 @@ def make_multi_updater(
                             "sonarr",
                             sonarr_auto_apply,
                             HealthPolicy("http", "http://sonarr:8989/", (200,), 1),
+                            enabled=sonarr_enabled,
                         ),
                     ),
                 ),
@@ -368,6 +370,41 @@ def test_monitor_baselines_each_service_in_a_multi_service_stack() -> None:
         "arr/radarr": OLD,
         "arr/sonarr": OLD,
     }
+    assert portainer.updates == []
+
+
+def test_monitor_skips_registry_resolution_for_health_only_service() -> None:
+    updater, portainer, registry, state, _, _ = make_multi_updater(
+        sonarr_enabled=False
+    )
+    assert registry.platform_digests is not None
+    del registry.platform_digests["linuxserver/sonarr"]
+
+    report = updater.run(Mode.MONITOR)
+
+    assert [(item.stack, item.code) for item in report.results] == [
+        ("arr/radarr", ResultCode.BASELINED),
+    ]
+    assert state.accepted == {"arr/radarr": OLD}
+    assert portainer.updates == []
+
+
+def test_health_only_service_still_blocks_sibling_update_when_unhealthy() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True, sonarr_enabled=False
+    )
+    updater.health = SelectiveHealth("http://sonarr:8989/")
+    state.accepted = {"arr/radarr": OLD}
+    assert registry.platform_digests is not None
+    del registry.platform_digests["linuxserver/sonarr"]
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    report = updater.run(Mode.APPLY)
+
+    assert report.results[0].code is ResultCode.INELIGIBLE
+    assert "health preflight" in report.results[0].detail
     assert portainer.updates == []
 
 

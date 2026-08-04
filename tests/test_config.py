@@ -77,6 +77,88 @@ def test_load_policy_supports_explicit_per_service_health_rules(tmp_path: Path) 
     assert stack.services[0].health.accepted_status == (200, 302)
 
 
+def test_multi_service_policy_supports_health_only_service(tmp_path: Path) -> None:
+    value = VALID.replace(
+        "  example-app:\n"
+        "    enabled: true\n"
+        "    auto_apply: false\n"
+        "    expected_services: [example-app]\n"
+        "    health:\n"
+        "      type: http\n"
+        "      url: http://nas:8091/\n",
+        "  arr:\n"
+        "    enabled: true\n"
+        "    expected_services: [radarr, readarr]\n"
+        "    services:\n"
+        "      radarr:\n"
+        "        enabled: true\n"
+        "        auto_apply: false\n"
+        "        health:\n"
+        "          type: http\n"
+        "          url: http://radarr:7878/\n"
+        "      readarr:\n"
+        "        enabled: false\n"
+        "        auto_apply: false\n"
+        "        health:\n"
+        "          type: http\n"
+        "          url: http://readarr:8787/\n",
+    ).replace("exclude: [arr]", "exclude: []")
+
+    policy = load_policy(write(tmp_path, value))
+
+    assert policy.stacks[0].services[0].enabled is True
+    assert policy.stacks[0].services[1].enabled is False
+
+
+def test_multi_service_policy_requires_one_managed_service(tmp_path: Path) -> None:
+    value = VALID.replace(
+        "    auto_apply: false\n"
+        "    expected_services: [example-app]\n"
+        "    health:\n"
+        "      type: http\n"
+        "      url: http://nas:8091/\n",
+        "    expected_services: [example-app]\n"
+        "    services:\n"
+        "      example-app:\n"
+        "        enabled: false\n"
+        "        auto_apply: false\n"
+        "        health:\n"
+        "          type: http\n"
+        "          url: http://example-app:8091/\n",
+    )
+
+    with pytest.raises(ConfigError, match="at least one enabled service"):
+        load_policy(write(tmp_path, value))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("enabled", '"false"'), ("auto_apply", '"true"')),
+)
+def test_per_service_flags_require_real_booleans(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    service = (
+        "    auto_apply: false\n"
+        "    expected_services: [example-app]\n"
+        "    health:\n"
+        "      type: http\n"
+        "      url: http://nas:8091/\n"
+    )
+    replacement = (
+        "    expected_services: [example-app]\n"
+        "    services:\n"
+        "      example-app:\n"
+        f"        {field}: {value}\n"
+        "        health:\n"
+        "          type: http\n"
+        "          url: http://example-app:8091/\n"
+    )
+
+    with pytest.raises(ConfigError, match=f"{field} must be a boolean"):
+        load_policy(write(tmp_path, VALID.replace(service, replacement)))
+
+
 def test_multi_service_policy_requires_explicit_service_rules(tmp_path: Path) -> None:
     value = VALID.replace(
         "expected_services: [example-app]",

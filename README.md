@@ -37,6 +37,11 @@ selected platform digest, and rollback changes only that service. Private
 registry credentials, scheduled maintenance windows, and image cleanup are not
 currently supported.
 
+A service may set `enabled: false` when its image channel is intentionally
+retired or otherwise unsuitable for registry monitoring. It remains part of
+the exact Compose shape and its health check still gates sibling updates, but
+the updater does not resolve, baseline, or mutate its image.
+
 ## Quick start
 
 1. Create a dedicated Portainer Standard User and grant it access only to the

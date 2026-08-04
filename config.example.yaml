@@ -40,6 +40,9 @@ stacks:
           accepted_status: [200]
           timeout_seconds: 5
       worker:
+        # A disabled service remains health-checked but its image is not
+        # resolved or updated.
+        enabled: false
         auto_apply: false
         health:
           type: http
