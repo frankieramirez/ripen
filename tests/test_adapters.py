@@ -65,6 +65,29 @@ class ServiceImagePortainerClient:
         return 404, {"message": "unexpected request"}
 
 
+class PinnedServiceImagePortainerClient:
+    def request(self, method, path, headers, body=None, *, timeout=None):  # noqa: ANN001
+        if "/containers/json?" in path:
+            return 200, [
+                {
+                    "Image": "lscr.io/linuxserver/bazarr:latest@sha256:" + "2" * 64,
+                    "ImageID": "sha256:bazarr-image",
+                    "Labels": {
+                        "com.docker.compose.project": "arr",
+                        "com.docker.compose.service": "bazarr",
+                    },
+                }
+            ]
+        if path.endswith("/images/sha256%3Abazarr-image/json"):
+            return 200, {
+                "RepoDigests": [
+                    "lscr.io/linuxserver/bazarr@sha256:" + "1" * 64,
+                    "lscr.io/linuxserver/bazarr@sha256:" + "2" * 64,
+                ]
+            }
+        return 404, {"message": "unexpected request"}
+
+
 def test_malformed_portainer_stack_is_reported_as_adapter_error(tmp_path) -> None:
     secret = tmp_path / "api-key"
     secret.write_text("ptr_key", encoding="utf-8")
@@ -160,6 +183,21 @@ def test_running_service_digests_reject_an_empty_project_result(tmp_path) -> Non
 
     with pytest.raises(AdapterError, match="no running containers"):
         adapter.get_service_image_digests(PortainerStack(211, 2, "arr", 1))
+
+
+def test_running_service_digest_prefers_the_containers_exact_digest_pin(
+    tmp_path,
+) -> None:
+    secret = tmp_path / "api-key"
+    secret.write_text("ptr_key", encoding="utf-8")
+    adapter = PortainerHttpAdapter(
+        "https://portainer:9443", str(secret), fingerprint_sha256="a" * 64
+    )
+    adapter._client = PinnedServiceImagePortainerClient()
+
+    digests = adapter.get_service_image_digests(PortainerStack(211, 2, "arr", 1))
+
+    assert digests == {"bazarr": "sha256:" + "2" * 64}
 
 
 def test_registry_rejects_insecure_bearer_realm() -> None:

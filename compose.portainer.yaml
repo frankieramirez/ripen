@@ -1,6 +1,6 @@
 services:
   nas-stack-updater:
-    image: nas-stack-updater:0.2.1
+    image: nas-stack-updater:0.2.2
     container_name: nas-stack-updater
     user: "1031:1031"
     command: ["--config", "/config/policy.yaml", "daemon", "--mode", "apply"]

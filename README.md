@@ -42,6 +42,10 @@ retired or otherwise unsuitable for registry monitoring. It remains part of
 the exact Compose shape and its health check still gates sibling updates, but
 the updater does not resolve, baseline, or mutate its image.
 
+When a running container was created from a `tag@sha256:digest` reference, that
+container-level pin is authoritative. This remains unambiguous even when the
+Docker image cache lists multiple repository digests for one local image ID.
+
 ## Quick start
 
 1. Create a dedicated Portainer Standard User and grant it access only to the
