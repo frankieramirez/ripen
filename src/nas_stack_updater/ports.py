@@ -21,6 +21,8 @@ class PortainerPort(Protocol):
 
     def get_image_status(self, stack_id: int) -> str: ...
 
+    def get_service_image_digests(self, stack: PortainerStack) -> dict[str, str]: ...
+
     def update_stack(
         self,
         stack: PortainerStack,
@@ -33,6 +35,15 @@ class PortainerPort(Protocol):
 
 class RegistryPort(Protocol):
     def resolve_digest(self, image: ImageReference) -> str: ...
+
+    def resolve_platform_digest(
+        self,
+        image: ImageReference,
+        *,
+        os_name: str,
+        architecture: str,
+        variant: str | None = None,
+    ) -> str: ...
 
 
 class HealthPort(Protocol):

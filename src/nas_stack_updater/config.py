@@ -7,7 +7,7 @@ import urllib.parse
 
 import yaml
 
-from .models import HealthPolicy, Mode, Policy, StackPolicy
+from .models import HealthPolicy, Mode, Policy, ServicePolicy, StackPolicy
 
 
 class ConfigError(ValueError):
@@ -40,6 +40,38 @@ def _positive_int(value: Any, path: str) -> int:
     if parsed <= 0:
         raise ConfigError(f"{path} must be greater than zero")
     return parsed
+
+
+def _health_policy(raw_value: Any, path: str) -> HealthPolicy:
+    raw = _mapping(raw_value, path)
+    _exact_keys(
+        raw,
+        {"type", "url", "target", "accepted_status", "timeout_seconds"},
+        path,
+    )
+    target = raw.get("target", raw.get("url"))
+    if not isinstance(target, str) or not target:
+        raise ConfigError(f"{path}.target or url is required")
+    statuses = raw.get("accepted_status", [200])
+    if (
+        not isinstance(statuses, list)
+        or not statuses
+        or not all(
+            isinstance(item, int)
+            and not isinstance(item, bool)
+            and 100 <= item <= 599
+            for item in statuses
+        )
+    ):
+        raise ConfigError(
+            f"{path}.accepted_status must be a non-empty list of HTTP status codes"
+        )
+    return HealthPolicy(
+        type=str(raw.get("type", "http")),
+        target=target,
+        accepted_status=tuple(statuses),
+        timeout_seconds=float(raw.get("timeout_seconds", 5)),
+    )
 
 
 def load_policy(path: str | Path) -> Policy:
@@ -82,40 +114,73 @@ def load_policy(path: str | Path) -> Policy:
         raw = _mapping(raw_value, f"stacks.{name}")
         _exact_keys(
             raw,
-            {"enabled", "auto_apply", "expected_services", "health"},
+            {"enabled", "auto_apply", "expected_services", "health", "services"},
             f"stacks.{name}",
         )
-        health_raw = _mapping(
-            _required(raw, "health", f"stacks.{name}"), f"stacks.{name}.health"
-        )
-        _exact_keys(
-            health_raw,
-            {"type", "url", "target", "accepted_status", "timeout_seconds"},
-            f"stacks.{name}.health",
-        )
-        target = health_raw.get("target", health_raw.get("url"))
-        if not isinstance(target, str) or not target:
-            raise ConfigError(f"stacks.{name}.health.target or url is required")
         expected = raw.get("expected_services", [])
         if not isinstance(expected, list) or not expected or not all(
             isinstance(item, str) and item for item in expected
         ):
             raise ConfigError(f"stacks.{name}.expected_services must be a non-empty list")
-        statuses = health_raw.get("accepted_status", [200])
-        if not isinstance(statuses, list) or not all(isinstance(item, int) for item in statuses):
-            raise ConfigError(f"stacks.{name}.health.accepted_status must be integers")
+        if len(set(expected)) != len(expected):
+            raise ConfigError(
+                f"stacks.{name}.expected_services must not contain duplicate names"
+            )
+        if "services" in raw and ({"auto_apply", "health"} & set(raw)):
+            raise ConfigError(
+                f"stacks.{name} cannot use stack-level auto_apply or health "
+                "with per-service rules"
+            )
+        if len(expected) > 1 and "services" not in raw:
+            raise ConfigError(
+                f"stacks.{name} requires per-service rules for multiple services"
+            )
+        service_policies: tuple[ServicePolicy, ...] = ()
+        health: HealthPolicy | None = None
+        if "services" in raw:
+            services_raw = _mapping(raw["services"], f"stacks.{name}.services")
+            if set(services_raw) != set(expected):
+                raise ConfigError(
+                    f"stacks.{name}.services must exactly match expected_services"
+                )
+            parsed_services: list[ServicePolicy] = []
+            for service_name in expected:
+                service_raw = _mapping(
+                    services_raw[service_name], f"stacks.{name}.services.{service_name}"
+                )
+                _exact_keys(
+                    service_raw,
+                    {"auto_apply", "health"},
+                    f"stacks.{name}.services.{service_name}",
+                )
+                parsed_services.append(
+                    ServicePolicy(
+                        name=service_name,
+                        auto_apply=bool(service_raw.get("auto_apply", False)),
+                        health=_health_policy(
+                            _required(
+                                service_raw,
+                                "health",
+                                f"stacks.{name}.services.{service_name}",
+                            ),
+                            f"stacks.{name}.services.{service_name}.health",
+                        ),
+                    )
+                )
+            service_policies = tuple(parsed_services)
+        else:
+            health = _health_policy(
+                _required(raw, "health", f"stacks.{name}"),
+                f"stacks.{name}.health",
+            )
         stacks.append(
             StackPolicy(
                 name=str(name),
                 enabled=bool(raw.get("enabled", False)),
                 auto_apply=bool(raw.get("auto_apply", False)),
                 expected_services=tuple(expected),
-                health=HealthPolicy(
-                    type=str(health_raw.get("type", "http")),
-                    target=target,
-                    accepted_status=tuple(statuses),
-                    timeout_seconds=float(health_raw.get("timeout_seconds", 5)),
-                ),
+                health=health,
+                services=service_policies,
             )
         )
 

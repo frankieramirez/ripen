@@ -207,6 +207,61 @@ class PortainerHttpAdapter:
             raise AdapterError("unexpected Portainer image status response")
         return payload["Status"].lower()
 
+    def get_service_image_digests(self, stack: PortainerStack) -> dict[str, str]:
+        filters = json.dumps(
+            {
+                "label": [f"com.docker.compose.project={stack.name}"],
+                "status": ["running"],
+            },
+            separators=(",", ":"),
+        )
+        path = (
+            f"/api/endpoints/{stack.endpoint_id}/docker/containers/json?"
+            + urllib.parse.urlencode({"filters": filters})
+        )
+        payload = self._request("GET", path)
+        if not isinstance(payload, list):
+            raise AdapterError("unexpected Portainer container response")
+        result: dict[str, str] = {}
+        for item in payload:
+            if not isinstance(item, dict):
+                raise AdapterError("unexpected Portainer container entry")
+            labels = item.get("Labels")
+            image_id = item.get("ImageID")
+            if not isinstance(labels, dict) or not isinstance(image_id, str):
+                raise AdapterError("Portainer container entry is missing image metadata")
+            service = labels.get("com.docker.compose.service")
+            if labels.get("com.docker.compose.project") != stack.name:
+                raise AdapterError("Portainer returned a container from another project")
+            if not isinstance(service, str) or not service or service in result:
+                raise AdapterError("Portainer returned an invalid Compose service identity")
+            image_payload = self._request(
+                "GET",
+                f"/api/endpoints/{stack.endpoint_id}/docker/images/"
+                f"{urllib.parse.quote(image_id, safe='')}/json",
+            )
+            if not isinstance(image_payload, dict) or not isinstance(
+                image_payload.get("RepoDigests"), list
+            ):
+                raise AdapterError("unexpected Portainer image response")
+            digests = [
+                value.rsplit("@", 1)[1]
+                for value in image_payload["RepoDigests"]
+                if isinstance(value, str)
+                and "@" in value
+                and value.rsplit("@", 1)[1].startswith("sha256:")
+            ]
+            if len(set(digests)) != 1:
+                raise AdapterError(
+                    f"Portainer image for service {service!r} has no unique digest"
+                )
+            result[service] = digests[0]
+        if not result:
+            raise AdapterError(
+                f"Portainer returned no running containers for project {stack.name!r}"
+            )
+        return result
+
     def update_stack(
         self,
         stack: PortainerStack,
@@ -231,13 +286,19 @@ class PortainerHttpAdapter:
 
 def parse_image_reference(value: str) -> ImageReference:
     original = value.strip()
-    if not original or "@" in original:
+    if not original:
         raise ValueError("image must be a mutable tagged reference")
-    last_segment = original.rsplit("/", 1)[-1]
+    tagged_part, separator, pinned_digest = original.partition("@")
+    if separator and (
+        "@" in pinned_digest
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", pinned_digest)
+    ):
+        raise ValueError("image digest pin must be a sha256 digest")
+    last_segment = tagged_part.rsplit("/", 1)[-1]
     if ":" in last_segment:
-        repository_part, tag = original.rsplit(":", 1)
+        repository_part, tag = tagged_part.rsplit(":", 1)
     else:
-        repository_part, tag = original, "latest"
+        repository_part, tag = tagged_part, "latest"
     first = repository_part.split("/", 1)[0]
     if "." in first or ":" in first or first == "localhost":
         registry, repository = repository_part.split("/", 1)
@@ -255,6 +316,7 @@ def parse_image_reference(value: str) -> ImageReference:
         repository=repository,
         tag=tag,
         original=original,
+        pinned_digest=(pinned_digest if separator else None),
     )
 
 
@@ -295,6 +357,91 @@ class OciRegistryAdapter:
         if not digest or not digest.startswith("sha256:"):
             raise AdapterError("registry did not return a sha256 digest")
         return digest
+
+    def resolve_platform_digest(
+        self,
+        image: ImageReference,
+        *,
+        os_name: str,
+        architecture: str,
+        variant: str | None = None,
+    ) -> str:
+        url = f"https://{image.registry}/v2/{image.repository}/manifests/{image.tag}"
+        request = urllib.request.Request(
+            url, method="GET", headers={"Accept": self._ACCEPT}
+        )
+        authorization: str | None = None
+        try:
+            response = urllib.request.urlopen(request, timeout=self.timeout)
+        except urllib.error.HTTPError as error:
+            if error.code != 401:
+                raise AdapterError(f"registry HTTP {error.code}") from error
+            challenge = error.headers.get("WWW-Authenticate", "")
+            authorization = f"Bearer {self._bearer_token(challenge)}"
+            request.add_header("Authorization", authorization)
+            try:
+                response = urllib.request.urlopen(request, timeout=self.timeout)
+            except urllib.error.HTTPError as second_error:
+                raise AdapterError(f"registry HTTP {second_error.code}") from second_error
+            except (urllib.error.URLError, TimeoutError) as second_error:
+                raise AdapterError("registry request failed") from second_error
+        except (urllib.error.URLError, TimeoutError) as error:
+            raise AdapterError("registry request failed") from error
+        with response:
+            header_digest = response.headers.get("Docker-Content-Digest")
+            try:
+                payload = json.loads(response.read())
+            except json.JSONDecodeError as error:
+                raise AdapterError("registry returned malformed manifest JSON") from error
+        manifests = payload.get("manifests") if isinstance(payload, dict) else None
+        if isinstance(manifests, list):
+            matches = [
+                item.get("digest")
+                for item in manifests
+                if isinstance(item, dict)
+                and isinstance(item.get("platform"), dict)
+                and item["platform"].get("os") == os_name
+                and item["platform"].get("architecture") == architecture
+                and (variant is None or item["platform"].get("variant") == variant)
+                and isinstance(item.get("digest"), str)
+                and item["digest"].startswith("sha256:")
+            ]
+            if len(matches) != 1:
+                raise AdapterError(
+                    f"registry returned {len(matches)} manifests for "
+                    f"{os_name}/{architecture}"
+                    + (f"/{variant}" if variant else "")
+                )
+            return matches[0]
+        if not isinstance(header_digest, str) or not header_digest.startswith("sha256:"):
+            raise AdapterError("registry did not return a sha256 digest")
+        config = payload.get("config") if isinstance(payload, dict) else None
+        config_digest = config.get("digest") if isinstance(config, dict) else None
+        if not isinstance(config_digest, str) or not re.fullmatch(
+            r"sha256:[0-9a-f]{64}", config_digest
+        ):
+            raise AdapterError("registry manifest has no verifiable config digest")
+        config_request = urllib.request.Request(
+            f"https://{image.registry}/v2/{image.repository}/blobs/{config_digest}",
+            method="GET",
+        )
+        if authorization:
+            config_request.add_header("Authorization", authorization)
+        try:
+            with urllib.request.urlopen(config_request, timeout=self.timeout) as response:
+                config_payload = json.load(response)
+        except urllib.error.HTTPError as error:
+            raise AdapterError(f"registry config HTTP {error.code}") from error
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            raise AdapterError("registry config request failed") from error
+        if (
+            not isinstance(config_payload, dict)
+            or config_payload.get("os") != os_name
+            or config_payload.get("architecture") != architecture
+            or (variant is not None and config_payload.get("variant") != variant)
+        ):
+            raise AdapterError("registry manifest does not match requested platform")
+        return header_digest
 
     def _bearer_token(self, challenge: str) -> str:
         if not challenge.lower().startswith("bearer "):

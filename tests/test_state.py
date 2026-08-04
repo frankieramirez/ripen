@@ -27,6 +27,21 @@ def test_state_persists_baseline_and_candidate_observations(tmp_path: Path) -> N
     assert store(tmp_path).get_accepted_digest("example-app") == OLD
 
 
+def test_state_persists_independent_service_digests_for_one_stack(tmp_path: Path) -> None:
+    state = store(tmp_path)
+
+    state.set_accepted_digest("arr/radarr", OLD, NOW)
+    state.set_accepted_digest("arr/sonarr", NEW, NOW)
+
+    reopened = store(tmp_path)
+    assert reopened.get_accepted_digest("arr/radarr") == OLD
+    assert reopened.get_accepted_digest("arr/sonarr") == NEW
+    assert reopened.get_status(NOW).accepted_digests == {
+        "arr/radarr": OLD,
+        "arr/sonarr": NEW,
+    }
+
+
 def test_lease_excludes_concurrent_run_and_expires(tmp_path: Path) -> None:
     state = store(tmp_path)
 

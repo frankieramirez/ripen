@@ -14,6 +14,9 @@ real Portainer API keys, Compose environment secrets, or private network data.
 policy file, state database, and Docker networks as sensitive infrastructure.
 
 - Give the Portainer automation user access only to stacks it may update.
+- Multi-service updates read running container image digests through the
+  authorized Portainer Docker proxy; keep Portainer RBAC limited to reviewed
+  stacks and do not grant direct Docker-socket access.
 - Mount the API key from a read-only file; never put it in Compose or Git.
 - Do not mount the Docker socket.
 - Use HTTPS with a CA file or an exact certificate fingerprint.

@@ -25,6 +25,28 @@ stacks:
       accepted_status: [200]
       timeout_seconds: 5
 
+  # Multi-service stacks require an exact policy for every expected service.
+  # Keep auto_apply false until monitor mode has established a baseline and you
+  # have reviewed that baseline for each service.
+  example-suite:
+    enabled: true
+    expected_services: [frontend, worker]
+    services:
+      frontend:
+        auto_apply: false
+        health:
+          type: http
+          url: http://frontend:8080/health
+          accepted_status: [200]
+          timeout_seconds: 5
+      worker:
+        auto_apply: false
+        health:
+          type: http
+          url: http://worker:8081/health
+          accepted_status: [200]
+          timeout_seconds: 5
+
 exclude:
   - infrastructure
-  - multi-service-stack
+  - dependency-sensitive-vpn-stack
