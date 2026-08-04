@@ -444,6 +444,26 @@ def test_apply_updates_only_one_service_in_a_multi_service_stack() -> None:
     ]
 
 
+def test_apply_refuses_to_detach_git_backed_multi_service_stack() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True
+    )
+    portainer.stack = PortainerStack(211, 2, "arr", 1, (), git_backed=True)
+    portainer.visible = (portainer.stack,)
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    report = updater.run(Mode.APPLY)
+
+    assert report.results[0].code is ResultCode.INELIGIBLE
+    assert "Git-native deployment" in report.results[0].detail
+    assert portainer.updates == []
+    assert state.breaker_reason is None
+
+
 def test_multi_service_update_preserves_compose_comments_and_anchors() -> None:
     compose = """# retained header
 x-restart: &restart unless-stopped

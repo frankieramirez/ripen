@@ -27,6 +27,20 @@ class RecordingPortainerClient:
         return 200, {}
 
 
+class StackListPortainerClient:
+    def request(self, method, path, headers, body=None, *, timeout=None):  # noqa: ANN001
+        return 200, [
+            {
+                "Id": 211,
+                "EndpointId": 2,
+                "Name": "arr",
+                "Status": 1,
+                "Env": [],
+                "GitConfig": {"URL": "https://github.com/example/nas.git"},
+            }
+        ]
+
+
 class ServiceImagePortainerClient:
     def __init__(self) -> None:
         self.container_path = ""
@@ -141,6 +155,37 @@ def test_stack_update_uses_the_extended_deployment_timeout(tmp_path) -> None:
     )
 
     assert client.timeout == 600
+
+
+def test_stack_list_records_git_backing(tmp_path) -> None:
+    secret = tmp_path / "api-key"
+    secret.write_text("ptr_key", encoding="utf-8")
+    adapter = PortainerHttpAdapter(
+        "https://portainer:9443", str(secret), fingerprint_sha256="a" * 64
+    )
+    adapter._client = StackListPortainerClient()
+
+    assert adapter.list_stacks()[0].git_backed is True
+
+
+def test_stack_update_refuses_git_backed_stack(tmp_path) -> None:
+    secret = tmp_path / "api-key"
+    secret.write_text("ptr_key", encoding="utf-8")
+    adapter = PortainerHttpAdapter(
+        "https://portainer:9443", str(secret), fingerprint_sha256="a" * 64
+    )
+    client = RecordingPortainerClient()
+    adapter._client = client
+
+    with pytest.raises(AdapterError, match="Git-backed stack"):
+        adapter.update_stack(
+            PortainerStack(211, 2, "arr", 1, (), git_backed=True),
+            "services: {}",
+            (),
+            repull=False,
+        )
+
+    assert client.timeout is None
 
 
 def test_running_service_digests_are_scoped_to_the_authorized_compose_project(

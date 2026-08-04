@@ -2,7 +2,7 @@ services:
   nas-stack-updater:
     build:
       context: .
-    image: nas-stack-updater:0.2.2
+    image: nas-stack-updater:0.2.3
     container_name: nas-stack-updater
     user: "1031:1031"
     command: ["--config", "/config/policy.yaml", "daemon", "--mode", "monitor"]

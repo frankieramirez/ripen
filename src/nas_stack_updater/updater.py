@@ -350,10 +350,20 @@ class Updater:
                 ),
                 False,
             )
+        if current.git_backed:
+            return (
+                StackResult(
+                    observation.state_key,
+                    ResultCode.INELIGIBLE,
+                    "Git-backed stacks require a Git-native deployment; direct update refused",
+                ),
+                False,
+            )
         current_compose = self.portainer.get_stack_file(current.id)
         if (
             current.id != observation.stack.id
             or current.endpoint_id != observation.stack.endpoint_id
+            or current.git_backed != observation.stack.git_backed
             or self._text_hash(current_compose) != observation.compose_hash
             or self._env_hash(current.env) != observation.env_hash
         ):

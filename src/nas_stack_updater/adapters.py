@@ -187,6 +187,7 @@ class PortainerHttpAdapter:
                         name=str(item["Name"]),
                         status=int(item["Status"]),
                         env=env,
+                        git_backed=bool(item.get("GitConfig")),
                     )
                 )
             except (KeyError, TypeError, ValueError) as error:
@@ -276,6 +277,10 @@ class PortainerHttpAdapter:
         *,
         repull: bool,
     ) -> None:
+        if stack.git_backed:
+            raise AdapterError(
+                "refusing direct update of a Git-backed stack; deploy through Git"
+            )
         body: dict[str, object] = {
             "Env": list(env),
             "Prune": False,
