@@ -79,6 +79,7 @@ class PortainerStack:
     name: str
     status: int
     env: tuple[dict[str, str], ...] = ()
+    git_backed: bool = False
 
 
 @dataclass(frozen=True)
