@@ -37,12 +37,20 @@ class HealthPolicy:
 
 
 @dataclass(frozen=True)
+class ServicePolicy:
+    name: str
+    auto_apply: bool
+    health: HealthPolicy
+
+
+@dataclass(frozen=True)
 class StackPolicy:
     name: str
     enabled: bool
     auto_apply: bool
     expected_services: tuple[str, ...]
-    health: HealthPolicy
+    health: HealthPolicy | None
+    services: tuple[ServicePolicy, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,13 +86,14 @@ class ImageReference:
     repository: str
     tag: str
     original: str
+    pinned_digest: str | None = None
 
     @property
     def tagged(self) -> str:
         return f"{self.registry}/{self.repository}:{self.tag}"
 
     def pinned(self, digest: str) -> str:
-        return f"{self.registry}/{self.repository}@{digest}"
+        return f"{self.tagged}@{digest}"
 
 
 @dataclass(frozen=True)
@@ -97,6 +106,10 @@ class StackObservation:
     image: ImageReference
     image_status: str
     remote_digest: str
+    state_key: str
+    health: HealthPolicy
+    auto_apply: bool
+    running_digest: str | None = None
 
 
 @dataclass(frozen=True)

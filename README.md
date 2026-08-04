@@ -14,7 +14,7 @@ functional health, and rolls back to the previously accepted digest when needed.
 - Runs in monitor mode unless apply mode is explicitly selected.
 - Uses a dedicated Portainer Standard User and sees only stacks assigned to it.
 - Requires two observations of a candidate digest separated by 24 hours.
-- Updates at most one stack per run.
+- Updates at most one service in one stack per run.
 - Opens a circuit breaker after every rollback.
 - Never cleans up images or activates stopped stacks.
 - Allows up to ten minutes for Portainer image pulls and stack redeployments.
@@ -24,14 +24,18 @@ functional health, and rolls back to the previously accepted digest when needed.
 
 The updater intentionally supports a narrow transaction:
 
-- Portainer-managed stacks containing exactly one service;
-- one literal OCI image reference per managed stack;
+- Portainer-managed single-service stacks and explicitly reviewed multi-service stacks;
+- one literal OCI image reference per managed service;
 - public registries that support the OCI/Docker Registry HTTP API;
 - HTTP functional health verification; and
-- one update per run.
+- one service update per run.
 
-Multi-service stacks, private registry credentials, scheduled maintenance
-windows, and image cleanup are not currently supported.
+Multi-service policies must define every expected service separately. Before and
+after changing one service, the updater verifies every configured sibling's
+health. The changed image remains on its reviewed tag but is pinned to the
+selected platform digest, and rollback changes only that service. Private
+registry credentials, scheduled maintenance windows, and image cleanup are not
+currently supported.
 
 ## Quick start
 
@@ -74,9 +78,12 @@ Copy `config.example.yaml` to `policy.yaml`. Unknown fields are rejected. Config
 
 There is no insecure TLS mode.
 
-Each enabled stack must list its exact expected service name. If its Compose
-shape or Portainer environment changes after observation, the updater fails
-closed instead of applying an unreviewed deployment.
+Each enabled stack must list its exact expected service names. A multi-service
+stack must also define an exact `services` map with per-service `auto_apply` and
+health policy; ambiguous stack-level settings are rejected. If its Compose
+shape, service set, running digest, or Portainer environment changes after
+observation, the updater fails closed instead of applying an unreviewed
+deployment.
 
 ## Container deployment
 
@@ -96,14 +103,16 @@ are deployment operations and are intentionally not automated here.
 
 ## Update lifecycle
 
-1. The first successful observation records the accepted registry digest.
+1. The first successful observation records each service's proven running digest.
 2. A new digest must be observed twice and remain present for
    `candidate_min_age_seconds`.
-3. Apply mode verifies the Portainer identity, stack shape, Compose hash, and
-   environment hash before redeployment.
-4. The application must pass its configured HTTP health check.
-5. A failed update is pinned back to the accepted digest and opens the circuit
-   breaker for human review.
+3. Apply mode verifies the Portainer identity, stack shape, Compose hash,
+   environment hash, running digest, and all configured service health checks.
+4. Only the selected service image is changed to `tag@sha256:digest`; sibling
+   service image references remain untouched.
+5. Every configured service must pass its health check after deployment.
+6. A failed update pins only the selected service back to its accepted digest
+   and opens the circuit breaker for human review.
 
 ## Development
 

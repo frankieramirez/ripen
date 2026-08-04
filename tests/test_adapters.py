@@ -1,4 +1,5 @@
 import json
+import urllib.parse
 
 import pytest
 
@@ -7,6 +8,7 @@ from nas_stack_updater.adapters import (
     JsonLogNotifier,
     OciRegistryAdapter,
     PortainerHttpAdapter,
+    parse_image_reference,
 )
 from nas_stack_updater.models import PortainerStack
 
@@ -23,6 +25,44 @@ class RecordingPortainerClient:
     def request(self, method, path, headers, body=None, *, timeout=None):  # noqa: ANN001
         self.timeout = timeout
         return 200, {}
+
+
+class ServiceImagePortainerClient:
+    def __init__(self) -> None:
+        self.container_path = ""
+
+    def request(self, method, path, headers, body=None, *, timeout=None):  # noqa: ANN001
+        if "/containers/json?" in path:
+            self.container_path = path
+            return 200, [
+                {
+                    "ImageID": "sha256:radarr-image",
+                    "Labels": {
+                        "com.docker.compose.project": "arr",
+                        "com.docker.compose.service": "radarr",
+                    },
+                },
+                {
+                    "ImageID": "sha256:sonarr-image",
+                    "Labels": {
+                        "com.docker.compose.project": "arr",
+                        "com.docker.compose.service": "sonarr",
+                    },
+                },
+            ]
+        if path.endswith("/images/sha256%3Aradarr-image/json"):
+            return 200, {
+                "RepoDigests": [
+                    "lscr.io/linuxserver/radarr@sha256:" + "1" * 64
+                ]
+            }
+        if path.endswith("/images/sha256%3Asonarr-image/json"):
+            return 200, {
+                "RepoDigests": [
+                    "lscr.io/linuxserver/sonarr@sha256:" + "2" * 64
+                ]
+            }
+        return 404, {"message": "unexpected request"}
 
 
 def test_malformed_portainer_stack_is_reported_as_adapter_error(tmp_path) -> None:
@@ -80,11 +120,159 @@ def test_stack_update_uses_the_extended_deployment_timeout(tmp_path) -> None:
     assert client.timeout == 600
 
 
+def test_running_service_digests_are_scoped_to_the_authorized_compose_project(
+    tmp_path,
+) -> None:
+    secret = tmp_path / "api-key"
+    secret.write_text("ptr_key", encoding="utf-8")
+    adapter = PortainerHttpAdapter(
+        "https://portainer:9443", str(secret), fingerprint_sha256="a" * 64
+    )
+    client = ServiceImagePortainerClient()
+    adapter._client = client
+
+    digests = adapter.get_service_image_digests(
+        PortainerStack(211, 2, "arr", 1)
+    )
+
+    assert digests == {
+        "radarr": "sha256:" + "1" * 64,
+        "sonarr": "sha256:" + "2" * 64,
+    }
+    assert "all=1" not in client.container_path
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(client.container_path).query)
+    filters = json.loads(query["filters"][0])
+    assert filters["label"] == ["com.docker.compose.project=arr"]
+    assert filters["status"] == ["running"]
+
+
+def test_running_service_digests_reject_an_empty_project_result(tmp_path) -> None:
+    class EmptyClient:
+        def request(self, method, path, headers, body=None, *, timeout=None):  # noqa: ANN001
+            return 200, []
+
+    secret = tmp_path / "api-key"
+    secret.write_text("ptr_key", encoding="utf-8")
+    adapter = PortainerHttpAdapter(
+        "https://portainer:9443", str(secret), fingerprint_sha256="a" * 64
+    )
+    adapter._client = EmptyClient()
+
+    with pytest.raises(AdapterError, match="no running containers"):
+        adapter.get_service_image_digests(PortainerStack(211, 2, "arr", 1))
+
+
 def test_registry_rejects_insecure_bearer_realm() -> None:
     challenge = 'Bearer realm="http://auth.example/token",service="registry.example"'
 
     with pytest.raises(AdapterError, match="realm must use https"):
         OciRegistryAdapter()._bearer_token(challenge)
+
+
+def test_registry_resolves_the_linux_amd64_manifest_digest(monkeypatch) -> None:
+    class Response:
+        headers = {
+            "Content-Type": "application/vnd.oci.image.index.v1+json",
+            "Docker-Content-Digest": "sha256:" + "0" * 64,
+        }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):  # noqa: ANN002
+            return None
+
+        def read(self):
+            return json.dumps(
+                {
+                    "manifests": [
+                        {
+                            "digest": "sha256:" + "1" * 64,
+                            "platform": {"os": "linux", "architecture": "arm64"},
+                        },
+                        {
+                            "digest": "sha256:" + "2" * 64,
+                            "platform": {"os": "linux", "architecture": "amd64"},
+                        },
+                    ]
+                }
+            ).encode()
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: Response())
+
+    digest = OciRegistryAdapter().resolve_platform_digest(
+        parse_image_reference("lscr.io/linuxserver/radarr:latest"),
+        os_name="linux",
+        architecture="amd64",
+    )
+
+    assert digest == "sha256:" + "2" * 64
+
+
+def test_registry_uses_variant_to_disambiguate_arm_manifests(monkeypatch) -> None:
+    class Response:
+        headers = {"Docker-Content-Digest": "sha256:" + "0" * 64}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):  # noqa: ANN002
+            return None
+
+        def read(self):
+            return json.dumps(
+                {
+                    "manifests": [
+                        {"digest": "sha256:" + "6" * 64, "platform": {"os": "linux", "architecture": "arm", "variant": "v6"}},
+                        {"digest": "sha256:" + "7" * 64, "platform": {"os": "linux", "architecture": "arm", "variant": "v7"}},
+                    ]
+                }
+            ).encode()
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: Response())
+
+    digest = OciRegistryAdapter().resolve_platform_digest(
+        parse_image_reference("example/app:latest"),
+        os_name="linux",
+        architecture="arm",
+        variant="v7",
+    )
+
+    assert digest == "sha256:" + "7" * 64
+
+
+def test_registry_verifies_platform_for_single_manifest(monkeypatch) -> None:
+    manifest_digest = "sha256:" + "1" * 64
+    config_digest = "sha256:" + "2" * 64
+
+    class Response:
+        def __init__(self, payload, digest):  # noqa: ANN001
+            self.payload = payload
+            self.headers = {"Docker-Content-Digest": digest}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):  # noqa: ANN002
+            return None
+
+        def read(self):
+            return json.dumps(self.payload).encode()
+
+    responses = iter(
+        [
+            Response({"config": {"digest": config_digest}}, manifest_digest),
+            Response({"os": "linux", "architecture": "arm64", "variant": "v8"}, config_digest),
+        ]
+    )
+    monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: next(responses))
+
+    with pytest.raises(AdapterError, match="does not match requested platform"):
+        OciRegistryAdapter().resolve_platform_digest(
+            parse_image_reference("example/app:latest"),
+            os_name="linux",
+            architecture="amd64",
+        )
 
 
 def test_json_notifier_redacts_secret_like_fields(capsys) -> None:

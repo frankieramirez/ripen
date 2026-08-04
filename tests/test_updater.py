@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import yaml
 
 from nas_stack_updater.adapters import parse_image_reference
 from nas_stack_updater.models import (
@@ -13,6 +14,7 @@ from nas_stack_updater.models import (
     Policy,
     PortainerStack,
     ResultCode,
+    ServicePolicy,
     StackPolicy,
     UpdaterStatus,
 )
@@ -23,6 +25,12 @@ COMPOSE = """services:
   example-app:
     image: ghcr.io/example/example-app:latest
     restart: unless-stopped
+"""
+MULTI_COMPOSE = """services:
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
 """
 DRIFTED_COMPOSE = COMPOSE + "    environment:\n      CHANGED: 'true'\n"
 OLD = "sha256:" + "1" * 64
@@ -53,6 +61,12 @@ class FakePortainer:
         self.updates: list[tuple[str, bool]] = []
         self.update_error: Exception | None = None
         self.status_after_update_error: str | None = None
+        self.service_digests = {
+            "example-app": OLD,
+            "radarr": OLD,
+            "sonarr": OLD,
+        }
+        self.simulate_service_updates = False
 
     def current_username(self) -> str:
         return self.username
@@ -68,6 +82,9 @@ class FakePortainer:
     def get_image_status(self, stack_id: int) -> str:
         return self.image_status
 
+    def get_service_image_digests(self, stack: PortainerStack) -> dict[str, str]:
+        return dict(self.service_digests)
+
     def update_stack(
         self,
         stack: PortainerStack,
@@ -77,6 +94,13 @@ class FakePortainer:
         repull: bool,
     ) -> None:
         self.updates.append((compose, repull))
+        if self.simulate_service_updates:
+            parsed = yaml.safe_load(compose)
+            for name, service in parsed["services"].items():
+                image = service.get("image", "")
+                if "@sha256:" in image:
+                    self.service_digests[name] = image.rsplit("@", 1)[1]
+            self.compose_values = [compose]
         if self.update_error is not None:
             if self.status_after_update_error is not None:
                 self.image_status = self.status_after_update_error
@@ -86,8 +110,22 @@ class FakePortainer:
 @dataclass
 class FakeRegistry:
     digest: str = OLD
+    platform_digests: dict[str, str] | None = None
 
     def resolve_digest(self, image: object) -> str:
+        return self.digest
+
+    def resolve_platform_digest(
+        self,
+        image: object,
+        *,
+        os_name: str,
+        architecture: str,
+        variant: str | None = None,
+    ) -> str:
+        repository = getattr(image, "repository")
+        if self.platform_digests is not None:
+            return self.platform_digests[repository]
         return self.digest
 
 
@@ -113,6 +151,16 @@ class FakeNotifier:
 class FailingNotifier:
     def emit(self, event: str, fields: dict[str, object]) -> None:
         raise RuntimeError("notification transport unavailable")
+
+
+class SelectiveHealth:
+    def __init__(self, unhealthy_target: str | None = None) -> None:
+        self.unhealthy_target = unhealthy_target
+        self.targets: list[str] = []
+
+    def check(self, policy: HealthPolicy) -> bool:
+        self.targets.append(policy.target)
+        return policy.target != self.unhealthy_target
 
 
 class FakeState:
@@ -230,6 +278,69 @@ def make_updater(
     return updater, portainer, registry, state, clock, health
 
 
+def make_multi_updater(
+    *,
+    auto_apply: bool = False,
+    sonarr_auto_apply: bool = False,
+    health_outcomes: list[bool] | None = None,
+) -> tuple[
+    Updater, FakePortainer, FakeRegistry, FakeState, FakeClock, FakeHealth
+]:
+    portainer = FakePortainer()
+    portainer.stack = PortainerStack(211, 2, "arr", 1, ())
+    portainer.visible = (portainer.stack,)
+    portainer.compose_values = [MULTI_COMPOSE]
+    portainer.service_digests = {"radarr": OLD, "sonarr": OLD}
+    portainer.simulate_service_updates = True
+    registry = FakeRegistry(
+        platform_digests={
+            "linuxserver/radarr": OLD,
+            "linuxserver/sonarr": OLD,
+        }
+    )
+    state = FakeState()
+    clock = FakeClock()
+    health = FakeHealth(health_outcomes)
+    multi_policy = policy()
+    multi_policy = Policy(
+        **{
+            **multi_policy.__dict__,
+            "stacks": (
+                StackPolicy(
+                    "arr",
+                    True,
+                    False,
+                    ("radarr", "sonarr"),
+                    None,
+                    (
+                        ServicePolicy(
+                            "radarr",
+                            auto_apply,
+                            HealthPolicy("http", "http://radarr:7878/", (200,), 1),
+                        ),
+                        ServicePolicy(
+                            "sonarr",
+                            sonarr_auto_apply,
+                            HealthPolicy("http", "http://sonarr:8989/", (200,), 1),
+                        ),
+                    ),
+                ),
+            ),
+            "excluded_stacks": frozenset(),
+        }
+    )
+    updater = Updater(
+        multi_policy,
+        portainer=portainer,
+        registry=registry,
+        health=health,
+        state=state,
+        notifier=FakeNotifier(),
+        clock=clock,
+    )
+    return updater, portainer, registry, state, clock, health
+
+
 def result_code(updater: Updater, mode: Mode | None = None) -> ResultCode:
     report = updater.run(mode)
     assert len(report.results) == 1
@@ -242,6 +353,180 @@ def test_monitor_records_proven_baseline_without_redeploying() -> None:
     assert result_code(updater) is ResultCode.BASELINED
     assert state.accepted["example-app"] == OLD
     assert portainer.updates == []
+
+
+def test_monitor_baselines_each_service_in_a_multi_service_stack() -> None:
+    updater, portainer, _, state, _, _ = make_multi_updater()
+
+    report = updater.run(Mode.MONITOR)
+
+    assert [(item.stack, item.code) for item in report.results] == [
+        ("arr/radarr", ResultCode.BASELINED),
+        ("arr/sonarr", ResultCode.BASELINED),
+    ]
+    assert state.accepted == {
+        "arr/radarr": OLD,
+        "arr/sonarr": OLD,
+    }
+    assert portainer.updates == []
+
+
+def test_apply_updates_only_one_service_in_a_multi_service_stack() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True
+    )
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    first = updater.run(Mode.APPLY)
+    clock.advance(86400)
+    second = updater.run(Mode.APPLY)
+
+    assert [(item.stack, item.code) for item in first.results] == [
+        ("arr/radarr", ResultCode.CANDIDATE),
+        ("arr/sonarr", ResultCode.UP_TO_DATE),
+    ]
+    assert [(item.stack, item.code) for item in second.results] == [
+        ("arr/radarr", ResultCode.UPDATED),
+        ("arr/sonarr", ResultCode.UP_TO_DATE),
+    ]
+    assert len(portainer.updates) == 1
+    deployed = yaml.safe_load(portainer.updates[0][0])
+    assert deployed["services"]["radarr"]["image"].endswith("@" + NEW)
+    assert deployed["services"]["sonarr"]["image"] == (
+        "lscr.io/linuxserver/sonarr:latest"
+    )
+    assert portainer.updates[0][1] is False
+    assert portainer.service_digests == {"radarr": NEW, "sonarr": OLD}
+
+    follow_up = updater.run(Mode.MONITOR)
+    assert [(item.stack, item.code) for item in follow_up.results] == [
+        ("arr/radarr", ResultCode.UP_TO_DATE),
+        ("arr/sonarr", ResultCode.UP_TO_DATE),
+    ]
+
+
+def test_multi_service_update_preserves_compose_comments_and_anchors() -> None:
+    compose = """# retained header
+x-restart: &restart unless-stopped
+services:
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest # retain target comment
+    restart: *restart
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    restart: *restart
+"""
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True
+    )
+    portainer.compose_values = [compose]
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    updater.run(Mode.APPLY)
+
+    deployed = portainer.updates[0][0]
+    assert "# retained header" in deployed
+    assert "# retain target comment" in deployed
+    assert "&restart" in deployed
+    assert deployed.count("*restart") == 2
+    assert f'"lscr.io/linuxserver/radarr:latest@{NEW}"' in deployed
+
+
+def test_failed_multi_service_health_check_rolls_back_only_changed_service() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True,
+        health_outcomes=[True, True, False, False, False, True, True],
+    )
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    report = updater.run(Mode.APPLY)
+
+    assert [(item.stack, item.code) for item in report.results] == [
+        ("arr/radarr", ResultCode.ROLLED_BACK),
+        ("arr/sonarr", ResultCode.UP_TO_DATE),
+    ]
+    assert len(portainer.updates) == 2
+    deployed = [yaml.safe_load(item[0]) for item in portainer.updates]
+    assert deployed[0]["services"]["radarr"]["image"].endswith("@" + NEW)
+    assert deployed[1]["services"]["radarr"]["image"].endswith("@" + OLD)
+    assert all(
+        item["services"]["sonarr"]["image"]
+        == "lscr.io/linuxserver/sonarr:latest"
+        for item in deployed
+    )
+    assert all(repull is False for _, repull in portainer.updates)
+    assert portainer.service_digests == {"radarr": OLD, "sonarr": OLD}
+    assert state.breaker_reason is not None
+    assert "arr/radarr" in state.breaker_reason
+
+
+def test_apply_changes_at_most_one_service_when_two_candidates_are_mature() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True, sonarr_auto_apply=True
+    )
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests = {
+        "linuxserver/radarr": NEW,
+        "linuxserver/sonarr": NEW,
+    }
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    report = updater.run(Mode.APPLY)
+
+    assert report.updates_applied == 1
+    assert [(item.stack, item.code) for item in report.results] == [
+        ("arr/radarr", ResultCode.UPDATED),
+        ("arr/sonarr", ResultCode.CANDIDATE),
+    ]
+    assert portainer.service_digests == {"radarr": NEW, "sonarr": OLD}
+
+
+def test_apply_refuses_to_mutate_when_another_stack_service_is_unhealthy() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True
+    )
+    updater.health = SelectiveHealth("http://sonarr:8989/")
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    report = updater.run(Mode.APPLY)
+
+    assert report.results[0].stack == "arr/radarr"
+    assert report.results[0].code is ResultCode.INELIGIBLE
+    assert "health preflight" in report.results[0].detail
+    assert portainer.updates == []
+
+
+def test_apply_verifies_every_stack_service_before_and_after_update() -> None:
+    updater, _, registry, state, clock, _ = make_multi_updater(auto_apply=True)
+    health = SelectiveHealth()
+    updater.health = health
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    report = updater.run(Mode.APPLY)
+
+    assert report.results[0].code is ResultCode.UPDATED
+    assert health.targets.count("http://radarr:7878/") >= 2
+    assert health.targets.count("http://sonarr:8989/") >= 2
 
 
 def test_monitor_refuses_to_baseline_when_update_already_pending() -> None:
@@ -305,7 +590,7 @@ def test_failed_health_rolls_back_to_digest_and_opens_breaker() -> None:
     clock.advance(86400)
     assert result_code(updater, Mode.APPLY) is ResultCode.ROLLED_BACK
     assert len(portainer.updates) == 2
-    assert f"ghcr.io/example/example-app@{OLD}" in portainer.updates[1][0]
+    assert f"ghcr.io/example/example-app:latest@{OLD}" in portainer.updates[1][0]
     assert state.breaker_reason is not None
 
 
@@ -321,6 +606,24 @@ def test_failed_rollback_health_opens_breaker_and_stops_future_apply() -> None:
     clock.advance(86400)
     assert result_code(updater, Mode.APPLY) is ResultCode.ROLLBACK_FAILED
     assert result_code(updater, Mode.APPLY) is ResultCode.BREAKER_OPEN
+    assert len(portainer.updates) == 2
+
+
+def test_health_adapter_exception_times_out_into_rollback() -> None:
+    class ExplodingHealth:
+        def check(self, policy: HealthPolicy) -> bool:
+            raise RuntimeError("temporary health transport failure")
+
+    updater, portainer, registry, state, clock, _ = make_updater(auto_apply=True)
+    updater.health = ExplodingHealth()
+    state.accepted["example-app"] = OLD
+    portainer.image_status = "outdated"
+    registry.digest = NEW
+
+    assert result_code(updater, Mode.APPLY) is ResultCode.CANDIDATE
+    clock.advance(86400)
+
+    assert result_code(updater, Mode.APPLY) is ResultCode.ROLLBACK_FAILED
     assert len(portainer.updates) == 2
 
 
@@ -356,9 +659,12 @@ def test_image_parser_normalizes_docker_hub_and_preserves_ghcr() -> None:
     assert ghcr.repository == "example/app"
 
 
-def test_digest_pinned_image_is_ineligible() -> None:
-    with pytest.raises(ValueError, match="mutable tagged"):
-        parse_image_reference(f"ghcr.io/example/app@{OLD}")
+def test_tagged_digest_reference_preserves_update_channel_and_pin() -> None:
+    image = parse_image_reference(f"ghcr.io/example/app:latest@{OLD}")
+
+    assert image.tagged == "ghcr.io/example/app:latest"
+    assert image.pinned_digest == OLD
+    assert image.pinned(NEW) == f"ghcr.io/example/app:latest@{NEW}"
 
 
 @pytest.mark.parametrize(
