@@ -174,6 +174,8 @@ class Updater:
                 )
             observations: list[StackObservation] = []
             for service_policy in stack_policy.services:
+                if not service_policy.enabled:
+                    continue
                 service = services[service_policy.name]
                 if not isinstance(service, dict) or not isinstance(
                     service.get("image"), str

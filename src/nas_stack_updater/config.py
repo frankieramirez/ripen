@@ -150,13 +150,30 @@ def load_policy(path: str | Path) -> Policy:
                 )
                 _exact_keys(
                     service_raw,
-                    {"auto_apply", "health"},
+                    {"enabled", "auto_apply", "health"},
                     f"stacks.{name}.services.{service_name}",
                 )
+                service_enabled = service_raw.get("enabled", True)
+                service_auto_apply = service_raw.get("auto_apply", False)
+                if not isinstance(service_enabled, bool):
+                    raise ConfigError(
+                        f"stacks.{name}.services.{service_name}.enabled "
+                        "must be a boolean"
+                    )
+                if not isinstance(service_auto_apply, bool):
+                    raise ConfigError(
+                        f"stacks.{name}.services.{service_name}.auto_apply "
+                        "must be a boolean"
+                    )
+                if not service_enabled and service_auto_apply:
+                    raise ConfigError(
+                        f"stacks.{name}.services.{service_name} cannot auto-apply "
+                        "when disabled"
+                    )
                 parsed_services.append(
                     ServicePolicy(
                         name=service_name,
-                        auto_apply=bool(service_raw.get("auto_apply", False)),
+                        auto_apply=service_auto_apply,
                         health=_health_policy(
                             _required(
                                 service_raw,
@@ -165,7 +182,12 @@ def load_policy(path: str | Path) -> Policy:
                             ),
                             f"stacks.{name}.services.{service_name}.health",
                         ),
+                        enabled=service_enabled,
                     )
+                )
+            if not any(service.enabled for service in parsed_services):
+                raise ConfigError(
+                    f"stacks.{name}.services requires at least one enabled service"
                 )
             service_policies = tuple(parsed_services)
         else:

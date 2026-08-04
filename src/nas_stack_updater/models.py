@@ -41,6 +41,7 @@ class ServicePolicy:
     name: str
     auto_apply: bool
     health: HealthPolicy
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
