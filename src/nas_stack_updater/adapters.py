@@ -228,6 +228,7 @@ class PortainerHttpAdapter:
                 raise AdapterError("unexpected Portainer container entry")
             labels = item.get("Labels")
             image_id = item.get("ImageID")
+            container_image = item.get("Image")
             if not isinstance(labels, dict) or not isinstance(image_id, str):
                 raise AdapterError("Portainer container entry is missing image metadata")
             service = labels.get("com.docker.compose.service")
@@ -235,6 +236,11 @@ class PortainerHttpAdapter:
                 raise AdapterError("Portainer returned a container from another project")
             if not isinstance(service, str) or not service or service in result:
                 raise AdapterError("Portainer returned an invalid Compose service identity")
+            if isinstance(container_image, str):
+                pinned = re.search(r"@(sha256:[0-9a-f]{64})$", container_image)
+                if pinned:
+                    result[service] = pinned.group(1)
+                    continue
             image_payload = self._request(
                 "GET",
                 f"/api/endpoints/{stack.endpoint_id}/docker/images/"
