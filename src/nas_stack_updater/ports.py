@@ -5,9 +5,12 @@ from typing import Protocol
 
 from .models import (
     CandidateObservation,
+    GitProposalChange,
+    GitProposalResult,
     HealthPolicy,
     ImageReference,
     PortainerStack,
+    PendingProposal,
     UpdaterStatus,
 )
 
@@ -46,6 +49,10 @@ class RegistryPort(Protocol):
     ) -> str: ...
 
 
+class GitProposalPort(Protocol):
+    def propose(self, change: GitProposalChange) -> GitProposalResult: ...
+
+
 class HealthPort(Protocol):
     def check(self, policy: HealthPolicy) -> bool: ...
 
@@ -60,6 +67,14 @@ class StateStore(Protocol):
     def get_accepted_digest(self, stack: str) -> str | None: ...
 
     def set_accepted_digest(self, stack: str, digest: str, now: datetime) -> None: ...
+
+    def get_pending_proposal(self, stack: str) -> PendingProposal | None: ...
+
+    def set_pending_proposal(
+        self, stack: str, digest: str, url: str, now: datetime
+    ) -> None: ...
+
+    def clear_pending_proposal(self, stack: str) -> bool: ...
 
     def observe_candidate(
         self, stack: str, digest: str, now: datetime

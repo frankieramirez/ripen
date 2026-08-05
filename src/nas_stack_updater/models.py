@@ -22,6 +22,7 @@ class ResultCode(StrEnum):
     EXCLUDED = "excluded"
     INELIGIBLE = "ineligible"
     NOT_VISIBLE = "not_visible"
+    PROPOSED = "proposed"
     ROLLBACK_FAILED = "rollback_failed"
     ROLLED_BACK = "rolled_back"
     UPDATED = "updated"
@@ -52,6 +53,14 @@ class StackPolicy:
     expected_services: tuple[str, ...]
     health: HealthPolicy | None
     services: tuple[ServicePolicy, ...] = ()
+    git_path: str | None = None
+
+
+@dataclass(frozen=True)
+class GitHubPolicy:
+    repository: str
+    base_branch: str
+    token_file: str
 
 
 @dataclass(frozen=True)
@@ -70,6 +79,7 @@ class Policy:
     check_interval_seconds: int
     stacks: tuple[StackPolicy, ...]
     excluded_stacks: frozenset[str]
+    github: GitHubPolicy | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +157,7 @@ class UpdaterStatus:
     breaker_reason: str | None
     accepted_digests: dict[str, str] = field(default_factory=dict)
     lease_active: bool = False
+    pending_proposals: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -158,3 +169,25 @@ class CandidateObservation:
     first_seen: datetime
     last_seen: datetime
     count: int
+
+
+@dataclass(frozen=True)
+class PendingProposal:
+    digest: str
+    url: str
+    proposed_at: datetime
+
+
+@dataclass(frozen=True)
+class GitProposalChange:
+    state_key: str
+    repository_path: str
+    expected_content: str
+    proposed_content: str
+    digest: str
+
+
+@dataclass(frozen=True)
+class GitProposalResult:
+    url: str
+    created: bool

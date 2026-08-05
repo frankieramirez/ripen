@@ -8,6 +8,7 @@ from yaml.nodes import MappingNode, ScalarNode
 
 from .adapters import parse_image_reference
 from .models import (
+    GitProposalChange,
     HealthPolicy,
     Mode,
     Policy,
@@ -19,7 +20,15 @@ from .models import (
     StackResult,
     UpdaterStatus,
 )
-from .ports import Clock, HealthPort, NotifierPort, PortainerPort, RegistryPort, StateStore
+from .ports import (
+    Clock,
+    GitProposalPort,
+    HealthPort,
+    NotifierPort,
+    PortainerPort,
+    RegistryPort,
+    StateStore,
+)
 
 
 class EligibilityError(ValueError):
@@ -39,6 +48,7 @@ class Updater:
         state: StateStore,
         notifier: NotifierPort,
         clock: Clock,
+        git_proposals: GitProposalPort | None = None,
     ) -> None:
         self.policy = policy
         self.portainer = portainer
@@ -47,6 +57,7 @@ class Updater:
         self.state = state
         self.notifier = notifier
         self.clock = clock
+        self.git_proposals = git_proposals
 
     def run(self, mode: Mode | None = None) -> RunReport:
         selected_mode = mode or self.policy.mode
@@ -151,6 +162,17 @@ class Updater:
         self._notify("breaker_cleared", {"reason": reason})
         return self.status()
 
+    def clear_proposal(self, stack: str, reason: str) -> UpdaterStatus:
+        if not stack.strip() or not reason.strip():
+            raise ValueError("stack and reason are required")
+        if not self.state.clear_pending_proposal(stack.strip()):
+            raise ValueError(f"no pending proposal exists for {stack.strip()!r}")
+        self._notify(
+            "git_proposal_cleared",
+            {"stack": stack.strip(), "reason": reason.strip()},
+        )
+        return self.status()
+
     def _observe(
         self, stack_policy: StackPolicy, stack: PortainerStack
     ) -> tuple[StackObservation, ...]:
@@ -220,10 +242,23 @@ class Updater:
             image = parse_image_reference(service["image"])
         except ValueError as error:
             raise EligibilityError(str(error)) from error
-        image_status = self.portainer.get_image_status(stack.id)
-        if image_status not in {"updated", "outdated"}:
-            raise EligibilityError(f"Portainer image status is {image_status!r}")
-        digest = self.registry.resolve_digest(image)
+        running_digest: str | None = None
+        if stack.git_backed:
+            running = self.portainer.get_service_image_digests(stack)
+            if set(running) != {service_name}:
+                raise EligibilityError(
+                    "running Compose services do not match the reviewed policy"
+                )
+            digest = self.registry.resolve_platform_digest(
+                image, os_name="linux", architecture="amd64"
+            )
+            running_digest = running[service_name]
+            image_status = "updated" if running_digest == digest else "outdated"
+        else:
+            image_status = self.portainer.get_image_status(stack.id)
+            if image_status not in {"updated", "outdated"}:
+                raise EligibilityError(f"Portainer image status is {image_status!r}")
+            digest = self.registry.resolve_digest(image)
         return (StackObservation(
             stack=stack,
             compose=compose,
@@ -236,6 +271,7 @@ class Updater:
             state_key=stack_policy.name,
             health=stack_policy.health,
             auto_apply=stack_policy.auto_apply,
+            running_digest=running_digest,
         ),)
 
     def _evaluate(
@@ -282,16 +318,85 @@ class Updater:
                 ),
                 False,
             )
+        pending = self.state.get_pending_proposal(observation.state_key)
         if (
             observation.running_digest is not None
             and observation.running_digest != accepted
         ):
+            if (
+                observation.stack.git_backed
+                and pending is not None
+                and pending.digest == observation.running_digest
+                and observation.image.pinned_digest == observation.running_digest
+            ):
+                if not self._stack_health_once(stack_policy):
+                    reason = (
+                        f"{observation.state_key}: pending Git deployment failed "
+                        "functional health verification"
+                    )
+                    self.state.open_breaker(reason, now)
+                    self.state.record_attempt(
+                        observation.state_key,
+                        accepted,
+                        observation.running_digest,
+                        ResultCode.ERROR.value,
+                        now,
+                        reason,
+                    )
+                    return (
+                        StackResult(
+                            observation.state_key,
+                            ResultCode.ERROR,
+                            "pending Git deployment failed health; breaker opened",
+                            observation.running_digest,
+                        ),
+                        False,
+                    )
+                detail = "Git proposal deployed and passed functional health verification"
+                self.state.set_accepted_digest(
+                    observation.state_key, observation.running_digest, now
+                )
+                self.state.record_attempt(
+                    observation.state_key,
+                    accepted,
+                    observation.running_digest,
+                    ResultCode.UPDATED.value,
+                    now,
+                    detail,
+                )
+                self._notify(
+                    "git_deployment_accepted",
+                    {
+                        "stack": observation.state_key,
+                        "digest": observation.running_digest,
+                        "proposal_url": pending.url,
+                    },
+                )
+                return (
+                    StackResult(
+                        observation.state_key,
+                        ResultCode.UPDATED,
+                        detail,
+                        observation.running_digest,
+                    ),
+                    False,
+                )
             return (
                 StackResult(
                     observation.state_key,
                     ResultCode.DRIFTED,
                     "running service digest changed outside the updater",
                     observation.running_digest,
+                ),
+                False,
+            )
+        if pending is not None and pending.digest != observation.remote_digest:
+            return (
+                StackResult(
+                    observation.state_key,
+                    ResultCode.INELIGIBLE,
+                    "a different Git proposal is still pending review",
+                    pending.digest,
                 ),
                 False,
             )
@@ -350,15 +455,6 @@ class Updater:
                 ),
                 False,
             )
-        if current.git_backed:
-            return (
-                StackResult(
-                    observation.state_key,
-                    ResultCode.INELIGIBLE,
-                    "Git-backed stacks require a Git-native deployment; direct update refused",
-                ),
-                False,
-            )
         current_compose = self.portainer.get_stack_file(current.id)
         if (
             current.id != observation.stack.id
@@ -375,6 +471,8 @@ class Updater:
                 ),
                 False,
             )
+        if current.git_backed:
+            return self._propose_git_change(stack_policy, observation, current_compose)
         deploy_compose = current_compose
         repull = True
         if observation.running_digest is not None:
@@ -438,6 +536,86 @@ class Updater:
         except Exception as error:
             failure = f"update failed: {error}"
         return self._rollback(stack_policy, observation, accepted, failure)
+
+    def _propose_git_change(
+        self,
+        stack_policy: StackPolicy,
+        observation: StackObservation,
+        current_compose: str,
+    ) -> tuple[StackResult, bool]:
+        if self.git_proposals is None or stack_policy.git_path is None:
+            return (
+                StackResult(
+                    observation.state_key,
+                    ResultCode.INELIGIBLE,
+                    "Git-backed stack has no reviewed Git proposal configuration",
+                ),
+                False,
+            )
+        running = self.portainer.get_service_image_digests(observation.stack)
+        accepted = self.state.get_accepted_digest(observation.state_key)
+        if accepted is None or running.get(observation.service_name) != accepted:
+            return (
+                StackResult(
+                    observation.state_key,
+                    ResultCode.DRIFTED,
+                    "running service digest changed before Git proposal",
+                ),
+                False,
+            )
+        if not self._stack_health_once(stack_policy):
+            return (
+                StackResult(
+                    observation.state_key,
+                    ResultCode.INELIGIBLE,
+                    "stack health preflight failed before Git proposal",
+                ),
+                False,
+            )
+        proposed_compose = self._replace_service_image(
+            current_compose,
+            observation.service_name,
+            observation.image.original,
+            observation.image.pinned(observation.remote_digest),
+        )
+        proposal = self.git_proposals.propose(
+            GitProposalChange(
+                state_key=observation.state_key,
+                repository_path=stack_policy.git_path,
+                expected_content=current_compose,
+                proposed_content=proposed_compose,
+                digest=observation.remote_digest,
+            )
+        )
+        self.state.set_pending_proposal(
+            observation.state_key,
+            observation.remote_digest,
+            proposal.url,
+            self.clock.now(),
+        )
+        detail = (
+            "created Git digest-pin proposal"
+            if proposal.created
+            else "Git digest-pin proposal is already open"
+        )
+        self._notify(
+            "git_proposal_ready",
+            {
+                "stack": observation.state_key,
+                "digest": observation.remote_digest,
+                "proposal_url": proposal.url,
+                "created": proposal.created,
+            },
+        )
+        return (
+            StackResult(
+                observation.state_key,
+                ResultCode.PROPOSED,
+                f"{detail}: {proposal.url}",
+                observation.remote_digest,
+            ),
+            False,
+        )
 
     def _record_update_success(
         self,

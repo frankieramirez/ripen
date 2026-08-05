@@ -42,6 +42,35 @@ def test_state_persists_independent_service_digests_for_one_stack(tmp_path: Path
     }
 
 
+def test_state_persists_and_clears_pending_git_proposal(tmp_path: Path) -> None:
+    state = store(tmp_path)
+    state.set_accepted_digest("arr/radarr", OLD, NOW)
+    state.set_pending_proposal(
+        "arr/radarr", NEW, "https://github.com/example/nas/pull/42", NOW
+    )
+
+    pending = store(tmp_path).get_pending_proposal("arr/radarr")
+    assert pending is not None
+    assert pending.digest == NEW
+    assert pending.url.endswith("/pull/42")
+    assert store(tmp_path).get_status(NOW).pending_proposals == {
+        "arr/radarr": {"digest": NEW, "url": pending.url}
+    }
+
+    state.set_accepted_digest("arr/radarr", NEW, NOW + timedelta(minutes=1))
+    assert state.get_pending_proposal("arr/radarr") is None
+
+
+def test_clear_pending_proposal_reports_whether_record_existed(tmp_path: Path) -> None:
+    state = store(tmp_path)
+    assert state.clear_pending_proposal("arr/radarr") is False
+    state.set_pending_proposal(
+        "arr/radarr", NEW, "https://github.com/example/nas/pull/42", NOW
+    )
+    assert state.clear_pending_proposal("arr/radarr") is True
+    assert state.clear_pending_proposal("arr/radarr") is False
+
+
 def test_lease_excludes_concurrent_run_and_expires(tmp_path: Path) -> None:
     state = store(tmp_path)
 

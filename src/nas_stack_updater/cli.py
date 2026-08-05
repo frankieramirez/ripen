@@ -8,6 +8,7 @@ import sys
 from .adapters import (
     AdapterError,
     FunctionalHealthAdapter,
+    GitHubProposalAdapter,
     JsonLogNotifier,
     OciRegistryAdapter,
     PortainerHttpAdapter,
@@ -42,6 +43,11 @@ def _parser() -> argparse.ArgumentParser:
 
     clear = commands.add_parser("clear-breaker", help="clear a reviewed circuit breaker")
     clear.add_argument("--reason", required=True)
+    proposal = commands.add_parser(
+        "clear-proposal", help="clear a reviewed stale Git proposal record"
+    )
+    proposal.add_argument("--stack", required=True)
+    proposal.add_argument("--reason", required=True)
     return parser
 
 
@@ -61,6 +67,15 @@ def _build(config_path: str) -> tuple[Updater, SystemClock]:
         state=SqliteStateStore(policy.state_file),
         notifier=JsonLogNotifier(),
         clock=clock,
+        git_proposals=(
+            GitHubProposalAdapter(
+                policy.github.repository,
+                policy.github.base_branch,
+                policy.github.token_file,
+            )
+            if policy.github is not None
+            else None
+        ),
     )
     return updater, clock
 
@@ -80,6 +95,15 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 json.dumps(
                     updater.clear_breaker(args.reason).to_dict(), indent=2, sort_keys=True
+                )
+            )
+            return 0
+        if args.command == "clear-proposal":
+            print(
+                json.dumps(
+                    updater.clear_proposal(args.stack, args.reason).to_dict(),
+                    indent=2,
+                    sort_keys=True,
                 )
             )
             return 0
