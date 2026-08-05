@@ -6,7 +6,8 @@ Do not open a public issue for a suspected vulnerability. Use GitHub's private
 vulnerability reporting feature for this repository.
 
 Include the affected version, reproduction steps, and impact. Do not include
-real Portainer API keys, Compose environment secrets, or private network data.
+real Portainer API keys, GitHub tokens, Compose environment secrets, or private
+network data.
 
 ## Deployment boundaries
 

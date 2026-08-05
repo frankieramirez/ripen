@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import http.client
@@ -20,8 +21,11 @@ from typing import Any
 
 from .models import (
     CandidateObservation,
+    GitProposalChange,
+    GitProposalResult,
     HealthPolicy,
     ImageReference,
+    PendingProposal,
     PortainerStack,
     UpdaterStatus,
 )
@@ -34,6 +38,12 @@ class AdapterError(RuntimeError):
 class PortainerError(AdapterError):
     def __init__(self, status: int, detail: str) -> None:
         super().__init__(f"Portainer HTTP {status}: {detail}")
+        self.status = status
+
+
+class GitHubError(AdapterError):
+    def __init__(self, status: int, detail: str) -> None:
+        super().__init__(f"GitHub HTTP {status}: {detail}")
         self.status = status
 
 
@@ -295,6 +305,184 @@ class PortainerHttpAdapter:
         )
 
 
+class GitHubProposalAdapter:
+    """Creates one idempotent digest-pin PR without merging or deploying it."""
+
+    def __init__(
+        self,
+        repository: str,
+        base_branch: str,
+        token_file: str,
+        *,
+        timeout: float = 20,
+    ) -> None:
+        owner, separator, name = repository.partition("/")
+        if not separator or not owner or not name or "/" in name:
+            raise ValueError("GitHub repository must be owner/repository")
+        token = Path(token_file).read_text(encoding="utf-8").strip()
+        if not token or any(character.isspace() for character in token):
+            raise ValueError("GitHub token file is empty or contains whitespace")
+        if Path(token_file).stat().st_mode & 0o077:
+            raise ValueError("GitHub token file must not be accessible by group or others")
+        self.repository = repository
+        self.owner = owner
+        self.base_branch = base_branch
+        self.timeout = timeout
+        self._headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, object] | None = None,
+        *,
+        allow_not_found: bool = False,
+    ) -> object | None:
+        url = f"https://api.github.com/repos/{self.repository}{path}"
+        encoded = json.dumps(body, separators=(",", ":")).encode() if body else None
+        headers = dict(self._headers)
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(url, data=encoded, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as error:
+            if allow_not_found and error.code == 404:
+                return None
+            try:
+                payload = json.loads(error.read())
+            except (json.JSONDecodeError, OSError):
+                payload = {}
+            detail = str(payload.get("message", "request failed"))
+            raise GitHubError(error.code, detail) from error
+        except (urllib.error.URLError, TimeoutError) as error:
+            raise AdapterError("GitHub request failed") from error
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise AdapterError("GitHub returned malformed JSON") from error
+
+    @staticmethod
+    def _file(payload: object) -> tuple[str, str]:
+        if not isinstance(payload, dict):
+            raise AdapterError("GitHub returned an invalid repository file")
+        encoded = payload.get("content")
+        sha = payload.get("sha")
+        if not isinstance(encoded, str) or not isinstance(sha, str):
+            raise AdapterError("GitHub repository file is missing content or sha")
+        try:
+            content = base64.b64decode(
+                "".join(encoded.split()), validate=True
+            ).decode("utf-8")
+        except (ValueError, UnicodeDecodeError) as error:
+            raise AdapterError("GitHub repository file content is invalid") from error
+        return content, sha
+
+    @staticmethod
+    def _slug(value: str) -> str:
+        slug = re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
+        if not slug:
+            raise ValueError("proposal state key has no safe branch name")
+        return slug[:80]
+
+    def propose(self, change: GitProposalChange) -> GitProposalResult:
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", change.digest):
+            raise ValueError("Git proposal digest must be a sha256 digest")
+        source_path = Path(change.repository_path)
+        if (
+            source_path.is_absolute()
+            or ".." in source_path.parts
+            or "\\" in change.repository_path
+            or source_path.suffix not in {".yaml", ".yml"}
+        ):
+            raise ValueError("Git proposal repository path must be a relative YAML path")
+        path = urllib.parse.quote(change.repository_path, safe="/")
+        base_ref = urllib.parse.quote(self.base_branch, safe="")
+        base_payload = self._request("GET", f"/contents/{path}?ref={base_ref}")
+        base_content, base_file_sha = self._file(base_payload)
+        if not hmac.compare_digest(base_content, change.expected_content):
+            raise AdapterError(
+                "Git repository source differs from the live reviewed Compose file"
+            )
+
+        digest_short = change.digest.removeprefix("sha256:")[:12]
+        branch = f"nas-stack-updater/{self._slug(change.state_key)}-{digest_short}"
+        encoded_branch = urllib.parse.quote(branch, safe="")
+        branch_payload = self._request(
+            "GET", f"/git/ref/heads/{encoded_branch}", allow_not_found=True
+        )
+        if branch_payload is None:
+            source_ref = self._request("GET", f"/git/ref/heads/{base_ref}")
+            try:
+                source_sha = source_ref["object"]["sha"]  # type: ignore[index]
+            except (KeyError, TypeError) as error:
+                raise AdapterError("GitHub base branch response is invalid") from error
+            self._request(
+                "POST",
+                "/git/refs",
+                {"ref": f"refs/heads/{branch}", "sha": source_sha},
+            )
+            branch_content = base_content
+            branch_file_sha = base_file_sha
+        else:
+            branch_file = self._request("GET", f"/contents/{path}?ref={encoded_branch}")
+            branch_content, branch_file_sha = self._file(branch_file)
+            if branch_content not in {change.expected_content, change.proposed_content}:
+                raise AdapterError("existing updater branch contains an unexpected change")
+
+        if branch_content != change.proposed_content:
+            self._request(
+                "PUT",
+                f"/contents/{path}",
+                {
+                    "message": f"Pin {change.state_key} to {digest_short}",
+                    "content": base64.b64encode(
+                        change.proposed_content.encode("utf-8")
+                    ).decode("ascii"),
+                    "sha": branch_file_sha,
+                    "branch": branch,
+                },
+            )
+
+        query = urllib.parse.urlencode(
+            {"state": "open", "head": f"{self.owner}:{branch}", "base": self.base_branch}
+        )
+        pulls = self._request("GET", f"/pulls?{query}")
+        if isinstance(pulls, list) and len(pulls) == 1:
+            url = pulls[0].get("html_url") if isinstance(pulls[0], dict) else None
+            if isinstance(url, str):
+                return GitProposalResult(url=url, created=False)
+        if pulls != []:
+            raise AdapterError("GitHub returned an ambiguous pull request result")
+
+        pull = self._request(
+            "POST",
+            "/pulls",
+            {
+                "title": f"Pin {change.state_key} to {digest_short}",
+                "head": branch,
+                "base": self.base_branch,
+                "body": (
+                    "Automated digest-pin proposal from nas-stack-updater.\n\n"
+                    f"Service: `{change.state_key}`\n"
+                    f"Digest: `{change.digest}`\n\n"
+                    "This proposal does not merge or deploy itself."
+                ),
+            },
+        )
+        url = pull.get("html_url") if isinstance(pull, dict) else None
+        if not isinstance(url, str):
+            raise AdapterError("GitHub pull request response is invalid")
+        return GitProposalResult(url=url, created=True)
+
+
 def parse_image_reference(value: str) -> ImageReference:
     original = value.strip()
     if not original:
@@ -541,6 +729,12 @@ class SqliteStateStore:
                     observation_count INTEGER NOT NULL,
                     PRIMARY KEY (stack, digest)
                 );
+                CREATE TABLE IF NOT EXISTS pending_proposals (
+                    stack TEXT PRIMARY KEY,
+                    digest TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    proposed_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS attempts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     stack TEXT NOT NULL,
@@ -611,11 +805,18 @@ class SqliteStateStore:
             lease = connection.execute(
                 "SELECT expires_at FROM lease WHERE singleton = 1"
             ).fetchone()
+            proposals = {
+                row["stack"]: {"digest": row["digest"], "url": row["url"]}
+                for row in connection.execute(
+                    "SELECT stack, digest, url FROM pending_proposals ORDER BY stack"
+                )
+            }
         return UpdaterStatus(
             breaker_open=bool(breaker and breaker["is_open"]),
             breaker_reason=(breaker["reason"] if breaker and breaker["is_open"] else None),
             accepted_digests=digests,
             lease_active=bool(lease and datetime.fromisoformat(lease["expires_at"]) > now),
+            pending_proposals=proposals,
         )
 
     def get_accepted_digest(self, stack: str) -> str | None:
@@ -635,6 +836,46 @@ class SqliteStateStore:
                 (stack, digest, now.isoformat()),
             )
             connection.execute("DELETE FROM candidates WHERE stack = ?", (stack,))
+            connection.execute(
+                "DELETE FROM pending_proposals WHERE stack = ?", (stack,)
+            )
+
+    def get_pending_proposal(self, stack: str) -> PendingProposal | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT digest, url, proposed_at FROM pending_proposals WHERE stack = ?",
+                (stack,),
+            ).fetchone()
+        if row is None:
+            return None
+        return PendingProposal(
+            digest=row["digest"],
+            url=row["url"],
+            proposed_at=datetime.fromisoformat(row["proposed_at"]),
+        )
+
+    def set_pending_proposal(
+        self, stack: str, digest: str, url: str, now: datetime
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO pending_proposals(stack, digest, url, proposed_at)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(stack) DO UPDATE SET
+                    digest=excluded.digest,
+                    url=excluded.url,
+                    proposed_at=excluded.proposed_at
+                """,
+                (stack, digest, url, now.isoformat()),
+            )
+
+    def clear_pending_proposal(self, stack: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM pending_proposals WHERE stack = ?", (stack,)
+            )
+        return cursor.rowcount == 1
 
     def observe_candidate(
         self, stack: str, digest: str, now: datetime

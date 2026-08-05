@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -9,8 +9,11 @@ import yaml
 from nas_stack_updater.adapters import parse_image_reference
 from nas_stack_updater.models import (
     CandidateObservation,
+    GitHubPolicy,
+    GitProposalResult,
     HealthPolicy,
     Mode,
+    PendingProposal,
     Policy,
     PortainerStack,
     ResultCode,
@@ -148,6 +151,15 @@ class FakeNotifier:
         self.events.append((event, fields))
 
 
+class FakeGitProposals:
+    def __init__(self) -> None:
+        self.changes = []
+
+    def propose(self, change):  # noqa: ANN001
+        self.changes.append(change)
+        return GitProposalResult("https://github.com/example/nas/pull/42", True)
+
+
 class FailingNotifier:
     def emit(self, event: str, fields: dict[str, object]) -> None:
         raise RuntimeError("notification transport unavailable")
@@ -170,6 +182,7 @@ class FakeState:
         self.breaker_reason: str | None = None
         self.leased = False
         self.attempts: list[tuple[str, str]] = []
+        self.pending: dict[str, PendingProposal] = {}
 
     def acquire_lease(self, now: datetime, ttl_seconds: int) -> str | None:
         if self.leased:
@@ -187,6 +200,10 @@ class FakeState:
             breaker_reason=self.breaker_reason,
             accepted_digests=dict(self.accepted),
             lease_active=self.leased,
+            pending_proposals={
+                stack: {"digest": item.digest, "url": item.url}
+                for stack, item in self.pending.items()
+            },
         )
 
     def get_accepted_digest(self, stack: str) -> str | None:
@@ -194,8 +211,20 @@ class FakeState:
 
     def set_accepted_digest(self, stack: str, digest: str, now: datetime) -> None:
         self.accepted[stack] = digest
+        self.pending.pop(stack, None)
         for key in [key for key in self.candidates if key[0] == stack]:
             del self.candidates[key]
+
+    def get_pending_proposal(self, stack: str) -> PendingProposal | None:
+        return self.pending.get(stack)
+
+    def set_pending_proposal(
+        self, stack: str, digest: str, url: str, now: datetime
+    ) -> None:
+        self.pending[stack] = PendingProposal(digest, url, now)
+
+    def clear_pending_proposal(self, stack: str) -> bool:
+        return self.pending.pop(stack, None) is not None
 
     def observe_candidate(
         self, stack: str, digest: str, now: datetime
@@ -459,9 +488,120 @@ def test_apply_refuses_to_detach_git_backed_multi_service_stack() -> None:
     report = updater.run(Mode.APPLY)
 
     assert report.results[0].code is ResultCode.INELIGIBLE
-    assert "Git-native deployment" in report.results[0].detail
+    assert "Git proposal configuration" in report.results[0].detail
     assert portainer.updates == []
     assert state.breaker_reason is None
+
+
+def test_git_backed_stack_creates_proposal_without_redeploying() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True
+    )
+    portainer.stack = replace(portainer.stack, git_backed=True)
+    portainer.visible = (portainer.stack,)
+    updater.policy = replace(
+        updater.policy,
+        github=GitHubPolicy("example/nas", "main", "/secret"),
+        stacks=(replace(updater.policy.stacks[0], git_path="stacks/arr/compose.yaml"),),
+    )
+    proposals = FakeGitProposals()
+    updater.git_proposals = proposals
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    report = updater.run(Mode.APPLY)
+
+    assert report.results[0].code is ResultCode.PROPOSED
+    assert report.updates_applied == 0
+    assert portainer.updates == []
+    assert len(proposals.changes) == 1
+    change = proposals.changes[0]
+    assert change.repository_path == "stacks/arr/compose.yaml"
+    assert f"lscr.io/linuxserver/radarr:latest@{NEW}" in change.proposed_content
+    assert state.pending["arr/radarr"].digest == NEW
+
+
+def test_git_deployment_is_accepted_only_after_digest_pin_and_health_match() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True
+    )
+    portainer.stack = replace(portainer.stack, git_backed=True)
+    portainer.visible = (portainer.stack,)
+    updater.policy = replace(
+        updater.policy,
+        github=GitHubPolicy("example/nas", "main", "/secret"),
+        stacks=(replace(updater.policy.stacks[0], git_path="stacks/arr/compose.yaml"),),
+    )
+    updater.git_proposals = FakeGitProposals()
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    updater.run(Mode.APPLY)
+
+    portainer.compose_values = [
+        MULTI_COMPOSE.replace(
+            "lscr.io/linuxserver/radarr:latest",
+            f"lscr.io/linuxserver/radarr:latest@{NEW}",
+        )
+    ]
+    portainer.service_digests["radarr"] = NEW
+    report = updater.run(Mode.MONITOR)
+
+    assert report.results[0].code is ResultCode.UPDATED
+    assert report.updates_applied == 0
+    assert state.accepted["arr/radarr"] == NEW
+    assert "arr/radarr" not in state.pending
+    assert portainer.updates == []
+
+
+def test_unhealthy_git_deployment_opens_breaker_without_accepting_digest() -> None:
+    updater, portainer, registry, state, clock, _ = make_multi_updater(
+        auto_apply=True
+    )
+    portainer.stack = replace(portainer.stack, git_backed=True)
+    portainer.visible = (portainer.stack,)
+    updater.policy = replace(
+        updater.policy,
+        github=GitHubPolicy("example/nas", "main", "/secret"),
+        stacks=(replace(updater.policy.stacks[0], git_path="stacks/arr/compose.yaml"),),
+    )
+    updater.git_proposals = FakeGitProposals()
+    state.accepted = {"arr/radarr": OLD, "arr/sonarr": OLD}
+    assert registry.platform_digests is not None
+    registry.platform_digests["linuxserver/radarr"] = NEW
+    updater.run(Mode.APPLY)
+    clock.advance(86400)
+    updater.run(Mode.APPLY)
+    portainer.compose_values = [
+        MULTI_COMPOSE.replace(
+            "lscr.io/linuxserver/radarr:latest",
+            f"lscr.io/linuxserver/radarr:latest@{NEW}",
+        )
+    ]
+    portainer.service_digests["radarr"] = NEW
+    updater.health = SelectiveHealth("http://radarr:7878/")
+
+    report = updater.run(Mode.MONITOR)
+
+    assert report.results[0].code is ResultCode.ERROR
+    assert state.accepted["arr/radarr"] == OLD
+    assert state.breaker_reason is not None
+
+
+def test_operator_can_clear_reviewed_stale_proposal() -> None:
+    updater, _, _, state, clock, _ = make_updater()
+    state.set_pending_proposal(
+        "example-app", NEW, "https://github.com/example/nas/pull/42", clock.now()
+    )
+
+    status = updater.clear_proposal("example-app", "PR closed without merge")
+
+    assert status.pending_proposals == {}
 
 
 def test_multi_service_update_preserves_compose_comments_and_anchors() -> None:

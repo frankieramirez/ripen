@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nas-stack-updater"
-version = "0.2.3"
+version = "0.3.0"
 description = "Least-privilege Portainer stack update monitor with health-gated rollback"
 readme = "README.md"
 requires-python = ">=3.12"

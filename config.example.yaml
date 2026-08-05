@@ -14,6 +14,13 @@ portainer:
   # during deployment staging; never set a global "insecure" flag.
   tls_fingerprint_sha256: REPLACE_DURING_STAGING
 
+# Optional. This token may only target the one allowlisted repository below.
+# Grant Metadata: read, Contents: read/write, and Pull requests: read/write.
+github:
+  repository: example/nas-infrastructure
+  base_branch: main
+  token_file: /run/secrets/github_token
+
 stacks:
   example-app:
     enabled: true
@@ -30,6 +37,9 @@ stacks:
   # have reviewed that baseline for each service.
   example-suite:
     enabled: true
+    # Required for a Git-backed stack when one of its services may auto-apply.
+    # The updater creates a PR; it never merges it.
+    git_path: stacks/example-suite/compose.yaml
     expected_services: [frontend, worker]
     services:
       frontend:

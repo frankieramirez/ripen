@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import string
 from typing import Any
 import urllib.parse
 
 import yaml
 
-from .models import HealthPolicy, Mode, Policy, ServicePolicy, StackPolicy
+from .models import GitHubPolicy, HealthPolicy, Mode, Policy, ServicePolicy, StackPolicy
 
 
 class ConfigError(ValueError):
@@ -88,6 +89,7 @@ def load_policy(path: str | Path) -> Policy:
             "lease_ttl_seconds",
             "check_interval_seconds",
             "portainer",
+            "github",
             "state_file",
             "stacks",
             "exclude",
@@ -114,7 +116,14 @@ def load_policy(path: str | Path) -> Policy:
         raw = _mapping(raw_value, f"stacks.{name}")
         _exact_keys(
             raw,
-            {"enabled", "auto_apply", "expected_services", "health", "services"},
+            {
+                "enabled",
+                "auto_apply",
+                "expected_services",
+                "health",
+                "services",
+                "git_path",
+            },
             f"stacks.{name}",
         )
         expected = raw.get("expected_services", [])
@@ -203,8 +212,48 @@ def load_policy(path: str | Path) -> Policy:
                 expected_services=tuple(expected),
                 health=health,
                 services=service_policies,
+                git_path=(str(raw["git_path"]) if raw.get("git_path") else None),
             )
         )
+
+    github_policy: GitHubPolicy | None = None
+    if "github" in root:
+        github = _mapping(root["github"], "github")
+        _exact_keys(github, {"repository", "base_branch", "token_file"}, "github")
+        repository = str(_required(github, "repository", "github"))
+        if not re.fullmatch(
+            r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?/"
+            r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?",
+            repository,
+        ):
+            raise ConfigError("github.repository must be an owner/repository name")
+        base_branch = str(_required(github, "base_branch", "github"))
+        if (
+            not base_branch
+            or base_branch.startswith("/")
+            or base_branch.endswith(("/", ".", ".lock"))
+            or ".." in base_branch
+            or "//" in base_branch
+            or re.search(r"[\s~^:?*\\\[]", base_branch)
+        ):
+            raise ConfigError("github.base_branch is invalid")
+        token_file = str(_required(github, "token_file", "github"))
+        github_policy = GitHubPolicy(repository, base_branch, token_file)
+
+    for stack in stacks:
+        if stack.git_path is not None:
+            path = Path(stack.git_path)
+            if (
+                github_policy is None
+                or path.is_absolute()
+                or ".." in path.parts
+                or "\\" in stack.git_path
+                or path.suffix not in {".yaml", ".yml"}
+            ):
+                raise ConfigError(
+                    f"stacks.{stack.name}.git_path requires github configuration "
+                    "and a relative YAML path"
+                )
 
     excluded_raw = root.get("exclude", [])
     if not isinstance(excluded_raw, list) or not all(
@@ -277,4 +326,5 @@ def load_policy(path: str | Path) -> Policy:
         ),
         stacks=tuple(stacks),
         excluded_stacks=frozenset(excluded_raw),
+        github=github_policy,
     )

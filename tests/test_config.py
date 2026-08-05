@@ -41,6 +41,38 @@ def test_load_policy_defaults_to_single_update_monitor_mode(tmp_path: Path) -> N
     assert policy.stacks[0].auto_apply is False
 
 
+def test_load_policy_supports_git_native_stack_source(tmp_path: Path) -> None:
+    value = VALID.replace(
+        "portainer:\n",
+        "github:\n"
+        "  repository: example/nas\n"
+        "  base_branch: main\n"
+        "  token_file: /run/secrets/github_token\n"
+        "portainer:\n",
+    ).replace(
+        "    expected_services: [example-app]\n",
+        "    expected_services: [example-app]\n"
+        "    git_path: stacks/example-app/compose.yaml\n",
+    )
+
+    policy = load_policy(write(tmp_path, value))
+
+    assert policy.github is not None
+    assert policy.github.repository == "example/nas"
+    assert policy.stacks[0].git_path == "stacks/example-app/compose.yaml"
+
+
+def test_git_path_requires_github_configuration(tmp_path: Path) -> None:
+    value = VALID.replace(
+        "    expected_services: [example-app]\n",
+        "    expected_services: [example-app]\n"
+        "    git_path: stacks/example-app/compose.yaml\n",
+    )
+
+    with pytest.raises(ConfigError, match="requires github configuration"):
+        load_policy(write(tmp_path, value))
+
+
 def test_load_policy_supports_explicit_per_service_health_rules(tmp_path: Path) -> None:
     value = VALID.replace(
         "  example-app:\n"

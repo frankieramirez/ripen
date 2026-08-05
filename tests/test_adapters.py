@@ -1,3 +1,4 @@
+import base64
 import json
 import urllib.parse
 
@@ -5,12 +6,13 @@ import pytest
 
 from nas_stack_updater.adapters import (
     AdapterError,
+    GitHubProposalAdapter,
     JsonLogNotifier,
     OciRegistryAdapter,
     PortainerHttpAdapter,
     parse_image_reference,
 )
-from nas_stack_updater.models import PortainerStack
+from nas_stack_updater.models import GitProposalChange, GitProposalResult, PortainerStack
 
 
 class FakePortainerClient:
@@ -186,6 +188,132 @@ def test_stack_update_refuses_git_backed_stack(tmp_path) -> None:
         )
 
     assert client.timeout is None
+
+
+def test_github_proposal_creates_digest_pin_pr(tmp_path) -> None:
+    secret = tmp_path / "github-token"
+    secret.write_text("github_pat_example\n", encoding="utf-8")
+    secret.chmod(0o600)
+    adapter = GitHubProposalAdapter("example/nas", "main", str(secret))
+    old = "services:\n  radarr:\n    image: example/radarr:latest\n"
+    new = old.replace("latest", "latest@sha256:" + "2" * 64)
+    calls = []
+
+    def request(method, path, body=None, *, allow_not_found=False):  # noqa: ANN001
+        calls.append((method, path, body, allow_not_found))
+        if path.startswith("/contents/stacks/arr/compose.yaml?ref=main"):
+            return {
+                "content": "\n".join(
+                    [base64.b64encode(old.encode()).decode()[:20],
+                     base64.b64encode(old.encode()).decode()[20:]]
+                ),
+                "sha": "file-sha",
+            }
+        if path.startswith("/git/ref/heads/nas-stack-updater%2F"):
+            return None
+        if path == "/git/ref/heads/main":
+            return {"object": {"sha": "commit-sha"}}
+        if method == "GET" and path.startswith("/pulls?"):
+            return []
+        if method == "POST" and path == "/pulls":
+            return {"html_url": "https://github.com/example/nas/pull/42"}
+        return {}
+
+    adapter._request = request
+    result = adapter.propose(
+        GitProposalChange(
+            "arr/radarr",
+            "stacks/arr/compose.yaml",
+            old,
+            new,
+            "sha256:" + "2" * 64,
+        )
+    )
+
+    assert result.created is True
+    assert result.url.endswith("/pull/42")
+    put = next(
+        call
+        for call in calls
+        if call[0:2] == ("PUT", "/contents/stacks/arr/compose.yaml")
+    )
+    assert base64.b64decode(put[2]["content"]).decode() == new
+    assert put[2]["sha"] == "file-sha"
+
+
+def test_github_proposal_reuses_existing_branch_and_pull_request(tmp_path) -> None:
+    secret = tmp_path / "github-token"
+    secret.write_text("github_pat_example", encoding="utf-8")
+    secret.chmod(0o600)
+    adapter = GitHubProposalAdapter("example/nas", "main", str(secret))
+    old = "services:\n  radarr:\n    image: example/radarr:latest\n"
+    new = old.replace("latest", "latest@sha256:" + "2" * 64)
+    calls = []
+
+    def request(method, path, body=None, *, allow_not_found=False):  # noqa: ANN001
+        calls.append((method, path, body, allow_not_found))
+        if path.endswith("?ref=main"):
+            content = old
+        elif path.startswith("/git/ref/heads/"):
+            return {"object": {"sha": "branch-sha"}}
+        elif path.startswith("/contents/"):
+            content = new
+        elif path.startswith("/pulls?"):
+            return [{"html_url": "https://github.com/example/nas/pull/42"}]
+        else:
+            raise AssertionError((method, path))
+        return {
+            "content": base64.b64encode(content.encode()).decode(),
+            "sha": "file-sha",
+        }
+
+    adapter._request = request
+    result = adapter.propose(
+        GitProposalChange(
+            "arr/radarr",
+            "stacks/arr/compose.yaml",
+            old,
+            new,
+            "sha256:" + "2" * 64,
+        )
+    )
+
+    assert result == GitProposalResult(
+        "https://github.com/example/nas/pull/42", created=False
+    )
+    assert not any(call[0] in {"POST", "PUT"} for call in calls)
+
+
+def test_github_proposal_refuses_repository_source_drift(tmp_path) -> None:
+    secret = tmp_path / "github-token"
+    secret.write_text("github_pat_example", encoding="utf-8")
+    secret.chmod(0o600)
+    adapter = GitHubProposalAdapter("example/nas", "main", str(secret))
+    actual = "services: {}\n"
+    adapter._request = lambda *args, **kwargs: {
+        "content": base64.b64encode(actual.encode()).decode(),
+        "sha": "file-sha",
+    }
+
+    with pytest.raises(AdapterError, match="differs from the live reviewed"):
+        adapter.propose(
+            GitProposalChange(
+                "arr/radarr",
+                "stacks/arr/compose.yaml",
+                "services:\n  radarr: {}\n",
+                "services:\n  radarr:\n    image: example/radarr:latest\n",
+                "sha256:" + "2" * 64,
+            )
+        )
+
+
+def test_github_token_file_rejects_broad_permissions(tmp_path) -> None:
+    secret = tmp_path / "github-token"
+    secret.write_text("github_pat_example", encoding="utf-8")
+    secret.chmod(0o644)
+
+    with pytest.raises(ValueError, match="group or others"):
+        GitHubProposalAdapter("example/nas", "main", str(secret))
 
 
 def test_running_service_digests_are_scoped_to_the_authorized_compose_project(

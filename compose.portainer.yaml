@@ -1,6 +1,6 @@
 services:
   nas-stack-updater:
-    image: nas-stack-updater:0.2.3
+    image: nas-stack-updater:0.3.0
     container_name: nas-stack-updater
     user: "1031:1031"
     command: ["--config", "/config/policy.yaml", "daemon", "--mode", "apply"]
@@ -17,6 +17,7 @@ services:
       - ./config/policy.yaml:/config/policy.yaml:ro
       - ./data:/data
       - ./secrets/portainer-api-key:/run/secrets/portainer_api_key:ro
+      - ./secrets/github-token:/run/secrets/github_token:ro
     networks:
       - stack-control
       - app-health
