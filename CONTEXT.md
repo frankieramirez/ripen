@@ -56,6 +56,10 @@ _Avoid_: auto-update, unattended mode
 The machine-facing interface — versioned JSON CLI plus MCP server — an agent uses to observe and prepare. It is not a path to Apply mode or Circuit breaker clearing. Scopes agents _operating_ Ripen. Agents working on Ripen's own codebase are a different audience served by different files; that scaffolding is not the Agent surface.
 _Avoid_: AI integration, copilot, chatbot, AGENTS.md
 
+**Event**:
+One record of something Ripen observed or did. Emitted once, to a single stream that every sink reads. The stream always records every Event; who gets paged is a sink's decision, not the Event's.
+_Avoid_: message, notification, log line
+
 **Notifier**:
-An outbound page to a human about an observed event. Distinct from stderr JSON logs.
-_Avoid_: alert, log
+The configured outbound sink that pages a human with a subset of Events. Off unless configured. Distinct from the Event stream, which always records everything and pages no one.
+_Avoid_: alert, log, stderr JSON
