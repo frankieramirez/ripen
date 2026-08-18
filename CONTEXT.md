@@ -1,11 +1,11 @@
 # Ripen
 
-A fail-closed image updater for Portainer. A digest ripens. You apply. This glossary is the ubiquitous language for that product.
+A fail-closed image updater for Portainer and Compose. A digest ripens. You apply. This glossary is the ubiquitous language for that product.
 
 ## Language
 
 **Ripen**:
-The product. Orchestrator-neutral name; launch talks to Portainer only.
+The product. Orchestrator-neutral name. Launch talks to Portainer and to a Compose runtime (Docker Compose or Podman Compose).
 _Avoid_: NAS Stack Updater, nas-stack-updater, Daymark, Plimsoll
 
 **Transaction**:
@@ -17,8 +17,16 @@ One named Compose service inside a Stack. A Transaction mutates at most one.
 _Avoid_: container, app, unit
 
 **Stack**:
-A Portainer-managed Compose application the updater is authorized to see.
-_Avoid_: project, compose file, application
+A Compose application the updater is authorized to see, through Portainer or a Compose runtime.
+_Avoid_: application
+
+**Compose runtime**:
+Docker Compose or Podman Compose as the control plane. Stacks are declared as compose-file paths in policy. Distinct from Portainer.
+_Avoid_: Docker socket backend, engine adapter, Quadlet
+
+**Privileged socket**:
+The host engine's full API, usually `/var/run/docker.sock`. Out of scope. A rootless user socket is a narrower, opt-in connection, not this.
+_Avoid_: docker.sock, Watchtower-style access
 
 **Candidate**:
 A remote image digest observed for a Service that is not yet the accepted Baseline.
