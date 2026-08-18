@@ -413,7 +413,7 @@ class GitHubProposalAdapter:
             )
 
         digest_short = change.digest.removeprefix("sha256:")[:12]
-        branch = f"nas-stack-updater/{self._slug(change.state_key)}-{digest_short}"
+        branch = f"ripen/{self._slug(change.state_key)}-{digest_short}"
         encoded_branch = urllib.parse.quote(branch, safe="")
         branch_payload = self._request(
             "GET", f"/git/ref/heads/{encoded_branch}", allow_not_found=True
@@ -470,7 +470,7 @@ class GitHubProposalAdapter:
                 "head": branch,
                 "base": self.base_branch,
                 "body": (
-                    "Automated digest-pin proposal from nas-stack-updater.\n\n"
+                    "Automated digest-pin proposal from Ripen.\n\n"
                     f"Service: `{change.state_key}`\n"
                     f"Digest: `{change.digest}`\n\n"
                     "This proposal does not merge or deploy itself."

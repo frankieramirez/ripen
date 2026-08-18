@@ -4,7 +4,7 @@ import urllib.parse
 
 import pytest
 
-from nas_stack_updater.adapters import (
+from ripen.adapters import (
     AdapterError,
     GitHubProposalAdapter,
     JsonLogNotifier,
@@ -12,7 +12,7 @@ from nas_stack_updater.adapters import (
     PortainerHttpAdapter,
     parse_image_reference,
 )
-from nas_stack_updater.models import GitProposalChange, GitProposalResult, PortainerStack
+from ripen.models import GitProposalChange, GitProposalResult, PortainerStack
 
 
 class FakePortainerClient:
@@ -209,7 +209,7 @@ def test_github_proposal_creates_digest_pin_pr(tmp_path) -> None:
                 ),
                 "sha": "file-sha",
             }
-        if path.startswith("/git/ref/heads/nas-stack-updater%2F"):
+        if path.startswith("/git/ref/heads/ripen%2F"):
             return None
         if path == "/git/ref/heads/main":
             return {"object": {"sha": "commit-sha"}}

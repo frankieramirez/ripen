@@ -28,7 +28,7 @@ def _report_exit_code(report: object) -> int:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="nas-stack-updater")
+    parser = argparse.ArgumentParser(prog="ripen")
     parser.add_argument("--config", default="/config/policy.yaml")
     commands = parser.add_subparsers(dest="command", required=True)
 

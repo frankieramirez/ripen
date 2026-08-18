@@ -13,5 +13,5 @@ COPY src ./src
 RUN python -m pip install --no-cache-dir .
 
 USER 1031:1031
-ENTRYPOINT ["nas-stack-updater"]
+ENTRYPOINT ["ripen"]
 CMD ["--config", "/config/policy.yaml", "daemon"]

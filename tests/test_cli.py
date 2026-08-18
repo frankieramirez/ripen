@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from nas_stack_updater import cli
-from nas_stack_updater.adapters import AdapterError
+from ripen import cli
+from ripen.adapters import AdapterError
 
 
 class FailingUpdater:

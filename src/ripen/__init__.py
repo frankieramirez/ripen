@@ -1,4 +1,4 @@
-"""Least-privilege Portainer stack updater."""
+"""Ripen — fail-closed image updates for Portainer."""
 
 from .models import Mode, RunReport, UpdaterStatus
 from .updater import Updater

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from nas_stack_updater.config import ConfigError, load_policy
-from nas_stack_updater.models import Mode
+from ripen.config import ConfigError, load_policy
+from ripen.models import Mode
 
 
 VALID = """
@@ -12,7 +12,7 @@ state_file: /tmp/updater.db
 portainer:
   base_url: https://portainer:9443
   api_key_file: /secret
-  expected_username: nas-stack-updater
+  expected_username: ripen
   tls_fingerprint_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 stacks:
   example-app:

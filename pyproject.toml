@@ -3,9 +3,9 @@ requires = ["setuptools==80.10.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nas-stack-updater"
+name = "ripen"
 version = "0.3.0"
-description = "Least-privilege Portainer stack update monitor with health-gated rollback"
+description = "Fail-closed image updates for Portainer. A digest ripens. You apply."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["PyYAML==6.0.3"]
@@ -17,14 +17,14 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/frankieramirez/nas-stack-updater"
-Issues = "https://github.com/frankieramirez/nas-stack-updater/issues"
+Repository = "https://github.com/frankieramirez/ripen"
+Issues = "https://github.com/frankieramirez/ripen/issues"
 
 [project.optional-dependencies]
 dev = ["pytest==9.1.1"]
 
 [project.scripts]
-nas-stack-updater = "nas_stack_updater.cli:main"
+ripen = "ripen.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

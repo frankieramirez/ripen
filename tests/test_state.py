@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from nas_stack_updater.adapters import SqliteStateStore
+from ripen.adapters import SqliteStateStore
 
 
 NOW = datetime(2026, 8, 1, tzinfo=UTC)
