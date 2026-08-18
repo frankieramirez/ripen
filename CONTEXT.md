@@ -37,7 +37,7 @@ The last accepted, health-proven digest for a Service.
 _Avoid_: current image, running tag
 
 **Circuit breaker**:
-A human-reset halt that opens after a failed Transaction. While open, Apply mode cannot mutate.
+A human-reset halt that opens after a failed Transaction. While open, Ripen takes no outbound action: Apply mode cannot mutate and no Proposal is opened. Monitor-mode observation and every read continue.
 _Avoid_: lock, pause, alarm
 
 **Proposal**:
@@ -56,6 +56,10 @@ _Avoid_: auto-update, unattended mode
 The machine-facing interface — versioned JSON CLI plus MCP server — an agent uses to observe and prepare. It is not a path to Apply mode or Circuit breaker clearing. Scopes agents _operating_ Ripen. Agents working on Ripen's own codebase are a different audience served by different files; that scaffolding is not the Agent surface.
 _Avoid_: AI integration, copilot, chatbot, AGENTS.md
 
+**Actor**:
+Which surface initiated a write — the human CLI, the daemon, or the Agent surface. Recorded on the attempt and on the Event. Always determined by the surface that ran the code; a caller can never declare its own.
+_Avoid_: user, caller, origin
+
 **Event**:
 One record of something Ripen observed or did. Emitted once, to a single stream that every sink reads. The stream always records every Event; who gets paged is a sink's decision, not the Event's.
 _Avoid_: message, notification, log line
@@ -63,3 +67,11 @@ _Avoid_: message, notification, log line
 **Notifier**:
 The configured outbound sink that pages a human with a subset of Events. Off unless configured. Distinct from the Event stream, which always records everything and pages no one.
 _Avoid_: alert, log, stderr JSON
+
+**Event envelope**:
+The versioned wrapper around one Event on its way to a sink. Versioned independently of the Response envelope, because Events and reads change at different rates.
+_Avoid_: envelope, payload
+
+**Response envelope**:
+The versioned wrapper around every Agent surface answer, identical whether it came from the CLI or from MCP. Versioned independently of the Event envelope.
+_Avoid_: envelope, output, response
