@@ -53,8 +53,8 @@ The extra-gated mode that may mutate one Service or open a Proposal.
 _Avoid_: auto-update, unattended mode
 
 **Agent surface**:
-The machine-facing interface — versioned JSON CLI plus MCP server — an agent uses to observe and prepare. It is not a path to Apply mode or Circuit breaker clearing.
-_Avoid_: AI integration, copilot, chatbot
+The machine-facing interface — versioned JSON CLI plus MCP server — an agent uses to observe and prepare. It is not a path to Apply mode or Circuit breaker clearing. Scopes agents _operating_ Ripen. Agents working on Ripen's own codebase are a different audience served by different files; that scaffolding is not the Agent surface.
+_Avoid_: AI integration, copilot, chatbot, AGENTS.md
 
 **Notifier**:
 An outbound page to a human about an observed event. Distinct from stderr JSON logs.
