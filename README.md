@@ -1,4 +1,6 @@
-# NAS Stack Updater
+# Ripen
+
+Fail-closed image updates for Portainer. A digest ripens. You apply.
 
 A safety-focused updater for Portainer-managed Docker Compose stacks. It checks
 OCI registries for image changes without mounting the Docker socket, waits for a
@@ -84,11 +86,11 @@ python3 -m venv .venv
 ## Commands
 
 ```bash
-nas-stack-updater --config policy.yaml run --mode monitor
-nas-stack-updater --config policy.yaml status
-nas-stack-updater --config policy.yaml clear-breaker --reason "health verified manually"
-nas-stack-updater --config policy.yaml clear-proposal --stack arr/radarr --reason "PR closed"
-nas-stack-updater --config policy.yaml daemon --mode monitor
+ripen --config policy.yaml run --mode monitor
+ripen --config policy.yaml status
+ripen --config policy.yaml clear-breaker --reason "health verified manually"
+ripen --config policy.yaml clear-proposal --stack arr/radarr --reason "PR closed"
+ripen --config policy.yaml daemon --mode monitor
 ```
 
 `clear-breaker` requires a human reason. Apply mode is additionally gated by `auto_apply: true`, a mature candidate, unchanged Compose/environment hashes, an available update slot, and a closed breaker.

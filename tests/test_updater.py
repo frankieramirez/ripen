@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import yaml
 
-from nas_stack_updater.adapters import parse_image_reference
-from nas_stack_updater.models import (
+from ripen.adapters import parse_image_reference
+from ripen.models import (
     CandidateObservation,
     GitHubPolicy,
     GitProposalResult,
@@ -21,7 +21,7 @@ from nas_stack_updater.models import (
     StackPolicy,
     UpdaterStatus,
 )
-from nas_stack_updater.updater import Updater
+from ripen.updater import Updater
 
 
 COMPOSE = """services:
@@ -56,7 +56,7 @@ class FakeClock:
 
 class FakePortainer:
     def __init__(self) -> None:
-        self.username = "nas-stack-updater"
+        self.username = "ripen"
         self.stack = PortainerStack(147, 2, "example-app", 1, ())
         self.visible = (self.stack,)
         self.compose_values = [COMPOSE]
@@ -269,7 +269,7 @@ def policy(*, auto_apply: bool = False, timeout: int = 20) -> Policy:
         lease_ttl_seconds=1800,
         portainer_base_url="https://portainer:9443",
         portainer_api_key_file="/secret",
-        expected_username="nas-stack-updater",
+        expected_username="ripen",
         tls_ca_file=None,
         tls_fingerprint_sha256="a" * 64,
         state_file=":memory:",

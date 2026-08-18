@@ -1,7 +1,7 @@
 services:
-  nas-stack-updater:
-    image: nas-stack-updater:0.3.0
-    container_name: nas-stack-updater
+  ripen:
+    image: ripen:0.3.0
+    container_name: ripen
     user: "1031:1031"
     command: ["--config", "/config/policy.yaml", "daemon", "--mode", "apply"]
     restart: unless-stopped

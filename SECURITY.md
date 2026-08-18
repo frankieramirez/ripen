@@ -11,7 +11,7 @@ network data.
 
 ## Deployment boundaries
 
-`nas-stack-updater` can redeploy authorized Portainer stacks. Treat its API key,
+`ripen` can redeploy authorized Portainer stacks. Treat its API key,
 policy file, state database, and Docker networks as sensitive infrastructure.
 
 - Give the Portainer automation user access only to stacks it may update.
