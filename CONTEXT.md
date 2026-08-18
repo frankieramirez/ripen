@@ -56,6 +56,10 @@ _Avoid_: auto-update, unattended mode
 The machine-facing interface — versioned JSON CLI plus MCP server — an agent uses to observe and prepare. It is not a path to Apply mode or Circuit breaker clearing. Scopes agents _operating_ Ripen. Agents working on Ripen's own codebase are a different audience served by different files; that scaffolding is not the Agent surface.
 _Avoid_: AI integration, copilot, chatbot, AGENTS.md
 
+**Web UI**:
+The optional, read-only, off-by-default browser view of what Ripen already knows. Embedded in the binary, served by the daemon. Never a path to Apply mode, Circuit breaker clearing, or policy edits.
+_Avoid_: dashboard, operator UI, frontend
+
 **Actor**:
 Which surface initiated a write — the human CLI, the daemon, or the Agent surface. Recorded on the attempt and on the Event. Always determined by the surface that ran the code; a caller can never declare its own.
 _Avoid_: user, caller, origin
