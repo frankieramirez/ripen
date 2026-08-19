@@ -164,24 +164,24 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### Config parsing/validation
 
-- [ ] A minimal valid policy defaults to monitor mode with max_updates_per_run of 1, and stack auto_apply defaults to false (test_config.py::test_load_policy_defaults_to_single_update_monitor_mode)
-- [ ] A policy may declare a GitHub source (repository, base_branch, token_file) and a per-stack git_path pointing at the compose file in the repo (test_config.py::test_load_policy_supports_git_native_stack_source)
-- [ ] Setting git_path on a stack without a top-level github section is a config error ("requires github configuration") (test_config.py::test_git_path_requires_github_configuration)
-- [ ] A stack may declare per-service rules with each service's own health check, including a custom accepted_status list (e.g. [200, 302]) (test_config.py::test_load_policy_supports_explicit_per_service_health_rules)
-- [ ] A service in a multi-service stack may be marked enabled: false (health-only), and the per-service enabled flag is preserved in the loaded policy (test_config.py::test_multi_service_policy_supports_health_only_service)
-- [ ] A stack where every service is disabled is a config error ("at least one enabled service") (test_config.py::test_multi_service_policy_requires_one_managed_service)
-- [ ] Per-service enabled/auto_apply flags must be real YAML booleans; quoted strings like "false"/"true" are a config error ("must be a boolean") — variants: enabled, auto_apply (test_config.py::test_per_service_flags_require_real_booleans)
-- [ ] A stack listing more than one expected service must define explicit per-service rules; a single stack-level health/auto_apply is a config error ("requires per-service rules") (test_config.py::test_multi_service_policy_requires_explicit_service_rules)
-- [ ] Duplicate names in expected_services are a config error ("duplicate") (test_config.py::test_expected_services_rejects_duplicate_names)
-- [ ] Health accepted_status must be a non-empty list of valid HTTP status codes — variants rejected: empty list, boolean, 99, 600 (test_config.py::test_health_statuses_are_nonempty_http_codes)
-- [ ] A stack with per-service rules may not also set stack-level auto_apply or health (ambiguity is a config error) (test_config.py::test_per_service_policy_rejects_ambiguous_stack_level_apply_setting)
-- [ ] Unknown/unrecognized config fields are rejected ("unknown config fields") (test_config.py::test_unknown_field_is_rejected)
-- [ ] A stack cannot be both configured/enabled and listed in exclude ("also excluded") (test_config.py::test_enabled_stack_cannot_also_be_excluded)
-- [ ] max_updates_per_run greater than 1 is rejected ("requires max_updates_per_run") (test_config.py::test_more_than_one_update_per_run_is_rejected)
-- [ ] tls_fingerprint_sha256 must be exactly 64 hexadecimal characters (test_config.py::test_invalid_tls_fingerprint_is_rejected)
-- [ ] Portainer base_url must use https; http URLs are rejected (test_config.py::test_portainer_base_url_must_use_https)
-- [ ] Exactly one TLS trust mechanism (CA file or pinned fingerprint) is required; omitting both is a config error ("exactly one") (test_config.py::test_tls_trust_mechanism_is_required)
-- [ ] Non-integer values for numeric settings (e.g. lease_ttl_seconds: nope) are a config error naming the field ("lease_ttl_seconds must be an integer") (test_config.py::test_malformed_numeric_setting_is_a_config_error)
+- [x] A minimal valid policy defaults to monitor mode with max_updates_per_run of 1, and stack auto_apply defaults to false (test_config.py::test_load_policy_defaults_to_single_update_monitor_mode) — Go: `config.TestLoadDefaultsToSingleUpdateMonitorMode`
+- [x] A policy may declare a GitHub source (repository, base_branch, token_file) and a per-stack git_path pointing at the compose file in the repo (test_config.py::test_load_policy_supports_git_native_stack_source) — Go: `config.TestLoadSupportsGitNativeStackSource`
+- [x] Setting git_path on a stack without a top-level github section is a config error ("requires github configuration") (test_config.py::test_git_path_requires_github_configuration) — Go: `config.TestGitPathRequiresGitHubConfiguration`
+- [x] A stack may declare per-service rules with each service's own health check, including a custom accepted_status list (e.g. [200, 302]) (test_config.py::test_load_policy_supports_explicit_per_service_health_rules) — Go: `config.TestLoadSupportsExplicitPerServiceHealthRules`
+- [x] A service in a multi-service stack may be marked enabled: false (health-only), and the per-service enabled flag is preserved in the loaded policy (test_config.py::test_multi_service_policy_supports_health_only_service) — Go: `config.TestMultiServicePolicySupportsHealthOnlyService`
+- [x] A stack where every service is disabled is a config error ("at least one enabled service") (test_config.py::test_multi_service_policy_requires_one_managed_service) — Go: `config.TestMultiServicePolicyRequiresOneManagedService`
+- [x] Per-service enabled/auto_apply flags must be real YAML booleans; quoted strings like "false"/"true" are a config error ("must be a boolean") — variants: enabled, auto_apply (test_config.py::test_per_service_flags_require_real_booleans) — Go: `config.TestPerServiceFlagsRequireRealBooleans`
+- [x] A stack listing more than one expected service must define explicit per-service rules; a single stack-level health/auto_apply is a config error ("requires per-service rules") (test_config.py::test_multi_service_policy_requires_explicit_service_rules) — Go: `config.TestMultiServicePolicyRequiresExplicitServiceRules`
+- [x] Duplicate names in expected_services are a config error ("duplicate") (test_config.py::test_expected_services_rejects_duplicate_names) — Go: `config.TestExpectedServicesRejectsDuplicateNames`
+- [x] Health accepted_status must be a non-empty list of valid HTTP status codes — variants rejected: empty list, boolean, 99, 600 (test_config.py::test_health_statuses_are_nonempty_http_codes) — Go: `config.TestHealthStatusesAreNonemptyHTTPCodes`
+- [x] A stack with per-service rules may not also set stack-level auto_apply or health (ambiguity is a config error) (test_config.py::test_per_service_policy_rejects_ambiguous_stack_level_apply_setting) — Go: `config.TestPerServicePolicyRejectsAmbiguousStackLevelApplySetting`
+- [x] Unknown/unrecognized config fields are rejected ("unknown config fields") (test_config.py::test_unknown_field_is_rejected) — Go: `config.TestUnknownFieldIsRejected`
+- [x] A stack cannot be both configured/enabled and listed in exclude ("also excluded") (test_config.py::test_enabled_stack_cannot_also_be_excluded) — Go: `config.TestEnabledStackCannotAlsoBeExcluded`
+- [x] max_updates_per_run greater than 1 is rejected ("requires max_updates_per_run") (test_config.py::test_more_than_one_update_per_run_is_rejected) — Go: `config.TestMoreThanOneUpdatePerRunIsRejected`
+- [x] tls_fingerprint_sha256 must be exactly 64 hexadecimal characters (test_config.py::test_invalid_tls_fingerprint_is_rejected) — Go: `config.TestInvalidTLSFingerprintIsRejected`
+- [x] Portainer base_url must use https; http URLs are rejected (test_config.py::test_portainer_base_url_must_use_https) — Go: `config.TestPortainerBaseURLMustUseHTTPS`
+- [x] Exactly one TLS trust mechanism (CA file or pinned fingerprint) is required; omitting both is a config error ("exactly one") (test_config.py::test_tls_trust_mechanism_is_required) — Go: `config.TestTLSTrustMechanismIsRequired`
+- [x] Non-integer values for numeric settings (e.g. lease_ttl_seconds: nope) are a config error naming the field ("lease_ttl_seconds must be an integer") (test_config.py::test_malformed_numeric_setting_is_a_config_error) — Go: `config.TestMalformedNumericSettingIsAConfigError`
 
 ### State store
 
@@ -246,9 +246,9 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### Image reference parsing
 
-- [ ] Docker Hub references normalize to registry-1.docker.io with a library/ repository prefix; other registries (e.g. ghcr.io) preserve registry and repository as written (test_updater.py::test_image_parser_normalizes_docker_hub_and_preserves_ghcr)
-- [ ] A tag@digest reference exposes the tagged form (update channel) and the pinned digest separately, and can be re-pinned to a new digest (test_updater.py::test_tagged_digest_reference_preserves_update_channel_and_pin)
-- [ ] Invalid image references are rejected with a "valid OCI" error — variants: path traversal in repository, invalid tag characters, uppercase repository (test_updater.py::test_invalid_image_reference_is_rejected)
+- [x] Docker Hub references normalize to registry-1.docker.io with a library/ repository prefix; other registries (e.g. ghcr.io) preserve registry and repository as written (test_updater.py::test_image_parser_normalizes_docker_hub_and_preserves_ghcr) — Go: `domain.TestParseImageReferenceNormalizesDockerHubAndPreservesGHCR`
+- [x] A tag@digest reference exposes the tagged form (update channel) and the pinned digest separately, and can be re-pinned to a new digest (test_updater.py::test_tagged_digest_reference_preserves_update_channel_and_pin) — Go: `domain.TestTaggedDigestReferencePreservesUpdateChannelAndPin`
+- [x] Invalid image references are rejected with a "valid OCI" error — variants: path traversal in repository, invalid tag characters, uppercase repository (test_updater.py::test_invalid_image_reference_is_rejected) — Go: `domain.TestInvalidImageReferencesAreRejected`
 
 ### Portainer adapter
 
