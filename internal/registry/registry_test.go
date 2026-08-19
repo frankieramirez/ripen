@@ -204,3 +204,37 @@ func TestResolveDigestRequiresSha256Header(t *testing.T) {
 		t.Errorf("error = %v, want 'sha256 digest'", err)
 	}
 }
+
+func TestChallengeScopeWithQuotedCommaSurvivesParsing(t *testing.T) {
+	transport := &fakeTransport{}
+	unauthenticated := func(request *http.Request) bool {
+		return strings.Contains(request.URL.Path, "/manifests/latest") &&
+			request.Header.Get("Authorization") == ""
+	}
+	authenticated := func(request *http.Request) bool {
+		return strings.Contains(request.URL.Path, "/manifests/latest") &&
+			request.Header.Get("Authorization") == "Bearer tok123"
+	}
+	transport.on(unauthenticated, http.StatusUnauthorized, map[string]string{
+		"Www-Authenticate": `Bearer realm="https://auth.example/token",service="registry.example",scope="repository:example/app:pull,push"`,
+	}, nil)
+	transport.on(pathMatch("auth.example/token"), http.StatusOK, nil, map[string]string{"token": "tok123"})
+	transport.on(authenticated, http.StatusOK, map[string]string{"Docker-Content-Digest": digest1}, nil)
+
+	if _, err := client(transport).ResolveDigest(mustParse(t, "example/app:latest")); err != nil {
+		t.Fatalf("ResolveDigest error: %v", err)
+	}
+
+	var tokenRequest *http.Request
+	for _, request := range transport.requests {
+		if strings.Contains(request.URL.Host, "auth.example") {
+			tokenRequest = request
+		}
+	}
+	if tokenRequest == nil {
+		t.Fatal("no token request made")
+	}
+	if got := tokenRequest.URL.Query().Get("scope"); got != "repository:example/app:pull,push" {
+		t.Errorf("scope = %q, want the quoted comma preserved", got)
+	}
+}

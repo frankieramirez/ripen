@@ -1,8 +1,13 @@
 // Package registry is a deliberately minimal OCI registry client for
 // digest observation: resolve what digest a tag points at, per platform.
-// It is read-only, anonymous-or-bearer-token only, and fail-closed —
-// differential-tested against google/go-containerregistry (see
-// differential_test.go). It never pulls image content.
+// It is read-only, https-only, anonymous-or-bearer-token only, and fail
+// closed. It never pulls image content.
+//
+// The index-resolution paths (platform match, ARM variant match) are
+// differential-tested against google/go-containerregistry in
+// differential_test.go. Known deliberate divergence: on zero or multiple
+// platform matches this client errors, where go-containerregistry's
+// WithPlatform has its own fallback behavior.
 package registry
 
 import (
@@ -23,6 +28,9 @@ const acceptHeader = "application/vnd.oci.image.index.v1+json, " +
 	"application/vnd.docker.distribution.manifest.list.v2+json, " +
 	"application/vnd.docker.distribution.manifest.v2+json"
 
+// digestPattern is stricter than the Python adapter's startswith
+// ("sha256:") checks — a full-shape match, rejecting malformed digests
+// the Python client would have accepted. Deliberate fail-closed change.
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // Platform selects one manifest out of a multi-arch index. Variant is
@@ -68,7 +76,7 @@ func New(options ...Option) *Client {
 // multi-arch image this is the index digest; use ResolvePlatformDigest
 // to match what a single-platform engine reports as running.
 func (c *Client) ResolveDigest(image domain.ImageReference) (string, error) {
-	response, err := c.manifestRequest(http.MethodHead, image)
+	response, _, err := c.manifestRequest(http.MethodHead, image)
 	if err != nil {
 		return "", err
 	}
@@ -85,12 +93,11 @@ func (c *Client) ResolveDigest(image domain.ImageReference) (string, error) {
 // a single manifest, the image config's platform is verified against the
 // request and a mismatch is an error.
 func (c *Client) ResolvePlatformDigest(image domain.ImageReference, platform Platform) (string, error) {
-	response, err := c.manifestRequest(http.MethodGet, image)
+	response, authorization, err := c.manifestRequest(http.MethodGet, image)
 	if err != nil {
 		return "", err
 	}
 	headerDigest := response.Header.Get("Docker-Content-Digest")
-	authorization := response.Request.Header.Get("Authorization")
 	body, err := io.ReadAll(response.Body)
 	closeBody(response)
 	if err != nil {
@@ -180,49 +187,62 @@ func (c *Client) verifyConfigPlatform(image domain.ImageReference, configDigest,
 }
 
 // manifestRequest performs a manifest request, following one bearer-token
-// challenge. The returned response has status 200 and an open body.
-func (c *Client) manifestRequest(method string, image domain.ImageReference) (*http.Response, error) {
+// challenge. The returned response has status 200 and an open body; the
+// returned authorization header value ("" when anonymous) is captured
+// here rather than read back off the response, because http.Client
+// strips Authorization on cross-host redirects and response.Request is
+// the post-redirect request.
+func (c *Client) manifestRequest(method string, image domain.ImageReference) (*http.Response, string, error) {
+	request, err := newManifestRequest(method, image, "")
+	if err != nil {
+		return nil, "", err
+	}
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, "", fmt.Errorf("registry manifest request failed: %w", err)
+	}
+	if response.StatusCode == http.StatusOK {
+		return response, "", nil
+	}
+	challenge := response.Header.Get("Www-Authenticate")
+	status := response.StatusCode
+	closeBody(response)
+	if status != http.StatusUnauthorized {
+		return nil, "", fmt.Errorf("registry HTTP %d", status)
+	}
+
+	token, err := c.bearerToken(challenge)
+	if err != nil {
+		return nil, "", err
+	}
+	authorization := "Bearer " + token
+	retry, err := newManifestRequest(method, image, authorization)
+	if err != nil {
+		return nil, "", err
+	}
+	response, err = c.httpClient.Do(retry)
+	if err != nil {
+		return nil, "", fmt.Errorf("registry manifest request failed: %w", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		status := response.StatusCode
+		closeBody(response)
+		return nil, "", fmt.Errorf("registry HTTP %d", status)
+	}
+	return response, authorization, nil
+}
+
+func newManifestRequest(method string, image domain.ImageReference, authorization string) (*http.Request, error) {
 	manifestURL := fmt.Sprintf("https://%s/v2/%s/manifests/%s", image.Registry, image.Repository, image.Tag)
 	request, err := http.NewRequest(method, manifestURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	request.Header.Set("Accept", acceptHeader)
-
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("registry request failed: %w", err)
+	if authorization != "" {
+		request.Header.Set("Authorization", authorization)
 	}
-	if response.StatusCode == http.StatusOK {
-		return response, nil
-	}
-	challenge := response.Header.Get("Www-Authenticate")
-	status := response.StatusCode
-	closeBody(response)
-	if status != http.StatusUnauthorized {
-		return nil, fmt.Errorf("registry HTTP %d", status)
-	}
-
-	token, err := c.bearerToken(challenge)
-	if err != nil {
-		return nil, err
-	}
-	retry, err := http.NewRequest(method, manifestURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	retry.Header.Set("Accept", acceptHeader)
-	retry.Header.Set("Authorization", "Bearer "+token)
-	response, err = c.httpClient.Do(retry)
-	if err != nil {
-		return nil, fmt.Errorf("registry request failed: %w", err)
-	}
-	if response.StatusCode != http.StatusOK {
-		status := response.StatusCode
-		closeBody(response)
-		return nil, fmt.Errorf("registry HTTP %d", status)
-	}
-	return response, nil
+	return request, nil
 }
 
 // bearerToken fetches an anonymous bearer token for a registry challenge.
@@ -232,13 +252,7 @@ func (c *Client) bearerToken(challenge string) (string, error) {
 	if !strings.HasPrefix(strings.ToLower(challenge), "bearer ") {
 		return "", fmt.Errorf("unsupported registry authentication challenge")
 	}
-	values := map[string]string{}
-	for _, item := range strings.Split(challenge[7:], ",") {
-		key, value, found := strings.Cut(strings.TrimSpace(item), "=")
-		if found {
-			values[key] = strings.Trim(strings.TrimSpace(value), `"`)
-		}
-	}
+	values := parseChallengeParams(challenge[7:])
 	realm, ok := values["realm"]
 	if !ok || realm == "" {
 		return "", fmt.Errorf("registry bearer challenge missing realm")
@@ -277,6 +291,40 @@ func (c *Client) bearerToken(challenge string) (string, error) {
 		return "", fmt.Errorf("registry token response missing token")
 	}
 	return token, nil
+}
+
+// parseChallengeParams parses the comma-separated auth params of a
+// WWW-Authenticate challenge, honoring quoted values (a quoted scope may
+// itself contain commas) and lowercasing keys.
+func parseChallengeParams(challenge string) map[string]string {
+	values := map[string]string{}
+	rest := challenge
+	for rest != "" {
+		rest = strings.TrimLeft(rest, " ,")
+		equals := strings.Index(rest, "=")
+		if equals < 0 {
+			break
+		}
+		key := strings.ToLower(strings.TrimSpace(rest[:equals]))
+		rest = rest[equals+1:]
+		var value string
+		if strings.HasPrefix(rest, `"`) {
+			end := strings.Index(rest[1:], `"`)
+			if end < 0 {
+				value, rest = rest[1:], ""
+			} else {
+				value, rest = rest[1:1+end], rest[end+2:]
+			}
+		} else if end := strings.Index(rest, ","); end >= 0 {
+			value, rest = strings.TrimSpace(rest[:end]), rest[end+1:]
+		} else {
+			value, rest = strings.TrimSpace(rest), ""
+		}
+		if key != "" {
+			values[key] = value
+		}
+	}
+	return values
 }
 
 func closeBody(response *http.Response) {
