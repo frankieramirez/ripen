@@ -264,10 +264,10 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### Registry adapter
 
-- [ ] A bearer-auth challenge with a non-https realm is rejected ("realm must use https") (test_adapters.py::test_registry_rejects_insecure_bearer_realm)
-- [ ] Multi-arch index resolution selects the manifest digest matching the requested os/architecture rather than the index digest (test_adapters.py::test_registry_resolves_the_linux_amd64_manifest_digest)
-- [ ] ARM manifests are disambiguated by variant (e.g. arm/v7 vs arm/v6) (test_adapters.py::test_registry_uses_variant_to_disambiguate_arm_manifests)
-- [ ] For a single (non-index) manifest, the image config's platform is verified against the requested platform and a mismatch is an adapter error (test_adapters.py::test_registry_verifies_platform_for_single_manifest)
+- [x] A bearer-auth challenge with a non-https realm is rejected ("realm must use https") (test_adapters.py::test_registry_rejects_insecure_bearer_realm) — Go: `registry.TestRejectsInsecureBearerRealm`
+- [x] Multi-arch index resolution selects the manifest digest matching the requested os/architecture rather than the index digest (test_adapters.py::test_registry_resolves_the_linux_amd64_manifest_digest) — Go: `registry.TestResolvesTheLinuxAmd64ManifestDigest`
+- [x] ARM manifests are disambiguated by variant (e.g. arm/v7 vs arm/v6) (test_adapters.py::test_registry_uses_variant_to_disambiguate_arm_manifests) — Go: `registry.TestUsesVariantToDisambiguateArmManifests`
+- [x] For a single (non-index) manifest, the image config's platform is verified against the requested platform and a mismatch is an adapter error (test_adapters.py::test_registry_verifies_platform_for_single_manifest) — Go: `registry.TestVerifiesPlatformForSingleManifest`
 
 ### GitHub proposal adapter
 
