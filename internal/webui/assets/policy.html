@@ -1,0 +1,41 @@
+{{template "head.html" .}}
+<h1>Effective policy</h1>
+<p class="lede">What Ripen is actually running with, after defaults — not what the file says.</p>
+
+{{with .Status.EffectivePolicy}}
+<dl class="policy">
+  <dt>Mode</dt><dd>{{.Mode}}</dd>
+  <dt>Updates per run</dt><dd>{{.MaxUpdatesPerRun}}</dd>
+  <dt>Candidate window</dt><dd>{{.CandidateMinAgeSeconds}}s</dd>
+  <dt>Verification timeout</dt><dd>{{.VerificationTimeoutSeconds}}s</dd>
+  <dt>Lease TTL</dt><dd>{{.LeaseTTLSeconds}}s</dd>
+  <dt>Check interval</dt><dd>{{.CheckIntervalSeconds}}s</dd>
+  <dt>State file</dt><dd><code>{{.StateFile}}</code></dd>
+  <dt>Backends</dt><dd>{{range .Backends}}<code>{{.}}</code> {{end}}</dd>
+  <dt>Stacks</dt><dd>{{.StackCount}}</dd>
+  <dt>Proposals</dt><dd>{{if .ProposalsConfigured}}configured{{else}}not configured{{end}}</dd>
+  <dt>Notifier</dt><dd>{{if .NotifierConfigured}}configured{{else}}not configured{{end}}</dd>
+</dl>
+{{end}}
+
+<h2>Versions</h2>
+{{with .Status.Versions}}
+<dl class="policy">
+  <dt>Ripen</dt><dd>{{.Ripen}}</dd>
+  <dt>Commit</dt><dd><code>{{.Commit}}</code></dd>
+  <dt>Built</dt><dd>{{.BuiltAt}}</dd>
+  <dt>Response schema</dt><dd>v{{.ResponseSchema}}</dd>
+  <dt>Event schema</dt><dd>v{{.EventSchema}}</dd>
+  <dt>State schema</dt><dd>v{{.StateSchema}}</dd>
+</dl>
+{{end}}
+
+<h2>Notifier</h2>
+{{with .Status.Notifier}}
+<dl class="policy">
+  <dt>Last delivery</dt><dd>{{if .LastSuccessAt}}{{.LastSuccessAt}}{{else}}<span class="muted">never</span>{{end}}</dd>
+  <dt>Consecutive failures</dt><dd>{{.ConsecutiveFailures}}</dd>
+  <dt>Dropped this process</dt><dd>{{.DroppedSinceStart}}</dd>
+</dl>
+{{end}}
+{{template "foot.html" .}}

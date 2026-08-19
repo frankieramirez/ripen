@@ -1,0 +1,42 @@
+{{template "head.html" .}}
+{{template "breaker.html" .Status.Breaker}}
+
+<h1>Services</h1>
+<p class="lede">
+  Every service the policy declares, with the digest Ripen accepted as its baseline
+  and whatever it has seen since.
+</p>
+
+<table id="services">
+  <thead>
+    <tr>
+      <th>Backend</th><th>Stack</th><th>Service</th>
+      <th>Baseline</th><th>Candidate</th><th>Last result</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Status.Services}}
+    <tr>
+      <td>{{.Backend}}</td>
+      <td>{{.Stack}}</td>
+      <td>{{if .Service}}{{.Service}}{{else}}<span class="muted">—</span>{{end}}</td>
+      <td><code>{{short .Baseline}}</code></td>
+      <td>
+        {{if .Candidate}}
+          <code>{{short .Candidate.Digest}}</code>
+          <span class="badge {{if .Candidate.Mature}}ready{{else}}waiting{{end}}">
+            {{if .Candidate.Mature}}mature{{else}}maturing{{end}}
+          </span>
+        {{else}}<span class="muted">none</span>{{end}}
+      </td>
+      <td>
+        {{if .LastResult}}<span class="result {{.LastResult.Result}}">{{.LastResult.Result}}</span>
+        {{else}}<span class="muted">—</span>{{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+
+<p class="polling">Refreshing every 15 seconds. <span id="last-updated"></span></p>
+{{template "foot.html" .}}

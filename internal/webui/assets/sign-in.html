@@ -1,0 +1,10 @@
+{{template "head.html" .}}
+<h1>Sign in</h1>
+<p class="lede">This instance is reachable from the network, so it wants the bearer token.</p>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/sign-in" class="sign-in">
+  <label for="token">Token</label>
+  <input id="token" name="token" type="password" autocomplete="off" autofocus>
+  <button type="submit">Sign in</button>
+</form>
+{{template "foot.html" .}}

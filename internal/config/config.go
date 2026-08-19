@@ -96,6 +96,17 @@ type NotifierSettings struct {
 	HeartbeatIntervalSeconds int
 }
 
+// UISettings configures the optional read-only Web UI. It is off unless
+// enabled is true — there is no way to switch it on by accident.
+type UISettings struct {
+	Enabled bool
+	Address string
+	// TokenFile holds the bearer token for a non-loopback bind. Ripen
+	// keeps every secret in a file, never in the policy document, and
+	// RIPEN_UI_TOKEN is the other way to supply it.
+	TokenFile string
+}
+
 // Policy is the loaded, validated configuration.
 type Policy struct {
 	Mode                       domain.Mode
@@ -111,6 +122,7 @@ type Policy struct {
 	ExcludedStacks             []string
 	GitHub                     *GitHubPolicy
 	Notifier                   *NotifierSettings
+	UI                         *UISettings
 }
 
 var (
@@ -147,7 +159,7 @@ func Load(path string) (*Policy, error) {
 	if err := exactKeys(root, []string{
 		"mode", "max_updates_per_run", "verification_timeout_seconds",
 		"candidate_min_age_seconds", "lease_ttl_seconds", "check_interval_seconds",
-		"portainer", "github", "compose", "notifier", "state_file", "stacks", "exclude",
+		"portainer", "github", "compose", "notifier", "ui", "state_file", "stacks", "exclude",
 	}, "config"); err != nil {
 		return nil, err
 	}
@@ -198,7 +210,44 @@ func Load(path string) (*Policy, error) {
 	if policy.Notifier, err = notifierSettings(root); err != nil {
 		return nil, err
 	}
+	if policy.UI, err = uiSettings(root); err != nil {
+		return nil, err
+	}
 	return policy, nil
+}
+
+// uiSettings reads the optional Web UI configuration.
+func uiSettings(root map[string]any) (*UISettings, error) {
+	value, ok := root["ui"]
+	if !ok {
+		return nil, nil
+	}
+	raw, err := mapping(value, "ui")
+	if err != nil {
+		return nil, err
+	}
+	if err := exactKeys(raw, []string{"enabled", "address", "token_file"}, "ui"); err != nil {
+		return nil, err
+	}
+	settings := &UISettings{Address: "127.0.0.1:7476"}
+	if settings.Enabled, err = boolOr(raw, "enabled", false, "ui"); err != nil {
+		return nil, err
+	}
+	if address, present := raw["address"]; present {
+		text, ok := address.(string)
+		if !ok || text == "" {
+			return nil, fmt.Errorf("ui.address must be a host:port string")
+		}
+		settings.Address = text
+	}
+	if tokenFile, present := raw["token_file"]; present {
+		text, ok := tokenFile.(string)
+		if !ok || text == "" {
+			return nil, fmt.Errorf("ui.token_file must be a non-empty path")
+		}
+		settings.TokenFile = text
+	}
+	return settings, nil
 }
 
 // notifierSettings reads the outbound Notifier. An unknown Event name is
