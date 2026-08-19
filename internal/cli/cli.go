@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"strconv"
@@ -33,6 +34,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/response"
 	"github.com/frankieramirez/ripen/internal/state"
 	"github.com/frankieramirez/ripen/internal/updater"
+	"github.com/frankieramirez/ripen/internal/webui"
 )
 
 // Exit codes. Three is deliberately narrow: it means the Circuit breaker
@@ -449,6 +451,37 @@ func daemonVerb(args []string, stream io.Writer) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// The Web UI is off unless the policy turns it on. Its listener is
+	// bound before the loop starts, so a taken port or an exposed bind
+	// without a token fails now rather than quietly later.
+	if settings := loaded.Policy.UI; settings != nil && settings.Enabled {
+		token, err := webui.ReadToken(settings.TokenFile)
+		if err != nil {
+			fmt.Fprintf(stream, "ripen: %v\n", err)
+			return ExitOperation
+		}
+		ui, err := webui.New(webui.Options{
+			App:     loaded,
+			Address: settings.Address,
+			Token:   token,
+		})
+		if err != nil {
+			fmt.Fprintf(stream, "ripen: %v\n", err)
+			return ExitOperation
+		}
+		listener, err := net.Listen("tcp", ui.Address())
+		if err != nil {
+			fmt.Fprintf(stream, "ripen: the web ui could not bind: %v\n", err)
+			return ExitOperation
+		}
+		go func() {
+			if err := ui.Serve(ctx, listener); err != nil {
+				fmt.Fprintf(stream, "ripen: the web ui stopped: %v\n", err)
+			}
+		}()
+	}
+
 	if err := daemon.Run(ctx, daemon.Options{
 		Updater:  engine,
 		Mode:     selected,

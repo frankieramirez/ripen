@@ -1,0 +1,29 @@
+{{template "head.html" .}}
+<h1>Audit trail</h1>
+<p class="lede">Every transaction Ripen recorded, newest first. This is the durable record, not the event stream.</p>
+
+<table>
+  <thead>
+    <tr><th>When</th><th>Stack</th><th>Service</th><th>Result</th><th>Digest</th><th>Actor</th><th>Detail</th></tr>
+  </thead>
+  <tbody>
+    {{range .Audit.Attempts}}
+    <tr>
+      <td class="when">{{.AttemptedAt}}</td>
+      <td>{{.Stack}}</td>
+      <td>{{if .Service}}{{.Service}}{{else}}<span class="muted">—</span>{{end}}</td>
+      <td><span class="result {{.Result}}">{{.Result}}</span></td>
+      <td><code>{{short .NewDigest}}</code></td>
+      <td>{{.Actor}}</td>
+      <td class="detail">{{.Detail}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="7" class="muted">Nothing has been recorded yet.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+
+{{if .Audit.NextCursor}}
+<p><a href="/audit?cursor={{.Audit.NextCursor}}">Older attempts →</a></p>
+{{end}}
+{{template "foot.html" .}}

@@ -583,3 +583,43 @@ stacks:
 		t.Errorf("notifier = %+v, want none configured", policy.Notifier)
 	}
 }
+
+func TestTheWebUIIsOffUnlessTheConfigTurnsItOn(t *testing.T) {
+	base := `
+stacks:
+  media:
+    enabled: true
+    backend: docker-compose
+    file: /srv/media/compose.yaml
+    expected_services: [web]
+    health:
+      target: http://media:8080/health
+`
+
+	if policy := mustLoad(t, base); policy.UI != nil {
+		t.Errorf("ui = %+v, want none when unconfigured", policy.UI)
+	}
+
+	present := mustLoad(t, base+`
+ui:
+  enabled: true
+  address: 0.0.0.0:7476
+  token_file: /run/secrets/ui_token
+`)
+	if present.UI == nil || !present.UI.Enabled {
+		t.Fatalf("ui = %+v, want it enabled", present.UI)
+	}
+	if present.UI.Address != "0.0.0.0:7476" || present.UI.TokenFile != "/run/secrets/ui_token" {
+		t.Errorf("ui = %+v, want the configured address and token file", present.UI)
+	}
+
+	defaults := mustLoad(t, base+`
+ui: {}
+`)
+	if defaults.UI.Enabled {
+		t.Error("an empty ui section must leave the interface off")
+	}
+	if defaults.UI.Address != "127.0.0.1:7476" {
+		t.Errorf("address = %q, want the loopback default", defaults.UI.Address)
+	}
+}

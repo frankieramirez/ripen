@@ -1,0 +1,9 @@
+{{if .Open}}
+<section class="breaker" id="breaker">
+  <h2>The circuit breaker is open</h2>
+  <p>No update or proposal will be attempted until an operator clears it.</p>
+  {{if .Reason}}<p class="reason" id="breaker-reason">{{.Reason}}</p>{{end}}
+  <p class="hint">Clear it from a terminal, with the reason you fixed:</p>
+  <pre class="command"><code>ripen clear-breaker --reason "what you fixed"</code></pre>
+</section>
+{{end}}
