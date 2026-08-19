@@ -56,10 +56,24 @@ with nowhere to put one, and a test walks that type to keep it so.
 ## Supply chain
 
 Releases are built by GitHub Actions from a tag and published with checksums, an
-SBOM per archive, keyless cosign signatures on the checksums and on every image,
-and GitHub build provenance. The release notes carry the exact `cosign
-verify-blob` invocation. Images are `FROM scratch` with a CA bundle and the
-binary — no shell, no package manager, a non-root uid.
+SBOM per archive, a keyless cosign signature over the checksum file and one on
+every image, and GitHub build provenance. The blob signature ships as a Sigstore
+bundle, `ripen_<version>_checksums.txt.sigstore.json`, holding the signature, the
+Fulcio certificate and the transparency-log proof in one file; verifying it needs
+cosign v3. The release notes carry the exact `cosign verify-blob` invocation.
+
+Only the checksum file is signed, and that is the whole chain: it lists every
+archive and every SBOM in the release, so one verified signature plus a checksum
+check covers all of them. Signing each archive separately would add certificates
+to verify, not assurance.
+
+A release cannot be published unsigned. GoReleaser does not check that a signing
+command wrote anything, so signing runs through a wrapper that refuses when
+cosign produces no bundle; there is no arrangement in which the step is skipped
+quietly.
+
+Images are `FROM scratch` with a CA bundle and the binary — no shell, no package
+manager, a non-root uid.
 
 ## Supported versions
 
