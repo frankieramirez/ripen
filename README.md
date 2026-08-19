@@ -143,6 +143,15 @@ Ripen holds credentials for the systems that run your services. Read
 [`SECURITY.md`](SECURITY.md) before deploying it, and report anything you find
 through GitHub's private vulnerability reporting rather than an issue.
 
+Every release archive carries GitHub build provenance. Check the one you
+downloaded before you extract it:
+
+```bash
+gh attestation verify ripen_<version>_linux_amd64.tar.gz --repo frankieramirez/ripen
+```
+
+The checksums file is attested the same way.
+
 ## Contributing
 
 Issue first, then a pull request — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
