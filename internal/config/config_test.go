@@ -460,3 +460,54 @@ func TestPortainerBackedStackRequiresPortainerSection(t *testing.T) {
 
 	assertLoadError(t, value, "portainer is required")
 }
+
+func TestGitPathRejectsInteriorParentTraversal(t *testing.T) {
+	value := strings.Replace(valid,
+		"portainer:\n",
+		"github:\n  repository: example/nas\n  base_branch: main\n  token_file: /run/secrets/github_token\nportainer:\n",
+		1)
+	value = strings.Replace(value,
+		"    expected_services: [example-app]\n",
+		"    expected_services: [example-app]\n    git_path: stacks/../evil.yaml\n",
+		1)
+
+	assertLoadError(t, value, "relative YAML path")
+}
+
+func TestStacksPreserveDocumentOrder(t *testing.T) {
+	value := strings.Replace(valid, singleStack, `  zeta:
+    enabled: true
+    auto_apply: false
+    expected_services: [zeta]
+    health:
+      type: http
+      url: http://zeta:1/
+  alpha:
+    enabled: true
+    auto_apply: false
+    expected_services: [alpha]
+    health:
+      type: http
+      url: http://alpha:1/
+`, 1)
+
+	policy := mustLoad(t, value)
+
+	if len(policy.Stacks) != 2 || policy.Stacks[0].Name != "zeta" || policy.Stacks[1].Name != "alpha" {
+		t.Errorf("stack order = %v, want document order [zeta alpha]", []string{policy.Stacks[0].Name, policy.Stacks[1].Name})
+	}
+}
+
+func TestHealthTargetAndURLBothSetIsAmbiguous(t *testing.T) {
+	value := strings.Replace(valid,
+		"      url: http://nas:8091/",
+		"      url: http://nas:8091/\n      target: http://other:1/", 1)
+
+	assertLoadError(t, value, "not both")
+}
+
+func TestHealthTypeMustBeAString(t *testing.T) {
+	value := strings.Replace(valid, "      type: http", "      type: 7", 1)
+
+	assertLoadError(t, value, "type must be a string")
+}

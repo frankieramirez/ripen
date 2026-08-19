@@ -7,7 +7,7 @@ package domain
 import "fmt"
 
 // Mode selects what a run may do: Monitor observes and baselines only,
-// Apply may additionally deploy a mature Candidate.
+// Apply may additionally mutate one Service or open a Proposal.
 type Mode string
 
 // The two run modes.

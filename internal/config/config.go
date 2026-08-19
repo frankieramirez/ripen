@@ -111,8 +111,12 @@ func Load(path string) (*Policy, error) {
 	if err != nil {
 		return nil, err
 	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return nil, fmt.Errorf("config is not valid YAML: %w", err)
+	}
 	var payload any
-	if err := yaml.Unmarshal(data, &payload); err != nil {
+	if err := document.Decode(&payload); err != nil {
 		return nil, fmt.Errorf("config is not valid YAML: %w", err)
 	}
 
@@ -162,7 +166,7 @@ func Load(path string) (*Policy, error) {
 	if policy.Compose, err = composeSettings(root); err != nil {
 		return nil, err
 	}
-	if policy.Stacks, err = stackPolicies(root, policy.GitHub); err != nil {
+	if policy.Stacks, err = stackPolicies(root, stackKeyOrder(&document), policy.GitHub); err != nil {
 		return nil, err
 	}
 	if policy.Portainer, err = portainerSettings(root, policy.Stacks); err != nil {
@@ -174,24 +178,50 @@ func Load(path string) (*Policy, error) {
 	return policy, nil
 }
 
-func stackPolicies(root map[string]any, github *GitHubPolicy) ([]StackPolicy, error) {
+func stackPolicies(root map[string]any, order []string, github *GitHubPolicy) ([]StackPolicy, error) {
 	value, ok := root["stacks"]
 	if !ok {
 		return nil, fmt.Errorf("config.stacks is required")
 	}
-	raw, err := orderedMapping(value, "stacks")
+	raw, err := mapping(value, "stacks")
 	if err != nil {
 		return nil, err
 	}
+	// Policy order is document order: with one update per run, the order
+	// stacks are declared in decides which mature Candidate goes first.
 	stacks := make([]StackPolicy, 0, len(raw))
-	for _, entry := range raw {
-		stack, err := stackPolicy(entry.key, entry.value, github)
+	for _, name := range order {
+		stack, err := stackPolicy(name, raw[name], github)
 		if err != nil {
 			return nil, err
 		}
 		stacks = append(stacks, stack)
 	}
 	return stacks, nil
+}
+
+// stackKeyOrder walks the parsed YAML document and returns the stacks
+// mapping's keys in document order, which plain map decoding loses.
+func stackKeyOrder(document *yaml.Node) []string {
+	if document.Kind != yaml.DocumentNode || len(document.Content) == 0 {
+		return nil
+	}
+	root := document.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value != "stacks" || root.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+		value := root.Content[i+1]
+		keys := make([]string, 0, len(value.Content)/2)
+		for j := 0; j+1 < len(value.Content); j += 2 {
+			keys = append(keys, value.Content[j].Value)
+		}
+		return keys
+	}
+	return nil
 }
 
 func stackPolicy(name string, value any, github *GitHubPolicy) (StackPolicy, error) {
@@ -291,11 +321,11 @@ func stackPolicy(name string, value any, github *GitHubPolicy) (StackPolicy, err
 
 	if gitPathRaw, ok := raw["git_path"]; ok {
 		gitPath, _ := gitPathRaw.(string)
-		clean := filepath.Clean(gitPath)
-		ext := filepath.Ext(clean)
-		if github == nil || gitPath == "" || filepath.IsAbs(clean) ||
-			strings.Contains(gitPath, "\\") || clean == ".." ||
-			strings.HasPrefix(clean, "../") || (ext != ".yaml" && ext != ".yml") {
+		ext := filepath.Ext(gitPath)
+		if github == nil || gitPath == "" || strings.HasPrefix(gitPath, "/") ||
+			strings.Contains(gitPath, "\\") ||
+			slices.Contains(strings.Split(gitPath, "/"), "..") ||
+			(ext != ".yaml" && ext != ".yml") {
 			return StackPolicy{}, fmt.Errorf(
 				"%s.git_path requires github configuration and a relative YAML path", path)
 		}
@@ -361,12 +391,22 @@ func healthPolicy(value any, path string) (HealthPolicy, error) {
 	if err := exactKeys(raw, []string{"type", "url", "target", "accepted_status", "timeout_seconds"}, path); err != nil {
 		return HealthPolicy{}, err
 	}
+	if _, hasTarget := raw["target"]; hasTarget {
+		if _, hasURL := raw["url"]; hasURL {
+			return HealthPolicy{}, fmt.Errorf("%s: set target or url, not both", path)
+		}
+	}
 	target, ok := raw["target"].(string)
 	if !ok {
 		target, ok = raw["url"].(string)
 	}
 	if !ok || target == "" {
 		return HealthPolicy{}, fmt.Errorf("%s.target or url is required", path)
+	}
+	if typeRaw, present := raw["type"]; present {
+		if _, ok := typeRaw.(string); !ok {
+			return HealthPolicy{}, fmt.Errorf("%s.type must be a string", path)
+		}
 	}
 
 	statuses := []int{200}
@@ -615,36 +655,12 @@ func resolvesToPrivilegedSocket(path string) (bool, string) {
 
 // --- generic mapping helpers ---
 
-type mapEntry struct {
-	key   string
-	value any
-}
-
 func mapping(value any, path string) (map[string]any, error) {
 	raw, ok := value.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%s must be a mapping", path)
 	}
 	return raw, nil
-}
-
-// orderedMapping re-decodes nothing: yaml.v3 loses key order in plain maps,
-// so stacks are re-sorted by name for deterministic policy order.
-func orderedMapping(value any, path string) ([]mapEntry, error) {
-	raw, err := mapping(value, path)
-	if err != nil {
-		return nil, err
-	}
-	keys := make([]string, 0, len(raw))
-	for key := range raw {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	entries := make([]mapEntry, 0, len(keys))
-	for _, key := range keys {
-		entries = append(entries, mapEntry{key: key, value: raw[key]})
-	}
-	return entries, nil
 }
 
 func exactKeys(raw map[string]any, allowed []string, path string) error {
