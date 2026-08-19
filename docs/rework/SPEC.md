@@ -252,15 +252,15 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### Portainer adapter
 
-- [ ] A malformed stack entry from the Portainer API (e.g. non-integer Id) is reported as an adapter error, not a crash (test_adapters.py::test_malformed_portainer_stack_is_reported_as_adapter_error)
-- [ ] The API key file tolerates a trailing newline (stripped before use as the X-API-Key header) (test_adapters.py::test_api_key_file_tolerates_trailing_newline)
-- [ ] An API key containing interior whitespace is rejected at adapter construction (test_adapters.py::test_api_key_file_rejects_interior_whitespace)
-- [ ] Stack updates use the configured extended deployment timeout rather than the default request timeout (test_adapters.py::test_stack_update_uses_the_extended_deployment_timeout)
-- [ ] list_stacks marks a stack as git_backed when Portainer reports a GitConfig (test_adapters.py::test_stack_list_records_git_backing)
-- [ ] update_stack refuses to update a Git-backed stack (adapter error) without making any HTTP call (test_adapters.py::test_stack_update_refuses_git_backed_stack)
-- [ ] Running-service digest discovery queries only running containers filtered by the stack's compose project label (never all containers), and maps service name to repo digest via each container's image RepoDigests (test_adapters.py::test_running_service_digests_are_scoped_to_the_authorized_compose_project)
-- [ ] Digest discovery raises an adapter error ("no running containers") when the compose project has no running containers (test_adapters.py::test_running_service_digests_reject_an_empty_project_result)
-- [ ] When a container's image reference carries an explicit digest pin and the image has multiple RepoDigests, the container's exact pinned digest wins (test_adapters.py::test_running_service_digest_prefers_the_containers_exact_digest_pin)
+- [x] A malformed stack entry from the Portainer API (e.g. non-integer Id) is reported as an adapter error, not a crash (test_adapters.py::test_malformed_portainer_stack_is_reported_as_adapter_error) — Go: `portainer.TestMalformedStackEntryIsAnAdapterError`
+- [x] The API key file tolerates a trailing newline (stripped before use as the X-API-Key header) (test_adapters.py::test_api_key_file_tolerates_trailing_newline) — Go: `portainer.TestAPIKeyFileToleratesTrailingNewline`
+- [x] An API key containing interior whitespace is rejected at adapter construction (test_adapters.py::test_api_key_file_rejects_interior_whitespace) — Go: `portainer.TestAPIKeyFileRejectsInteriorWhitespace`
+- [x] Stack updates use the configured extended deployment timeout rather than the default request timeout (test_adapters.py::test_stack_update_uses_the_extended_deployment_timeout) — Go: `portainer.TestStackUpdateUsesTheExtendedDeploymentTimeout`
+- [x] list_stacks marks a stack as git_backed when Portainer reports a GitConfig (test_adapters.py::test_stack_list_records_git_backing) — Go: `portainer.TestStackListRecordsGitBacking`
+- [x] update_stack refuses to update a Git-backed stack (adapter error) without making any HTTP call (test_adapters.py::test_stack_update_refuses_git_backed_stack) — Go: `portainer.TestStackUpdateRefusesGitBackedStack`
+- [x] Running-service digest discovery queries only running containers filtered by the stack's compose project label (never all containers), and maps service name to repo digest via each container's image RepoDigests (test_adapters.py::test_running_service_digests_are_scoped_to_the_authorized_compose_project) — Go: `portainer.TestRunningServiceDigestsAreScopedToTheAuthorizedComposeProject`
+- [x] Digest discovery raises an adapter error ("no running containers") when the compose project has no running containers (test_adapters.py::test_running_service_digests_reject_an_empty_project_result) — Go: `portainer.TestRunningServiceDigestsRejectAnEmptyProjectResult`
+- [x] When a container's image reference carries an explicit digest pin and the image has multiple RepoDigests, the container's exact pinned digest wins (test_adapters.py::test_running_service_digest_prefers_the_containers_exact_digest_pin) — Go: `portainer.TestRunningServiceDigestPrefersTheContainersExactDigestPin`
 
 ### Registry adapter
 
