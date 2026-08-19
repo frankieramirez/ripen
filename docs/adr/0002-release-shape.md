@@ -1,6 +1,6 @@
 # Release shape: self-updated distribution on six channels
 
-Status: accepted
+Status: accepted; superseded **in part** by [ADR 0003](./0003-distribution-channels-at-v1.md), which drops Homebrew from the channel list and restates why darwin binaries are published. The record below is left as it was written, rejections included.
 
 Strangers get Ripen from GitHub Releases, GHCR, Docker Hub, Homebrew, Nix, or `go install`, and they update it themselves. **Ripen does not update Ripen.** Releases are cut by GoReleaser from an annotated `vX.Y.Z` tag on `main`, publishing `linux/amd64` and `linux/arm64` `FROM scratch` images to both `ghcr.io/frankieramirez/ripen` and `docker.io/frankieramirez/ripen` under the same tags (`vX.Y.Z`, `X.Y.Z`, `vX.Y`, `vX`, `latest`), plus those two platforms and `darwin/amd64`/`darwin/arm64` as static binaries so Homebrew installs without compiling.
 

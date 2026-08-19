@@ -24,7 +24,6 @@ The ordered gate list from the [Public relaunch map](https://github.com/frankier
 
 ## Phase 3 — release plumbing (still private)
 
-- [ ] Create the public `frankieramirez/homebrew-tap` repo when GoReleaser is wired ([#12](https://github.com/frankieramirez/ripen/issues/12), [#19](https://github.com/frankieramirez/ripen/issues/19)).
 - [ ] GoReleaser config: linux/amd64+arm64 `FROM scratch` images to GHCR + Docker Hub (tags `vX.Y.Z`, `X.Y.Z`, `vX.Y`, `vX`, `latest`), linux+darwin binaries, checksums, Syft SBOM, keyless cosign, `attest-build-provenance`, CHANGELOG.md as release body ([#12](https://github.com/frankieramirez/ripen/issues/12)).
 - [ ] `flake.nix` in-repo builds from source ([#12](https://github.com/frankieramirez/ripen/issues/12)).
 - [ ] Dry-run: `goreleaser release --snapshot` produces the full artifact set locally.
@@ -52,11 +51,11 @@ Full runbook in [Plan the rework migration](https://github.com/frankieramirez/ri
 - [ ] Set repo description to the hero line, ~13 topics per [#14](https://github.com/frankieramirez/ripen/issues/14), optional social preview card.
 - [ ] Repo settings: Discussions **off**, blank issues off (via `config.yml`), private vulnerability reporting on.
 - [ ] Flip repo visibility to public. (Not gated on a real Apply Transaction — the clean soak is the gate.)
-- [ ] Tag annotated `v1.0.0` on `main`; verify the release workflow publishes binaries, both registries, brew formula, signatures/SBOM/provenance.
-- [ ] Verify `go install github.com/frankieramirez/ripen/cmd/ripen@v1.0.0`, `brew install frankieramirez/tap/ripen`, `nix run github:frankieramirez/ripen`, and both registry pulls.
+- [ ] Tag annotated `v1.0.0` on `main`; verify the release workflow publishes binaries, both registries, signatures/SBOM/provenance.
+- [ ] Verify `go install github.com/frankieramirez/ripen/cmd/ripen@v1.0.0`, `nix run github:frankieramirez/ripen`, and both registry pulls.
 
 ## Phase 7 — post-flip follow-ups
 
 - [ ] Repoint the NAS compose file at the published GHCR image (small `nas-infrastructure` follow-up).
 - [ ] Open the Docker MCP Catalog listing PR into docker/mcp-registry — read-only container form only, description "Ripen, a fail-closed image updater" ([#12](https://github.com/frankieramirez/ripen/issues/12), [#17](https://github.com/frankieramirez/ripen/issues/17)).
-- [ ] Post-launch (no deadline): nixpkgs submission, homebrew-core consideration ([#12](https://github.com/frankieramirez/ripen/issues/12)).
+- [ ] Post-launch (no deadline): nixpkgs submission. A macOS package channel is reconsidered only if someone asks, per [ADR 0003](../adr/0003-distribution-channels-at-v1.md).
