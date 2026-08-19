@@ -2,9 +2,9 @@
 # cross-compiles the matrix on every push; the full pipeline below runs
 # only on an annotated v* tag, from .github/workflows/release.yaml.
 #
-# Everything published is verifiable: checksums, an SBOM per archive,
-# keyless cosign signatures on the checksum file and on every image, and
-# GitHub build provenance attested in the workflow.
+# Everything published is verifiable: checksums, an SBOM per archive, a
+# keyless cosign signature over the checksum file and one on every image,
+# and GitHub build provenance attested in the workflow.
 version: 2
 
 project_name: ripen
@@ -56,17 +56,22 @@ sboms:
     artifacts: archive
 
 # Keyless signing: the certificate comes from the workflow's OIDC
-# identity, so there is no long-lived key to lose.
+# identity, so there is no long-lived key to lose. The signature, that
+# certificate and the transparency-log proof travel together in one
+# Sigstore bundle — the only format cosign v3 writes, and the only one
+# its `verify-blob` still reads.
+#
+# `cmd` is the wrapper rather than cosign itself on purpose. GoReleaser
+# does not check that a signing command wrote anything, so a cosign that
+# exits 0 having written nothing would register a signature artifact
+# that does not exist. The wrapper refuses instead; see the script.
 signs:
   - id: checksums
-    cmd: cosign
-    certificate: "${artifact}.pem"
+    cmd: ./.github/release/sign-blob.sh
+    signature: "${artifact}.sigstore.json"
     args:
-      - sign-blob
-      - "--output-certificate=${certificate}"
-      - "--output-signature=${signature}"
       - "${artifact}"
-      - "--yes"
+      - "${signature}"
     artifacts: checksum
     output: true
 
@@ -122,13 +127,22 @@ release:
   footer: |
     ---
 
-    Verify a download:
+    Verify a download. Needs cosign v3 — the bundle format below is not
+    readable by cosign v2.
 
     ```
     cosign verify-blob \
-      --certificate ripen_{{ .Version }}_checksums.txt.pem \
-      --signature ripen_{{ .Version }}_checksums.txt.sig \
+      --bundle ripen_{{ .Version }}_checksums.txt.sigstore.json \
       --certificate-identity-regexp 'https://github\.com/frankieramirez/ripen/\.github/workflows/release\.yaml@refs/tags/.*' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       ripen_{{ .Version }}_checksums.txt
     ```
+
+    That signature covers the checksum file, and the checksum file covers
+    every archive and SBOM here. Check what you downloaded against it:
+
+    ```
+    sha256sum --ignore-missing -c ripen_{{ .Version }}_checksums.txt
+    ```
+
+    On macOS that is `shasum -a 256 --ignore-missing -c`.
