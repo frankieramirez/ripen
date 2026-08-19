@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "clear-breaker",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "breaker": {
+          "additionalProperties": false,
+          "properties": {
+            "open": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "open",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "breaker",
+        "changed",
+        "detail",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen clear-breaker response",
+  "type": "object"
+}

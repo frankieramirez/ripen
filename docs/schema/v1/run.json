@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "run",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "breaker_open": {
+          "type": "boolean"
+        },
+        "finished_at": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "results": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "backend": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "result": {
+                "type": "string"
+              },
+              "service": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stack": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "backend",
+              "detail",
+              "digest",
+              "result",
+              "service",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "updates_applied": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "actor",
+        "breaker_open",
+        "finished_at",
+        "mode",
+        "results",
+        "run_id",
+        "started_at",
+        "updates_applied"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen run response",
+  "type": "object"
+}

@@ -200,7 +200,7 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 	}
 
 	if observed.runningDigest != "" && observed.runningDigest != accepted {
-		if observed.stack.GitBacked && pending != nil &&
+		if t.proposalMode(observed.stack) && pending != nil &&
 			pending.Digest == observed.runningDigest &&
 			observed.image.PinnedDigest == observed.runningDigest {
 			return t.acceptGitDeployment(observed, accepted, pending.URL, now)

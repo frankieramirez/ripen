@@ -40,7 +40,7 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 			Detail: "the stack changed between planning and applying",
 		}, false
 	}
-	if fresh.GitBacked {
+	if t.proposalMode(fresh) {
 		return t.propose(observed, fresh, accepted)
 	}
 
@@ -181,6 +181,13 @@ func (t *transaction) rollback(observed observation, accepted, failure string) (
 	return Result{Key: observed.key, Code: code, Detail: detail, Digest: accepted}, true
 }
 
+// proposalMode reports whether this stack is deployed by a forge rather
+// than by Ripen. Portainer says so itself; for a compose stack the
+// signal is an explicit per-stack git_path, never an inference.
+func (t *transaction) proposalMode(stackState backend.StackState) bool {
+	return stackState.GitBacked || t.stack.GitPath != ""
+}
+
 // propose opens a digest-pin Proposal instead of deploying: a Git-backed
 // stack is deployed by its forge, and Ripen never detaches it by writing
 // straight to the backend.
@@ -260,15 +267,17 @@ func (t *transaction) propose(observed observation, fresh backend.StackState, ac
 	if !result.Created {
 		detail = "the digest-pin proposal is already open"
 	}
+	opened := result
 	t.updater.emit("proposal.created", map[string]any{
 		"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
 		"service": observed.key.Service, "digest": observed.remoteDigest,
 		"proposal_url": result.URL, "created": result.Created})
 	return Result{
-		Key:    observed.key,
-		Code:   domain.ResultProposed,
-		Detail: fmt.Sprintf("%s: %s", detail, result.URL),
-		Digest: observed.remoteDigest,
+		Key:      observed.key,
+		Code:     domain.ResultProposed,
+		Detail:   fmt.Sprintf("%s: %s", detail, result.URL),
+		Digest:   observed.remoteDigest,
+		Proposal: &opened,
 	}, false
 }
 

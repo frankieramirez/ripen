@@ -87,3 +87,14 @@ const (
 	ResultUpdated           ResultCode = "updated"
 	ResultUpToDate          ResultCode = "up_to_date"
 )
+
+// Schema versions. Each surface versions independently: a change to the
+// Event envelope does not force a Response envelope bump, and neither
+// forces a state schema migration.
+const (
+	// EventSchemaVersion is the Event envelope's version.
+	EventSchemaVersion = 1
+	// StateSchemaVersion is the SQLite state schema's version. Schema v1
+	// has no migration path from the Python schema by design.
+	StateSchemaVersion = 1
+)

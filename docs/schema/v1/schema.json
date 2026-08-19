@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "schema",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "type": "integer"
+        },
+        "schemas": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "schemas"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen schema response",
+  "type": "object"
+}

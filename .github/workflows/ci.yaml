@@ -69,9 +69,8 @@ jobs:
           path: dist/ripen_linux_amd64_v1/ripen
 
   smoke:
-    # Runs the built binary to catch packaging breaks. Only `version` exists
-    # so far; `status` and `schema` join once the CLI PR of the migration
-    # plan lands (docs/rework/SPEC.md).
+    # Runs the built binary against a minimal policy to catch packaging
+    # breaks: the three verbs that need no backend at all.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: build
@@ -79,7 +78,26 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: snapshot-linux-amd64
-      - name: Run version
+      - name: Write a minimal policy
+        run: |
+          mkdir -p smoke
+          cat > smoke/policy.yaml <<'POLICY'
+          mode: monitor
+          state_file: smoke/state/ripen.db
+          stacks:
+            example:
+              enabled: false
+              backend: docker-compose
+              file: smoke/compose.yaml
+              expected_services:
+                - web
+              health:
+                target: http://127.0.0.1:9/health
+          POLICY
+          printf 'services:\n  web:\n    image: ghcr.io/example/web:1.0.0\n' > smoke/compose.yaml
+      - name: Run version, schema, and status
         run: |
           chmod +x ./ripen
           ./ripen version
+          ./ripen schema > /dev/null
+          ./ripen status --config smoke/policy.yaml

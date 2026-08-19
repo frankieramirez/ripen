@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "audit",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "actor": {
+                "type": "string"
+              },
+              "attempted_at": {
+                "type": "string"
+              },
+              "backend": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "new_digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "old_digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "result": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "service": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stack": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "actor",
+              "attempted_at",
+              "backend",
+              "detail",
+              "new_digest",
+              "old_digest",
+              "result",
+              "run_id",
+              "service",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "attempts",
+        "next_cursor"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen audit response",
+  "type": "object"
+}

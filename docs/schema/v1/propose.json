@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "propose",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "created": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "service": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stack": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "backend",
+        "created",
+        "detail",
+        "digest",
+        "run_id",
+        "service",
+        "stack",
+        "url"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen propose response",
+  "type": "object"
+}

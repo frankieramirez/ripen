@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "version",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "built_at": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "event_schema": {
+          "type": "integer"
+        },
+        "response_schema": {
+          "type": "integer"
+        },
+        "ripen": {
+          "type": "string"
+        },
+        "state_schema": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "built_at",
+        "commit",
+        "event_schema",
+        "response_schema",
+        "ripen",
+        "state_schema"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen version response",
+  "type": "object"
+}
