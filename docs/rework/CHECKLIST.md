@@ -25,7 +25,7 @@ The ordered gate list from the [Public relaunch map](https://github.com/frankier
 ## Phase 3 — release plumbing (still private)
 
 - [ ] GoReleaser config: linux/amd64+arm64 `FROM scratch` images to GHCR + Docker Hub (tags `vX.Y.Z`, `X.Y.Z`, `vX.Y`, `vX`, `latest`), linux+darwin binaries, checksums, Syft SBOM, keyless cosign, `attest-build-provenance`, CHANGELOG.md as release body ([#12](https://github.com/frankieramirez/ripen/issues/12)).
-- [ ] `flake.nix` in-repo builds from source ([#12](https://github.com/frankieramirez/ripen/issues/12)).
+- [x] `flake.nix` in-repo builds from source ([#12](https://github.com/frankieramirez/ripen/issues/12)) — written and verified on a real Nix install, with a `nix build` CI job so it cannot rot ([#52](https://github.com/frankieramirez/ripen/issues/52)). Its `version` is a constant a flake cannot derive from a tag: bump it in the release commit.
 - [ ] Dry-run: `goreleaser release --snapshot` produces the full artifact set locally.
 
 ## Phase 4 — Python removal

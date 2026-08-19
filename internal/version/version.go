@@ -3,7 +3,9 @@ package version
 
 import "fmt"
 
-// Populated at build time via -ldflags; see .goreleaser.yaml.
+// Populated at build time via -ldflags by .goreleaser.yaml for releases and
+// by flake.nix for source builds. A build that stamps nothing keeps these,
+// which is how `ripen version` says so rather than inventing a version.
 var (
 	Version = "dev"
 	Commit  = "none"

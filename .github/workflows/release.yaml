@@ -85,6 +85,20 @@ jobs:
           fi
           cat release-notes.md
 
+      # A flake cannot read the tag it was fetched by, so flake.nix carries
+      # the version as a constant and `nix run github:...` reports whatever
+      # that constant says. A tag that disagrees with it would publish a Nix
+      # channel whose binary lies about its own version, so the release stops
+      # here rather than shipping one.
+      - name: Refuse a tag the flake disagrees with
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          flake_version="$(sed -n 's/^ *version = "\(.*\)";$/\1/p' flake.nix)"
+          if [ "$flake_version" != "$version" ]; then
+            echo "flake.nix says version \"$flake_version\", tag says \"$version\"" >&2
+            exit 1
+          fi
+
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"

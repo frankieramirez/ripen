@@ -101,3 +101,39 @@ jobs:
           ./ripen version
           ./ripen schema > /dev/null
           ./ripen status --config smoke/policy.yaml
+
+  nix:
+    # The flake is a published install path (ADR 0003), so it builds on every
+    # push and pull request. Without this, `vendorHash` rots silently on the
+    # next dependency bump and the first person to notice is a stranger
+    # running `nix run`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Full history: a flake reads its revision out of the checkout, and a
+      # shallow one has none to read.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # v22 is the current major and already runs on Node 24, so this new
+      # action arrives on the footing #66 put the rest of the file on.
+      - uses: DeterminateSystems/nix-installer-action@v22
+      - name: Build the flake
+        run: nix build .#ripen --print-build-logs
+      # A binary that reports the internal/version defaults built fine and
+      # still lies about itself, which is half of what this job is for, so
+      # assert what it says rather than only that it ran.
+      - name: Check the built binary reports what the flake built
+        run: |
+          reported="$(./result/bin/ripen version)"
+          echo "$reported"
+          expected="$(sed -n 's/^ *version = "\(.*\)";$/\1/p' flake.nix)"
+          if ! printf '%s' "$reported" | grep -q "\"ripen\":\"$expected\""; then
+            echo "version verb does not report $expected" >&2
+            exit 1
+          fi
+          if printf '%s' "$reported" | grep -q '"commit":"none"'; then
+            echo "the build stamped no commit" >&2
+            exit 1
+          fi
+          ./result/bin/ripen schema > /dev/null

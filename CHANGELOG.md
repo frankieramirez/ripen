@@ -19,5 +19,17 @@ Each release's section here is what GitHub shows as the release notes.
   inventory it was verified against.
 - Documentation for the whole surface: eight `docs/` pages, a rewritten README,
   `AGENTS.md`, `ROADMAP.md` with the permanent non-goals, and `CONTRIBUTING.md`.
+- A `flake.nix`, so `nix run github:frankieramirez/ripen` builds Ripen from
+  source. It exposes the `ripen` package and a `devShell` carrying the Go
+  toolchain and golangci-lint, and CI builds it and checks what it reports on
+  every push and pull request, so its `vendorHash` cannot go stale unnoticed.
+  A release refuses a tag that disagrees with the version the flake carries.
+
+### Changed
+
+- `go.mod` asks for `go 1.26` rather than the exact patch `1.26.6`. Pinning the
+  patch put the module's floor above the newest Go any distribution had
+  packaged, which made every from-source install path unbuildable until they
+  caught up.
 
 [Unreleased]: https://github.com/frankieramirez/ripen/compare/main...HEAD
