@@ -1,0 +1,25 @@
+# Build configuration only, so CI can cross-compile the release matrix with
+# `goreleaser build --snapshot`. Full distribution wiring (archives, images,
+# signing, SBOM, release workflow) lands with the distribution PR of the
+# rework migration plan (docs/rework/SPEC.md).
+version: 2
+
+project_name: ripen
+
+builds:
+  - id: ripen
+    main: ./cmd/ripen
+    binary: ripen
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/frankieramirez/ripen/internal/version.Version={{.Version}}
+      - -X github.com/frankieramirez/ripen/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/frankieramirez/ripen/internal/version.Date={{.Date}}
