@@ -76,7 +76,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Provenance covers what the Release actually carries: the four
+      # archives and the checksums file. The raw binaries live in
+      # per-target directories under dist/ and are build intermediates
+      # nobody downloads, so these globs stay one level deep rather than
+      # descending. Attesting the checksums file reaches the SBOMs too —
+      # it lists every archive and every SBOM by digest.
+      #
+      # The images are out of scope here: docker_signs puts a cosign
+      # signature on each manifest, which is a different claim.
       - name: Attest what was built
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: dist/**/ripen
+          subject-path: |
+            dist/*.tar.gz
+            dist/*_checksums.txt

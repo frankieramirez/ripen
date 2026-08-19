@@ -61,6 +61,18 @@ and GitHub build provenance. The release notes carry the exact `cosign
 verify-blob` invocation. Images are `FROM scratch` with a CA bundle and the
 binary — no shell, no package manager, a non-root uid.
 
+The provenance covers what the Release carries rather than what it was built
+from: the four archives and the checksums file. So an archive verifies as it was
+downloaded, with nothing to extract or hash first.
+
+```bash
+gh attestation verify ripen_<version>_linux_amd64.tar.gz --repo frankieramirez/ripen
+```
+
+The checksums file names every archive and every SBOM by digest, so attesting it
+reaches those too. The images carry no provenance attestation — the cosign
+signature on each manifest is the claim there.
+
 ## Supported versions
 
 The latest release. Ripen is maintained for its author's own use; fixes land on
