@@ -195,54 +195,54 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### Digest observation / baselining (monitor)
 
-- [ ] Monitor mode records the currently running digest as the accepted Baseline without redeploying when the stack is up to date (test_updater.py::test_monitor_records_proven_baseline_without_redeploying)
-- [ ] In a multi-service stack, monitor baselines each service independently without redeploying (test_updater.py::test_monitor_baselines_each_service_in_a_multi_service_stack)
-- [ ] A health-only (disabled) service is skipped entirely for registry resolution and baselining; only enabled services produce results (test_updater.py::test_monitor_skips_registry_resolution_for_health_only_service)
-- [ ] Monitor refuses to baseline when the registry already shows a newer digest than the running one (result BASELINE_BLOCKED, nothing accepted) (test_updater.py::test_monitor_refuses_to_baseline_when_update_already_pending)
-- [ ] Monitor reports a new registry digest as CANDIDATE without redeploying (test_updater.py::test_monitor_reports_candidate_without_redeploying)
-- [ ] Candidate observations require a minimum age: the first apply-mode run over a new digest reports CANDIDATE, and only after candidate_min_age_seconds has elapsed does apply proceed to UPDATED (test_updater.py::test_apply_updates_mature_candidate_after_health_passes)
+- [x] Monitor mode records the currently running digest as the accepted Baseline without redeploying when the stack is up to date (test_updater.py::test_monitor_records_proven_baseline_without_redeploying) — Go: `updater.TestMonitorBaselinesTheProvenRunningDigestWithoutRedeploying`, `updater.TestMonitorBaselinesTheRegistryDigestWhenTheBackendReportsUpToDate`
+- [x] In a multi-service stack, monitor baselines each service independently without redeploying (test_updater.py::test_monitor_baselines_each_service_in_a_multi_service_stack) — Go: `updater.TestMonitorBaselinesEachServiceOfAMultiServiceStackIndependently`
+- [x] A health-only (disabled) service is skipped entirely for registry resolution and baselining; only enabled services produce results (test_updater.py::test_monitor_skips_registry_resolution_for_health_only_service) — Go: `updater.TestAHealthOnlyServiceIsNeverResolvedOrBaselined`
+- [x] Monitor refuses to baseline when the registry already shows a newer digest than the running one (result BASELINE_BLOCKED, nothing accepted) (test_updater.py::test_monitor_refuses_to_baseline_when_update_already_pending) — Go: `updater.TestMonitorRefusesToBaselineWhenAnUpdateIsAlreadyPending`
+- [x] Monitor reports a new registry digest as CANDIDATE without redeploying (test_updater.py::test_monitor_reports_candidate_without_redeploying) — Go: `updater.TestMonitorReportsANewRegistryDigestAsACandidateWithoutRedeploying`
+- [x] Candidate observations require a minimum age: the first apply-mode run over a new digest reports CANDIDATE, and only after candidate_min_age_seconds has elapsed does apply proceed to UPDATED (test_updater.py::test_apply_updates_mature_candidate_after_health_passes) — Go: `updater.TestApplyWaitsForTheCandidateMaturityWindow`
 
 ### Transaction / apply
 
-- [ ] Apply on a mature candidate with passing health redeploys with the new digest pinned, records it as accepted, and issues exactly one update with repull=true for a single-service stack (test_updater.py::test_apply_updates_mature_candidate_after_health_passes)
-- [ ] In a multi-service stack, apply pins only the changed service's image to its digest, leaves sibling services' image lines untouched, uses repull=false, and a follow-up monitor run shows all services UP_TO_DATE (test_updater.py::test_apply_updates_only_one_service_in_a_multi_service_stack)
-- [ ] At most one update is applied per run even when multiple services have mature candidates: the first becomes UPDATED, the rest stay CANDIDATE (test_updater.py::test_apply_changes_at_most_one_service_when_two_candidates_are_mature)
+- [x] Apply on a mature candidate with passing health redeploys with the new digest pinned, records it as accepted, and issues exactly one update with repull=true for a single-service stack (test_updater.py::test_apply_updates_mature_candidate_after_health_passes) — Go: `updater.TestApplyRedeploysASingleServiceStackWithOneRepull`
+- [x] In a multi-service stack, apply pins only the changed service's image to its digest, leaves sibling services' image lines untouched, uses repull=false, and a follow-up monitor run shows all services UP_TO_DATE (test_updater.py::test_apply_updates_only_one_service_in_a_multi_service_stack) — Go: `updater.TestApplyPinsOnlyTheChangedServiceOfAMultiServiceStack`
+- [x] At most one update is applied per run even when multiple services have mature candidates: the first becomes UPDATED, the rest stay CANDIDATE (test_updater.py::test_apply_changes_at_most_one_service_when_two_candidates_are_mature) — Go: `updater.TestAtMostOneServiceIsUpdatedPerRun`
 - [x] Rewriting the compose file preserves comments, YAML anchors/aliases, and header content; the pinned image is written as a quoted "tag@digest" reference (test_updater.py::test_multi_service_update_preserves_compose_comments_and_anchors) — Go: `composefile.TestPinningOneImagePreservesCommentsAnchorsAndSiblings`
-- [ ] Apply cancels (result DRIFTED, no update issued) when the compose file changes between planning and applying (test_updater.py::test_apply_cancels_when_compose_drifts_after_planning)
-- [ ] A run fails with a permission error before any inventory work when the Portainer API identity does not match the expected username (test_updater.py::test_wrong_portainer_identity_fails_before_inventory)
-- [ ] Environment variable hashing is order-independent (test_updater.py::test_environment_hash_is_independent_of_portainer_order)
-- [ ] A notifier failure never discards or alters the run result (test_updater.py::test_notification_failure_does_not_discard_run_result)
+- [x] Apply cancels (result DRIFTED, no update issued) when the compose file changes between planning and applying (test_updater.py::test_apply_cancels_when_compose_drifts_after_planning) — Go: `updater.TestApplyCancelsWhenTheComposeDriftsAfterPlanning`
+- [x] A run fails with a permission error before any inventory work when the Portainer API identity does not match the expected username (test_updater.py::test_wrong_portainer_identity_fails_before_inventory) — Go: `updater.TestAWrongBackendIdentityFailsTheRunBeforeAnyInventoryWork`, `portainer.TestPreflightRefusesAMismatchedPortainerIdentity`
+- [x] Environment variable hashing is order-independent (test_updater.py::test_environment_hash_is_independent_of_portainer_order) — Go: `portainer.TestTheFingerprintIsIndependentOfEnvironmentOrder`
+- [x] A notifier failure never discards or alters the run result (test_updater.py::test_notification_failure_does_not_discard_run_result) — Go: `updater.TestAFailingEventSinkNeverChangesARunResult`
 
 ### Verification (health)
 
-- [ ] Health preflight covers every service in the stack: an unhealthy sibling service blocks the update entirely (result INELIGIBLE, no update issued) (test_updater.py::test_apply_refuses_to_mutate_when_another_stack_service_is_unhealthy)
-- [ ] A health-only (disabled) service's health check still gates sibling updates: if it is unhealthy the update is INELIGIBLE (test_updater.py::test_health_only_service_still_blocks_sibling_update_when_unhealthy)
-- [ ] Verification checks every stack service's health both before and after the update (test_updater.py::test_apply_verifies_every_stack_service_before_and_after_update)
+- [x] Health preflight covers every service in the stack: an unhealthy sibling service blocks the update entirely (result INELIGIBLE, no update issued) (test_updater.py::test_apply_refuses_to_mutate_when_another_stack_service_is_unhealthy) — Go: `updater.TestAnUnhealthySiblingBlocksTheUpdateEntirely`
+- [x] A health-only (disabled) service's health check still gates sibling updates: if it is unhealthy the update is INELIGIBLE (test_updater.py::test_health_only_service_still_blocks_sibling_update_when_unhealthy) — Go: `updater.TestAHealthOnlyServiceStillGatesItsSiblings`
+- [x] Verification checks every stack service's health both before and after the update (test_updater.py::test_apply_verifies_every_stack_service_before_and_after_update) — Go: `updater.TestVerificationChecksEveryServiceBeforeAndAfterTheUpdate`
 
 ### Rollback
 
-- [ ] Failed post-update health rolls back by redeploying with the previous digest pinned and opens the Circuit breaker (test_updater.py::test_failed_health_rolls_back_to_digest_and_opens_breaker)
-- [ ] In a multi-service stack, rollback re-pins only the changed service back to the old digest, leaves siblings untouched, and the breaker reason names the failed stack/service (result ROLLED_BACK) (test_updater.py::test_failed_multi_service_health_check_rolls_back_only_changed_service)
-- [ ] When health also fails after rollback, the result is ROLLBACK_FAILED and the breaker blocks any future apply (next run reports BREAKER_OPEN) (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply)
-- [ ] An exception thrown by the health adapter is treated as unhealthy (times out into rollback) rather than crashing the run (test_updater.py::test_health_adapter_exception_times_out_into_rollback)
+- [x] Failed post-update health rolls back by redeploying with the previous digest pinned and opens the Circuit breaker (test_updater.py::test_failed_health_rolls_back_to_digest_and_opens_breaker) — Go: `updater.TestFailedPostUpdateHealthRollsBackAndOpensTheBreaker`
+- [x] In a multi-service stack, rollback re-pins only the changed service back to the old digest, leaves siblings untouched, and the breaker reason names the failed stack/service (result ROLLED_BACK) (test_updater.py::test_failed_multi_service_health_check_rolls_back_only_changed_service) — Go: `updater.TestFailedPostUpdateHealthRollsBackAndOpensTheBreaker`
+- [x] When health also fails after rollback, the result is ROLLBACK_FAILED and the breaker blocks any future apply (next run reports BREAKER_OPEN) (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply) — Go: `updater.TestAFailedRollbackIsReportedAndBlocksEveryFutureApply`
+- [x] An exception thrown by the health adapter is treated as unhealthy (times out into rollback) rather than crashing the run (test_updater.py::test_health_adapter_exception_times_out_into_rollback) — Go: `updater.TestAHealthCheckThatErrorsCountsAsUnhealthy`
 
 ### Circuit breaker
 
-- [ ] Failed rollback verification opens the breaker, and an open breaker stops future apply runs with result BREAKER_OPEN (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply)
-- [ ] The breaker opens on failed post-update health even when the rollback itself succeeds (test_updater.py::test_failed_health_rolls_back_to_digest_and_opens_breaker)
-- [ ] An unhealthy deployment observed via Git-flow reconciliation also opens the breaker (test_updater.py::test_unhealthy_git_deployment_opens_breaker_without_accepting_digest)
+- [x] Failed rollback verification opens the breaker, and an open breaker stops future apply runs with result BREAKER_OPEN (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply) — Go: `updater.TestAFailedRollbackIsReportedAndBlocksEveryFutureApply`
+- [x] The breaker opens on failed post-update health even when the rollback itself succeeds (test_updater.py::test_failed_health_rolls_back_to_digest_and_opens_breaker) — Go: `updater.TestFailedPostUpdateHealthRollsBackAndOpensTheBreaker`
+- [x] An unhealthy deployment observed via Git-flow reconciliation also opens the breaker (test_updater.py::test_unhealthy_git_deployment_opens_breaker_without_accepting_digest) — Go: `updater.TestAPinnedButUnhealthyGitDeploymentOpensTheBreakerWithoutAccepting`
 
 ### Timeout ambiguity
 
-- [ ] A backend update call that times out is treated as ambiguous and resolved by re-checking: when image status and health prove the deploy succeeded, the update is accepted (result UPDATED, digest accepted, breaker stays closed, no second deploy) (test_updater.py::test_timed_out_update_is_accepted_when_health_and_image_status_prove_success)
+- [x] A backend update call that times out is treated as ambiguous and resolved by re-checking: when image status and health prove the deploy succeeded, the update is accepted (result UPDATED, digest accepted, breaker stays closed, no second deploy) (test_updater.py::test_timed_out_update_is_accepted_when_health_and_image_status_prove_success) — Go: `updater.TestATimedOutDeployIsAcceptedWhenImageStatusAndHealthProveSuccess`
 
 ### Git-backed stacks / Proposals
 
-- [ ] Apply refuses to mutate a Git-backed stack directly when no Git proposal configuration exists (result INELIGIBLE, no update, breaker stays closed) (test_updater.py::test_apply_refuses_to_detach_git_backed_multi_service_stack)
-- [ ] With GitHub config and a stack git_path, a mature candidate on a Git-backed stack produces a Proposal (PR) instead of a redeploy: result PROPOSED, updates_applied stays 0, the proposed content pins tag@digest at the configured repo path, and the pending proposal (digest + URL) is recorded (test_updater.py::test_git_backed_stack_creates_proposal_without_redeploying)
-- [ ] A Git-flow deployment is accepted only after the live compose shows the digest pin AND the running digest matches AND health passes: result UPDATED with updates_applied 0, digest accepted, pending proposal cleared, no direct update issued (test_updater.py::test_git_deployment_is_accepted_only_after_digest_pin_and_health_match)
-- [ ] If the Git-flow deployment's service is unhealthy, the digest is not accepted (Baseline stays old), the result is ERROR, and the breaker opens (test_updater.py::test_unhealthy_git_deployment_opens_breaker_without_accepting_digest)
-- [ ] An operator can clear a reviewed stale pending proposal by stack name with a reason, and status then shows no pending proposals (test_updater.py::test_operator_can_clear_reviewed_stale_proposal)
+- [x] Apply refuses to mutate a Git-backed stack directly when no Git proposal configuration exists (result INELIGIBLE, no update, breaker stays closed) (test_updater.py::test_apply_refuses_to_detach_git_backed_multi_service_stack) — Go: `updater.TestApplyRefusesToDetachAGitBackedStackWithNoProposalConfiguration`
+- [x] With GitHub config and a stack git_path, a mature candidate on a Git-backed stack produces a Proposal (PR) instead of a redeploy: result PROPOSED, updates_applied stays 0, the proposed content pins tag@digest at the configured repo path, and the pending proposal (digest + URL) is recorded (test_updater.py::test_git_backed_stack_creates_proposal_without_redeploying) — Go: `updater.TestAGitBackedStackProposesInsteadOfRedeploying`
+- [x] A Git-flow deployment is accepted only after the live compose shows the digest pin AND the running digest matches AND health passes: result UPDATED with updates_applied 0, digest accepted, pending proposal cleared, no direct update issued (test_updater.py::test_git_deployment_is_accepted_only_after_digest_pin_and_health_match) — Go: `updater.TestAGitDeploymentIsAcceptedOnlyAfterThePinAndTheRunningDigestMatch`
+- [x] If the Git-flow deployment's service is unhealthy, the digest is not accepted (Baseline stays old), the result is ERROR, and the breaker opens (test_updater.py::test_unhealthy_git_deployment_opens_breaker_without_accepting_digest) — Go: `updater.TestAPinnedButUnhealthyGitDeploymentOpensTheBreakerWithoutAccepting`
+- [x] An operator can clear a reviewed stale pending proposal by stack name with a reason, and status then shows no pending proposals (test_updater.py::test_operator_can_clear_reviewed_stale_proposal) — Go: `updater.TestAnOperatorCanClearAReviewedStaleProposal`
 
 ### Image reference parsing
 
@@ -271,10 +271,10 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### GitHub proposal adapter
 
-- [ ] Proposing a change creates a branch and digest-pin PR: fetches the base-branch file (decoding multi-line base64 content), PUTs the new content with the file's blob sha, and opens a PR (result created=true with the PR URL) (test_adapters.py::test_github_proposal_creates_digest_pin_pr)
-- [ ] Proposing when the branch already holds the desired content and a PR is open is idempotent: no POST/PUT calls, result is the existing PR URL with created=false (test_adapters.py::test_github_proposal_reuses_existing_branch_and_pull_request)
-- [ ] A proposal is refused when the repository's base-branch file content differs from the live reviewed compose (source drift) (test_adapters.py::test_github_proposal_refuses_repository_source_drift)
-- [ ] A GitHub token file readable by group or others (e.g. mode 0644) is rejected at adapter construction (test_adapters.py::test_github_token_file_rejects_broad_permissions)
+- [x] Proposing a change creates a branch and digest-pin PR: fetches the base-branch file (decoding multi-line base64 content), PUTs the new content with the file's blob sha, and opens a PR (result created=true with the PR URL) (test_adapters.py::test_github_proposal_creates_digest_pin_pr) — Go: `github.TestProposingCreatesABranchAndADigestPinPullRequest`
+- [x] Proposing when the branch already holds the desired content and a PR is open is idempotent: no POST/PUT calls, result is the existing PR URL with created=false (test_adapters.py::test_github_proposal_reuses_existing_branch_and_pull_request) — Go: `github.TestProposingIsIdempotentWhenTheBranchAndPullRequestExist`
+- [x] A proposal is refused when the repository's base-branch file content differs from the live reviewed compose (source drift) (test_adapters.py::test_github_proposal_refuses_repository_source_drift) — Go: `github.TestProposingRefusesWhenTheRepositorySourceHasDrifted`
+- [x] A GitHub token file readable by group or others (e.g. mode 0644) is rejected at adapter construction (test_adapters.py::test_github_token_file_rejects_broad_permissions) — Go: `github.TestATokenFileReadableByOthersIsRefused`
 
 ### Event sink / Notifier
 

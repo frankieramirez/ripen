@@ -107,6 +107,19 @@ func newAdapter(name domain.Backend, settings config.EngineSettings,
 // Backend reports which backend this adapter serves.
 func (a *Adapter) Backend() domain.Backend { return a.backendName }
 
+// Preflight probes the engine. There is no identity to check: the
+// compose CLI acts as whoever runs Ripen.
+func (a *Adapter) Preflight() error { return a.probe() }
+
+// RunningDigests re-reads which digests the project is running.
+func (a *Adapter) RunningDigests(state backend.StackState) (map[string]string, error) {
+	handle, ok := state.Handle.(Handle)
+	if !ok {
+		return nil, errors.New("compose digest discovery needs a compose stack observation")
+	}
+	return a.digestsFor(handle)
+}
+
 // Observe reads the stack's current state: the Compose document on disk,
 // the resolved services, and the digests actually running.
 func (a *Adapter) Observe(stack config.StackPolicy) (backend.StackState, error) {
@@ -152,7 +165,7 @@ func (a *Adapter) Observe(stack config.StackPolicy) (backend.StackState, error) 
 		return backend.StackState{}, err
 	}
 
-	running, err := a.runningDigests(stack)
+	running, err := a.digestsFor(Handle{File: stack.File, Project: stack.Project})
 	if err != nil {
 		return backend.StackState{}, err
 	}
@@ -273,8 +286,8 @@ func (a *Adapter) resolveConfig(stack config.StackPolicy) (resolvedConfig, error
 	return resolved, nil
 }
 
-func (a *Adapter) runningDigests(stack config.StackPolicy) (map[string]string, error) {
-	containers, err := a.projectContainers(Handle{File: stack.File, Project: stack.Project})
+func (a *Adapter) digestsFor(handle Handle) (map[string]string, error) {
+	containers, err := a.projectContainers(handle)
 	if err != nil {
 		return nil, err
 	}
