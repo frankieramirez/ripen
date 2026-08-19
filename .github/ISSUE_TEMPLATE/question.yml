@@ -1,0 +1,28 @@
+name: Question
+description: How is this meant to work?
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Discussions are off, so questions are issues. The
+        [docs](https://github.com/frankieramirez/ripen/tree/main/docs) may
+        already answer it — `docs/troubleshooting.md` covers every result code.
+
+        Never paste a real API key, token, webhook URL, or anything else from a
+        private host.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What you have tried
+      description: >
+        Commands you ran and what they said. `ripen explain <stack>` answers a
+        surprising number of questions on its own.

@@ -1,0 +1,65 @@
+name: Bug report
+description: Ripen did something other than what it says it does.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste a real API key, GitHub token, webhook URL, or anything else
+        from a private host. Redact hostnames if you need to.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The commands you ran, in order.
+      placeholder: |
+        1. ripen run --mode monitor
+        2. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Version
+      description: The output of `ripen version`.
+      render: json
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options:
+        - Portainer
+        - Docker Compose
+        - Podman Compose
+        - More than one
+    validations:
+      required: true
+
+  - type: textarea
+    id: policy
+    attributes:
+      label: The relevant part of your policy
+      description: The stack this is about, with secrets and hostnames redacted.
+      render: yaml
+
+  - type: textarea
+    id: output
+    attributes:
+      label: What Ripen said
+      description: >
+        Relevant output from `ripen status`, `ripen explain <stack>`,
+        `ripen audit`, or the event stream. Redact before pasting.
+      render: json
