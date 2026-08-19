@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "explain",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "breaker": {
+          "additionalProperties": false,
+          "properties": {
+            "open": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "open",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "excluded": {
+          "type": "boolean"
+        },
+        "expected_services": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "git_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": "string"
+        },
+        "services": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "auto_apply": {
+                "type": "boolean"
+              },
+              "backend": {
+                "type": "string"
+              },
+              "baseline": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "candidate": {
+                "additionalProperties": false,
+                "properties": {
+                  "digest": {
+                    "type": "string"
+                  },
+                  "first_seen": {
+                    "type": "string"
+                  },
+                  "last_seen": {
+                    "type": "string"
+                  },
+                  "mature": {
+                    "type": "boolean"
+                  },
+                  "mature_at": {
+                    "type": "string"
+                  },
+                  "observations": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "digest",
+                  "first_seen",
+                  "last_seen",
+                  "mature",
+                  "mature_at",
+                  "observations"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "health": {
+                "additionalProperties": false,
+                "properties": {
+                  "accepted_status": {
+                    "items": {
+                      "type": "integer"
+                    },
+                    "type": [
+                      "array",
+                      "null"
+                    ]
+                  },
+                  "target": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "accepted_status",
+                  "target",
+                  "type"
+                ],
+                "type": "object"
+              },
+              "pending_proposal": {
+                "additionalProperties": false,
+                "properties": {
+                  "digest": {
+                    "type": "string"
+                  },
+                  "proposed_at": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "digest",
+                  "proposed_at",
+                  "url"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "service": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stack": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "auto_apply",
+              "backend",
+              "baseline",
+              "blockers",
+              "candidate",
+              "enabled",
+              "health",
+              "pending_proposal",
+              "service",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "stack": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "backend",
+        "breaker",
+        "enabled",
+        "excluded",
+        "expected_services",
+        "git_path",
+        "mode",
+        "services",
+        "stack"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen explain response",
+  "type": "object"
+}

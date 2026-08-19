@@ -48,6 +48,9 @@ type PendingProposal struct {
 
 // Attempt is one recorded Transaction attempt.
 type Attempt struct {
+	// ID is the audit trail's own order. It is the cursor `ripen audit`
+	// pages by, and it never appears in the JSON surface.
+	ID          int64
 	Key         Key
 	RunID       string
 	Actor       domain.Actor
@@ -56,6 +59,27 @@ type Attempt struct {
 	Result      domain.ResultCode
 	Detail      string
 	AttemptedAt time.Time
+}
+
+// CandidateRecord is one observed Candidate, with its Key.
+type CandidateRecord struct {
+	Key       Key
+	Digest    string
+	FirstSeen time.Time
+	LastSeen  time.Time
+	Count     int
+}
+
+// AuditFilter narrows and pages the audit trail. Every field is
+// optional; an empty filter reads the newest attempts.
+type AuditFilter struct {
+	Limit   int
+	Cursor  int64 // page for attempts older than this id
+	RunID   string
+	Backend domain.Backend
+	Stack   string
+	Service string
+	Result  domain.ResultCode
 }
 
 // AcceptedDigest pairs a Key with its accepted Baseline digest.
@@ -341,9 +365,42 @@ func (s *Store) RecordAttempt(attempt Attempt, now time.Time) error {
 
 // Attempts returns the newest attempts, most recent first.
 func (s *Store) Attempts(limit int) ([]Attempt, error) {
-	rows, err := s.db.Query(`
-		SELECT run_id, actor, backend, stack, service, old_digest, new_digest, result, attempted_at, detail
-		FROM attempts ORDER BY id DESC LIMIT ?`, limit)
+	return s.AuditPage(AuditFilter{Limit: limit})
+}
+
+// AuditPage reads the audit trail newest first, narrowed by the filter
+// and paged by attempt id. The audit trail is the attempts table — never
+// the Event stream, which is a notification channel and not a record.
+func (s *Store) AuditPage(filter AuditFilter) ([]Attempt, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 50
+	}
+	query := strings.Builder{}
+	query.WriteString(`
+		SELECT id, run_id, actor, backend, stack, service, old_digest, new_digest,
+		       result, attempted_at, detail
+		FROM attempts WHERE 1 = 1`)
+	var arguments []any
+	for _, condition := range []struct{ column, value string }{
+		{"run_id", filter.RunID},
+		{"backend", string(filter.Backend)},
+		{"stack", filter.Stack},
+		{"service", filter.Service},
+		{"result", string(filter.Result)},
+	} {
+		if condition.value != "" {
+			query.WriteString(" AND " + condition.column + " = ?")
+			arguments = append(arguments, condition.value)
+		}
+	}
+	if filter.Cursor > 0 {
+		query.WriteString(" AND id < ?")
+		arguments = append(arguments, filter.Cursor)
+	}
+	query.WriteString(" ORDER BY id DESC LIMIT ?")
+	arguments = append(arguments, filter.Limit)
+
+	rows, err := s.db.Query(query.String(), arguments...) // #nosec G202 -- column names are literals above, values are bound
 	if err != nil {
 		return nil, err
 	}
@@ -352,8 +409,9 @@ func (s *Store) Attempts(limit int) ([]Attempt, error) {
 	for rows.Next() {
 		var attempt Attempt
 		var backend, actor, result, attemptedAt string
-		if err := rows.Scan(&attempt.RunID, &actor, &backend, &attempt.Key.Stack, &attempt.Key.Service,
-			&attempt.OldDigest, &attempt.NewDigest, &result, &attemptedAt, &attempt.Detail); err != nil {
+		if err := rows.Scan(&attempt.ID, &attempt.RunID, &actor, &backend, &attempt.Key.Stack,
+			&attempt.Key.Service, &attempt.OldDigest, &attempt.NewDigest, &result,
+			&attemptedAt, &attempt.Detail); err != nil {
 			return nil, err
 		}
 		attempt.Actor = domain.Actor(actor)
@@ -365,6 +423,87 @@ func (s *Store) Attempts(limit int) ([]Attempt, error) {
 		attempts = append(attempts, attempt)
 	}
 	return attempts, rows.Err()
+}
+
+// Candidates returns every observed Candidate, oldest Key first.
+func (s *Store) Candidates() ([]CandidateRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT backend, stack, service, digest, first_seen, last_seen, observation_count
+		FROM candidates ORDER BY backend, stack, service`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var records []CandidateRecord
+	for rows.Next() {
+		var record CandidateRecord
+		var backend, firstSeen, lastSeen string
+		if err := rows.Scan(&backend, &record.Key.Stack, &record.Key.Service, &record.Digest,
+			&firstSeen, &lastSeen, &record.Count); err != nil {
+			return nil, err
+		}
+		record.Key.Backend = domain.Backend(backend)
+		if record.FirstSeen, err = parseStamp(firstSeen); err != nil {
+			return nil, err
+		}
+		if record.LastSeen, err = parseStamp(lastSeen); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+// Candidate returns one Key's observed Candidate, or nil.
+func (s *Store) Candidate(key Key) (*CandidateRecord, error) {
+	record := CandidateRecord{Key: key}
+	var firstSeen, lastSeen string
+	err := s.db.QueryRow(`
+		SELECT digest, first_seen, last_seen, observation_count FROM candidates
+		WHERE backend = ? AND stack = ? AND service = ?`,
+		key.Backend, key.Stack, key.Service).Scan(&record.Digest, &firstSeen, &lastSeen, &record.Count)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if record.FirstSeen, err = parseStamp(firstSeen); err != nil {
+		return nil, err
+	}
+	if record.LastSeen, err = parseStamp(lastSeen); err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+// LastAttempt returns the newest audit entry for one Key, or nil. The
+// Key is matched exactly, empty service included, which is why this does
+// not go through the audit filter.
+func (s *Store) LastAttempt(key Key) (*Attempt, error) {
+	var attempt Attempt
+	var backend, actor, result, attemptedAt string
+	err := s.db.QueryRow(`
+		SELECT id, run_id, actor, backend, stack, service, old_digest, new_digest,
+		       result, attempted_at, detail
+		FROM attempts WHERE backend = ? AND stack = ? AND service = ?
+		ORDER BY id DESC LIMIT 1`, key.Backend, key.Stack, key.Service).
+		Scan(&attempt.ID, &attempt.RunID, &actor, &backend, &attempt.Key.Stack,
+			&attempt.Key.Service, &attempt.OldDigest, &attempt.NewDigest, &result,
+			&attemptedAt, &attempt.Detail)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	attempt.Actor = domain.Actor(actor)
+	attempt.Key.Backend = domain.Backend(backend)
+	attempt.Result = domain.ResultCode(result)
+	if attempt.AttemptedAt, err = parseStamp(attemptedAt); err != nil {
+		return nil, err
+	}
+	return &attempt, nil
 }
 
 // AcquireLease takes the run lease when no unexpired lease exists,

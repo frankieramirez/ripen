@@ -11,6 +11,7 @@ package updater
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,12 +48,25 @@ type EventSink interface {
 	Emit(name string, fields map[string]any)
 }
 
+// The failures a caller has to tell apart: a name that does not exist,
+// and a stack that exists but cannot be proposed for.
+var (
+	// ErrUnknownStack means no stack by that name is configured.
+	ErrUnknownStack = errors.New("no such stack is configured")
+	// ErrNotProposable means the stack exists but has no proposal path:
+	// no git_path, or no forge configured.
+	ErrNotProposable = errors.New("this stack has no proposal configuration")
+)
+
 // Result is one Service's outcome in a run.
 type Result struct {
 	Key    state.Key
 	Code   domain.ResultCode
 	Detail string
 	Digest string
+	// Proposal is set only on a proposed result: the Proposal that now
+	// exists, whether or not this run is what created it.
+	Proposal *proposal.Result
 }
 
 // Report is one complete run.
@@ -327,4 +341,93 @@ func newRunID() string {
 		return id.String()
 	}
 	return uuid.NewString()
+}
+
+// Propose opens a Proposal for one stack's matured Candidate outside a
+// run. Its preconditions are the same ones a run would apply — a
+// configured git_path, a closed breaker, a matured Candidate, and no
+// Proposal already under review — because the verb is the run's
+// proposal step, not a way around it.
+func (u *Updater) Propose(stackName string) (Result, string, error) {
+	runID := newRunID()
+	index := slices.IndexFunc(u.policy.Stacks, func(stack config.StackPolicy) bool {
+		return stack.Name == stackName
+	})
+	if index < 0 {
+		return Result{}, runID, fmt.Errorf("%w: %q", ErrUnknownStack, stackName)
+	}
+	stack := u.policy.Stacks[index]
+	key := state.Key{Backend: stack.Backend, Stack: stack.Name}
+	if stack.GitPath == "" {
+		return Result{}, runID, fmt.Errorf("%w: stack %q has no git_path", ErrNotProposable, stackName)
+	}
+	if u.proposals == nil {
+		return Result{}, runID, fmt.Errorf("%w: no github section is configured", ErrNotProposable)
+	}
+
+	started := u.clock.Now()
+	token, acquired, err := u.state.AcquireLease(started, u.policy.LeaseTTLSeconds)
+	if err != nil {
+		return Result{}, runID, err
+	}
+	if !acquired {
+		return Result{Key: key, Code: domain.ResultBusy, Detail: "another run holds the lease"}, runID, nil
+	}
+	defer func() { _ = u.state.ReleaseLease(token) }()
+
+	status, err := u.state.Status(started)
+	if err != nil {
+		return Result{}, runID, err
+	}
+	if status.BreakerOpen {
+		return Result{Key: key, Code: domain.ResultBreakerOpen, Detail: breakerDetail(status)}, runID, nil
+	}
+
+	transaction := &transaction{updater: u, stack: stack, runID: runID, mode: domain.ModeApply}
+	if err := transaction.port().Preflight(); err != nil {
+		return transaction.failure(key, err), runID, nil
+	}
+	stackState, err := transaction.port().Observe(stack)
+	if err != nil {
+		return transaction.failure(key, err), runID, nil
+	}
+	observations, err := transaction.observe(stackState)
+	if err != nil {
+		return transaction.failure(key, err), runID, nil
+	}
+
+	for _, observed := range observations {
+		accepted, found, err := u.state.AcceptedDigest(observed.key)
+		if err != nil {
+			return Result{}, runID, err
+		}
+		if !found || observed.remoteDigest == accepted {
+			continue
+		}
+		mature, err := u.matured(observed.key, observed.remoteDigest, started)
+		if err != nil {
+			return Result{}, runID, err
+		}
+		if !mature {
+			continue
+		}
+		result, _ := transaction.propose(observed, stackState, accepted)
+		return result, runID, nil
+	}
+	return Result{
+		Key:    key,
+		Code:   domain.ResultIneligible,
+		Detail: "no matured candidate is waiting for a proposal",
+	}, runID, nil
+}
+
+// matured applies the maturity rule to a stored Candidate: two
+// observations of the same digest, and the window elapsed.
+func (u *Updater) matured(key state.Key, digest string, now time.Time) (bool, error) {
+	candidate, err := u.state.Candidate(key)
+	if err != nil || candidate == nil || candidate.Digest != digest {
+		return false, err
+	}
+	window := time.Duration(u.policy.CandidateMinAgeSeconds) * time.Second
+	return candidate.Count >= 2 && !now.Before(candidate.FirstSeen.Add(window)), nil
 }

@@ -282,7 +282,7 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### CLI
 
-- [ ] `run` exits 1 on an operational (adapter) error without a traceback — in Go the failure lands on stdout as an `ok: false` Response envelope plus a human-readable stderr line, per the agent-surface design (test_cli.py::test_run_reports_operational_error_without_traceback)
+- [x] `run` exits 1 on an operational (adapter) error without a traceback — in Go the failure lands on stdout as an `ok: false` Response envelope plus a human-readable stderr line, per the agent-surface design (test_cli.py::test_run_reports_operational_error_without_traceback) — Go: `cli.TestRunReportsAnOperationalErrorWithoutATraceback`
 - [ ] `daemon --once` exits 1 on a transient run error, emits a structured error Event, and never sleeps (test_cli.py::test_daemon_once_reports_transient_error_without_sleep)
 
 ## Invariants to test explicitly

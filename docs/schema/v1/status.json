@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "status",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "breaker": {
+          "additionalProperties": false,
+          "properties": {
+            "open": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "open",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "effective_policy": {
+          "additionalProperties": false,
+          "properties": {
+            "backends": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "candidate_min_age_seconds": {
+              "type": "integer"
+            },
+            "check_interval_seconds": {
+              "type": "integer"
+            },
+            "lease_ttl_seconds": {
+              "type": "integer"
+            },
+            "max_updates_per_run": {
+              "type": "integer"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "proposals_configured": {
+              "type": "boolean"
+            },
+            "stack_count": {
+              "type": "integer"
+            },
+            "state_file": {
+              "type": "string"
+            },
+            "verification_timeout_seconds": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "backends",
+            "candidate_min_age_seconds",
+            "check_interval_seconds",
+            "lease_ttl_seconds",
+            "max_updates_per_run",
+            "mode",
+            "proposals_configured",
+            "stack_count",
+            "state_file",
+            "verification_timeout_seconds"
+          ],
+          "type": "object"
+        },
+        "lease": {
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "active"
+          ],
+          "type": "object"
+        },
+        "services": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "auto_apply": {
+                "type": "boolean"
+              },
+              "backend": {
+                "type": "string"
+              },
+              "baseline": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "candidate": {
+                "additionalProperties": false,
+                "properties": {
+                  "digest": {
+                    "type": "string"
+                  },
+                  "first_seen": {
+                    "type": "string"
+                  },
+                  "last_seen": {
+                    "type": "string"
+                  },
+                  "mature": {
+                    "type": "boolean"
+                  },
+                  "mature_at": {
+                    "type": "string"
+                  },
+                  "observations": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "digest",
+                  "first_seen",
+                  "last_seen",
+                  "mature",
+                  "mature_at",
+                  "observations"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "last_result": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor": {
+                    "type": "string"
+                  },
+                  "attempted_at": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "result": {
+                    "type": "string"
+                  },
+                  "run_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actor",
+                  "attempted_at",
+                  "detail",
+                  "result",
+                  "run_id"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "pending_proposal": {
+                "additionalProperties": false,
+                "properties": {
+                  "digest": {
+                    "type": "string"
+                  },
+                  "proposed_at": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "digest",
+                  "proposed_at",
+                  "url"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "service": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stack": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "auto_apply",
+              "backend",
+              "baseline",
+              "candidate",
+              "enabled",
+              "last_result",
+              "pending_proposal",
+              "service",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "versions": {
+          "additionalProperties": false,
+          "properties": {
+            "built_at": {
+              "type": "string"
+            },
+            "commit": {
+              "type": "string"
+            },
+            "event_schema": {
+              "type": "integer"
+            },
+            "response_schema": {
+              "type": "integer"
+            },
+            "ripen": {
+              "type": "string"
+            },
+            "state_schema": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "built_at",
+            "commit",
+            "event_schema",
+            "response_schema",
+            "ripen",
+            "state_schema"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "breaker",
+        "effective_policy",
+        "lease",
+        "services",
+        "versions"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen status response",
+  "type": "object"
+}
