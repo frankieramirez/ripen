@@ -51,8 +51,14 @@ type StackState struct {
 // Port is the backend seam. Implementations are the Portainer API
 // adapter and the compose-runtime adapter.
 type Port interface {
+	// Preflight proves the backend is reachable and acting as the
+	// identity the policy expects, before a run does any inventory work.
+	Preflight() error
 	// Observe reads the stack's current state through the backend.
 	Observe(stack config.StackPolicy) (StackState, error)
+	// RunningDigests re-reads only which digests are running, for the
+	// repeated checks verification makes.
+	RunningDigests(state StackState) (map[string]string, error)
 	// Deploy redeploys the stack with a new Compose document. repull
 	// asks the engine to re-pull mutable tags; backends that always pin
 	// digests refuse it.
@@ -76,6 +82,22 @@ func (e *IneligibleError) Error() string { return e.Reason }
 // Ineligible builds an IneligibleError.
 func Ineligible(format string, args ...any) error {
 	return &IneligibleError{Reason: fmt.Sprintf(format, args...)}
+}
+
+// NotVisibleError marks a stack the policy declares but the backend
+// cannot see — usually a stack the automation identity has no access to.
+// It maps to ResultCode not_visible.
+type NotVisibleError struct {
+	Stack string
+}
+
+func (e *NotVisibleError) Error() string {
+	return fmt.Sprintf("stack %q is not visible to the automation identity", e.Stack)
+}
+
+// NotVisible builds a NotVisibleError.
+func NotVisible(stack string) error {
+	return &NotVisibleError{Stack: stack}
 }
 
 // EngineUnavailableError marks a backend that could not be reached or
