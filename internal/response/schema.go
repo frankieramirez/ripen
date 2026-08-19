@@ -14,7 +14,7 @@ const dialect = "https://json-schema.org/draft/2020-12/schema"
 var Commands = []string{
 	"status", "candidates", "audit", "explain",
 	"run", "propose", "clear-proposal", "clear-breaker",
-	"schema", "version",
+	"notify-test", "schema", "version",
 }
 
 // payloads maps each command to the Go type of its data payload. The
@@ -30,6 +30,7 @@ func payloads() map[string]reflect.Type {
 		"propose":        reflect.TypeOf(Proposed{}),
 		"clear-proposal": reflect.TypeOf(Acknowledged{}),
 		"clear-breaker":  reflect.TypeOf(Acknowledged{}),
+		"notify-test":    reflect.TypeOf(NotifyTest{}),
 		"schema":         reflect.TypeOf(SchemaSet{}),
 		"version":        reflect.TypeOf(Version{}),
 	}

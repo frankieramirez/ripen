@@ -193,12 +193,29 @@ type EffectivePolicy struct {
 	Backends                   []string `json:"backends"`
 	StackCount                 int      `json:"stack_count"`
 	ProposalsConfigured        bool     `json:"proposals_configured"`
+	NotifierConfigured         bool     `json:"notifier_configured"`
+}
+
+// NotifierHealth is how the outbound Notifier is doing. Delivery is
+// at-most-once and fail-open, so this is the only way to know.
+type NotifierHealth struct {
+	LastSuccessAt       *string `json:"last_success_at"`
+	ConsecutiveFailures int     `json:"consecutive_failures"`
+	DroppedSinceStart   int     `json:"dropped_since_start"`
+}
+
+// NotifyTest is the answer to `ripen notify test`.
+type NotifyTest struct {
+	Delivered bool           `json:"delivered"`
+	Detail    string         `json:"detail"`
+	Health    NotifierHealth `json:"health"`
 }
 
 // Status is the answer to `ripen status`.
 type Status struct {
 	Breaker         Breaker         `json:"breaker"`
 	Lease           Lease           `json:"lease"`
+	Notifier        NotifierHealth  `json:"notifier"`
 	Services        []Service       `json:"services"`
 	Versions        Versions        `json:"versions"`
 	EffectivePolicy EffectivePolicy `json:"effective_policy"`

@@ -10,17 +10,21 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/frankieramirez/ripen/internal/app"
 	"github.com/frankieramirez/ripen/internal/backend"
+	"github.com/frankieramirez/ripen/internal/daemon"
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/response"
 	"github.com/frankieramirez/ripen/internal/state"
@@ -54,7 +58,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return ExitOK
 	}
 
-	envelope, code := dispatch(command, rest)
+	// The daemon owns its process: the Event stream on stderr is its
+	// whole output, and nothing is ever written to stdout.
+	if command == "daemon" {
+		return daemonVerb(rest, stderr)
+	}
+
+	envelope, code := dispatch(command, rest, stderr)
 	return write(stdout, stderr, envelope, code)
 }
 
@@ -71,7 +81,7 @@ func write(stdout, stderr io.Writer, envelope response.Envelope, code int) int {
 	return code
 }
 
-func dispatch(command string, args []string) (response.Envelope, int) {
+func dispatch(command string, args []string, stream io.Writer) (response.Envelope, int) {
 	switch command {
 	case "version":
 		return response.Succeed("version", now(), response.Version{Versions: app.Versions()}), ExitOK
@@ -80,8 +90,14 @@ func dispatch(command string, args []string) (response.Envelope, int) {
 			SchemaVersion: response.SchemaVersion,
 			Schemas:       response.Schemas(),
 		}), ExitOK
+	case "notify":
+		if len(args) == 0 || args[0] != "test" {
+			return response.Fail("notify", now(), response.CodeUsage,
+				"the only notify subcommand is `notify test`"), ExitUsage
+		}
+		return withApp("notify-test", args[1:], stream)
 	case "status", "candidates", "audit", "explain", "run", "propose", "clear-proposal", "clear-breaker":
-		return withApp(command, args)
+		return withApp(command, args, stream)
 	default:
 		return response.Fail(command, now(), response.CodeUsage,
 			fmt.Sprintf("unknown command %q", command)), ExitUsage
@@ -89,7 +105,7 @@ func dispatch(command string, args []string) (response.Envelope, int) {
 }
 
 // withApp runs the verbs that need a policy and a state store.
-func withApp(command string, args []string) (response.Envelope, int) {
+func withApp(command string, args []string, stream io.Writer) (response.Envelope, int) {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", defaultConfigPath(), "path to the policy file")
@@ -118,7 +134,7 @@ func withApp(command string, args []string) (response.Envelope, int) {
 	}
 	defer func() { _ = loaded.Close() }()
 
-	return execute(loaded, command, options)
+	return execute(loaded, command, options, stream)
 }
 
 // verbOptions is every flag any verb takes. One struct keeps the
@@ -156,7 +172,8 @@ func registerFlags(command string, flags *flag.FlagSet) *verbOptions {
 	return options
 }
 
-func execute(loaded *app.App, command string, options *verbOptions) (response.Envelope, int) {
+func execute(loaded *app.App, command string, options *verbOptions,
+	stream io.Writer) (response.Envelope, int) {
 	switch command {
 	case "status":
 		return read(loaded, command, func() (any, error) { return loaded.Status() })
@@ -171,13 +188,15 @@ func execute(loaded *app.App, command string, options *verbOptions) (response.En
 		}
 		return read(loaded, command, func() (any, error) { return loaded.Explain(stack) })
 	case "run":
-		return runVerb(loaded, options)
+		return runVerb(loaded, options, stream)
 	case "propose":
-		return proposeVerb(loaded, options)
+		return proposeVerb(loaded, options, stream)
 	case "clear-proposal":
-		return clearProposalVerb(loaded, options)
+		return clearProposalVerb(loaded, options, stream)
 	case "clear-breaker":
-		return clearBreakerVerb(loaded, options)
+		return clearBreakerVerb(loaded, options, stream)
+	case "notify-test":
+		return notifyTestVerb(loaded, stream)
 	default:
 		return response.Fail(command, now(), response.CodeUsage,
 			fmt.Sprintf("unknown command %q", command)), ExitUsage
@@ -216,7 +235,7 @@ func auditVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
 	return response.Succeed("audit", now(), audit), ExitOK
 }
 
-func runVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
+func runVerb(loaded *app.App, options *verbOptions, stream io.Writer) (response.Envelope, int) {
 	mode := loaded.Policy.Mode
 	if options.mode != "" {
 		parsed, err := domain.ParseMode(options.mode)
@@ -225,10 +244,11 @@ func runVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
 		}
 		mode = parsed
 	}
-	engine, err := loaded.Updater(domain.ActorCLI, nil)
+	engine, drain, err := engineFor(loaded, stream)
 	if err != nil {
 		return failure("run", err)
 	}
+	defer drain()
 	report, err := engine.Run(mode)
 	if err != nil {
 		return failure("run", err)
@@ -265,15 +285,16 @@ func runVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
 	return response.Succeed("run", now(), payload), code
 }
 
-func proposeVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
+func proposeVerb(loaded *app.App, options *verbOptions, stream io.Writer) (response.Envelope, int) {
 	stack, envelope, ok := argument("propose", options, "a stack name is required")
 	if !ok {
 		return envelope, ExitUsage
 	}
-	engine, err := loaded.Updater(domain.ActorCLI, nil)
+	engine, drain, err := engineFor(loaded, stream)
 	if err != nil {
 		return failure("propose", err)
 	}
+	defer drain()
 	result, runID, err := engine.Propose(stack)
 	if err != nil {
 		return failure("propose", err)
@@ -306,7 +327,8 @@ func proposeVerb(loaded *app.App, options *verbOptions) (response.Envelope, int)
 	}
 }
 
-func clearProposalVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
+func clearProposalVerb(loaded *app.App, options *verbOptions,
+	stream io.Writer) (response.Envelope, int) {
 	stack, envelope, ok := argument("clear-proposal", options, "a stack name is required")
 	if !ok {
 		return envelope, ExitUsage
@@ -315,10 +337,11 @@ func clearProposalVerb(loaded *app.App, options *verbOptions) (response.Envelope
 		return response.Fail("clear-proposal", now(), response.CodeUsage,
 			"--reason is required: clearing a proposal is a decision, and it is recorded"), ExitUsage
 	}
-	engine, err := loaded.Updater(domain.ActorCLI, nil)
+	engine, drain, err := engineFor(loaded, stream)
 	if err != nil {
 		return failure("clear-proposal", err)
 	}
+	defer drain()
 	status, err := engine.ClearProposal(stack, options.reason)
 	if err != nil {
 		return response.Fail("clear-proposal", now(), response.CodeNotFound, err.Error()), ExitOperation
@@ -331,15 +354,17 @@ func clearProposalVerb(loaded *app.App, options *verbOptions) (response.Envelope
 	}), ExitOK
 }
 
-func clearBreakerVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
+func clearBreakerVerb(loaded *app.App, options *verbOptions,
+	stream io.Writer) (response.Envelope, int) {
 	if strings.TrimSpace(options.reason) == "" {
 		return response.Fail("clear-breaker", now(), response.CodeUsage,
 			"--reason is required: an operator has to say what they fixed"), ExitUsage
 	}
-	engine, err := loaded.Updater(domain.ActorCLI, nil)
+	engine, drain, err := engineFor(loaded, stream)
 	if err != nil {
 		return failure("clear-breaker", err)
 	}
+	defer drain()
 	status, err := engine.ClearBreaker(options.reason)
 	if err != nil {
 		return failure("clear-breaker", err)
@@ -350,6 +375,114 @@ func clearBreakerVerb(loaded *app.App, options *verbOptions) (response.Envelope,
 		Breaker: response.Breaker{Open: status.BreakerOpen, Reason: response.Optional(status.BreakerReason)},
 		Detail:  "the circuit breaker is closed",
 	}), ExitOK
+}
+
+// engineFor builds the write path with its Event stream attached. The
+// returned function drains the Notifier: delivery is asynchronous, and a
+// CLI process that exits immediately would otherwise take the queue with
+// it.
+func engineFor(loaded *app.App, stream io.Writer) (*updater.Updater, func(), error) {
+	events, webhook, err := loaded.Events(domain.ActorCLI, stream)
+	if err != nil {
+		return nil, nil, err
+	}
+	drain := func() {
+		if webhook != nil {
+			_ = webhook.Close()
+		}
+	}
+	engine, err := loaded.Updater(domain.ActorCLI, events)
+	if err != nil {
+		drain()
+		return nil, nil, err
+	}
+	return engine, drain, nil
+}
+
+func notifyTestVerb(loaded *app.App, stream io.Writer) (response.Envelope, int) {
+	if loaded.Policy.Notifier == nil || loaded.Policy.Notifier.Webhook == nil {
+		return response.Fail("notify-test", now(), response.CodePreconditionFailed,
+			"no notifier is configured, so there is nothing to test"), ExitOperation
+	}
+	_, webhook, err := loaded.Events(domain.ActorCLI, stream)
+	if err != nil {
+		return failure("notify-test", err)
+	}
+	defer func() { _ = webhook.Close() }()
+
+	delivery := webhook.Test()
+	health, err := loaded.NotifierHealth(webhook.Dropped())
+	if err != nil {
+		return failure("notify-test", err)
+	}
+	if delivery != nil {
+		return response.Fail("notify-test", now(), response.CodeBackendUnavailable,
+			delivery.Error()), ExitOperation
+	}
+	return response.Succeed("notify-test", now(), response.NotifyTest{
+		Delivered: true,
+		Detail:    "the webhook accepted a notifier.test event",
+		Health:    health,
+	}), ExitOK
+}
+
+// daemonVerb runs the scheduled loop. It writes nothing to stdout, ever.
+func daemonVerb(args []string, stream io.Writer) int {
+	flags := flag.NewFlagSet("daemon", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	configPath := flags.String("config", defaultConfigPath(), "path to the policy file")
+	mode := flags.String("mode", "", "monitor or apply; defaults to the configured mode")
+	once := flags.Bool("once", false, "run one cycle and exit")
+	if err := flags.Parse(args); err != nil {
+		fmt.Fprintf(stream, "ripen: usage: %v\n", err)
+		return ExitUsage
+	}
+
+	loaded, err := app.Open(*configPath)
+	if err != nil {
+		fmt.Fprintf(stream, "ripen: config_invalid: %v\n", err)
+		return ExitUsage
+	}
+	defer func() { _ = loaded.Close() }()
+
+	selected := loaded.Policy.Mode
+	if *mode != "" {
+		parsed, err := domain.ParseMode(*mode)
+		if err != nil {
+			fmt.Fprintf(stream, "ripen: usage: %v\n", err)
+			return ExitUsage
+		}
+		selected = parsed
+	}
+
+	events, webhook, err := loaded.Events(domain.ActorDaemon, stream)
+	if err != nil {
+		fmt.Fprintf(stream, "ripen: %v\n", err)
+		return ExitOperation
+	}
+	defer func() {
+		if webhook != nil {
+			_ = webhook.Close()
+		}
+	}()
+	engine, err := loaded.Updater(domain.ActorDaemon, events)
+	if err != nil {
+		fmt.Fprintf(stream, "ripen: %v\n", err)
+		return ExitOperation
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := daemon.Run(ctx, daemon.Options{
+		Updater:  engine,
+		Mode:     selected,
+		Interval: time.Duration(loaded.Policy.CheckIntervalSeconds) * time.Second,
+		Once:     *once,
+	}); err != nil {
+		fmt.Fprintf(stream, "ripen: %v\n", err)
+		return ExitOperation
+	}
+	return ExitOK
 }
 
 func argument(command string, options *verbOptions, message string) (string, response.Envelope, bool) {
@@ -400,6 +533,9 @@ func usage(writer io.Writer) {
 	fmt.Fprintln(writer, "  propose <stack>             open a digest-pin proposal")
 	fmt.Fprintln(writer, "  clear-proposal <stack> --reason <why>")
 	fmt.Fprintln(writer, "  clear-breaker --reason <why>")
+	fmt.Fprintln(writer, "")
+	fmt.Fprintln(writer, "  daemon [--once]             run on the configured interval")
+	fmt.Fprintln(writer, "  notify test                 send a real event through the webhook")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "other:")
 	fmt.Fprintln(writer, "  schema                      the response schemas")

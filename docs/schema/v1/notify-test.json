@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "const": "notify-test",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "delivered": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "health": {
+          "additionalProperties": false,
+          "properties": {
+            "consecutive_failures": {
+              "type": "integer"
+            },
+            "dropped_since_start": {
+              "type": "integer"
+            },
+            "last_success_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "consecutive_failures",
+            "dropped_since_start",
+            "last_success_at"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "delivered",
+        "detail",
+        "health"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "occurred_at",
+    "ok"
+  ],
+  "title": "ripen notify-test response",
+  "type": "object"
+}

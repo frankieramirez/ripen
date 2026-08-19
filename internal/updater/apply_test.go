@@ -9,6 +9,7 @@ import (
 
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 )
 
 const sidecarHealthTarget = "http://media:9090/health"
@@ -230,7 +231,7 @@ func TestFailedPostUpdateHealthRollsBackAndOpensTheBreaker(t *testing.T) {
 	report := harness.run(domain.ModeApply)
 
 	harness.expect(report, "web", domain.ResultRolledBack)
-	if !harness.events.saw("breaker.opened") {
+	if !harness.events.saw(event.BreakerOpened) {
 		t.Error("opening the breaker must reach the event stream")
 	}
 	status := harness.status()

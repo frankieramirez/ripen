@@ -174,6 +174,10 @@ CREATE TABLE IF NOT EXISTS notifier_health (
     last_success_at TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS notifier_destination (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    fingerprint TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS notification_suppression (
     event TEXT NOT NULL,
     stack TEXT NOT NULL,
@@ -702,6 +706,37 @@ func (s *Store) RecordNotifierFailure() error {
 		VALUES(1, NULL, 1)
 		ON CONFLICT(singleton) DO UPDATE SET
 			consecutive_failures = consecutive_failures + 1`)
+	return err
+}
+
+// NotifierDestination reads the fingerprint of the destination the
+// suppression table was built against.
+func (s *Store) NotifierDestination() (string, error) {
+	var fingerprint string
+	err := s.db.QueryRow("SELECT fingerprint FROM notifier_destination WHERE singleton = 1").
+		Scan(&fingerprint)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return fingerprint, err
+}
+
+// SetNotifierDestination records which destination the suppression table
+// belongs to.
+func (s *Store) SetNotifierDestination(fingerprint string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO notifier_destination(singleton, fingerprint) VALUES(1, ?)
+		ON CONFLICT(singleton) DO UPDATE SET fingerprint = excluded.fingerprint`, fingerprint)
+	return err
+}
+
+// ClearSuppression drops one suppression key, re-arming it. Recovery
+// uses this: a stack that failed, recovered, and fails again must page
+// the second time.
+func (s *Store) ClearSuppression(event, stack, service string) error {
+	_, err := s.db.Exec(
+		"DELETE FROM notification_suppression WHERE event = ? AND stack = ? AND service = ?",
+		event, stack, service)
 	return err
 }
 

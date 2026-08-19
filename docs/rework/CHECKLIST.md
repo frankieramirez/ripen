@@ -17,7 +17,7 @@ The ordered gate list from the [Public relaunch map](https://github.com/frankier
 ## Phase 2 — the Go rework
 
 - [ ] PRs 1–13 per the [spec's migration plan](./SPEC.md#migration-plan), each green on CI, each claiming its behavior-inventory rows.
-- [ ] Behavior inventory fully claimed (every row checked against a Go test or struck with a reason).
+- [x] Behavior inventory fully claimed (every row checked against a Go test or struck with a reason) — completed with the Event stream PR; every row names its Go test in [`SPEC.md`](./SPEC.md#behavior-inventory).
 - [ ] The ten explicit invariants each have a dedicated test.
 - [ ] PR 13 delivers the docs surface — budget it as real work, it is the largest single writing task: rewritten README, eight `docs/` pages, `AGENTS.md` + `CLAUDE.md`, `docs/agents.md`, `ROADMAP.md` (non-goals seeded from the map's Out of scope), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md` check, three YAML issue forms + `config.yml`, PR template, `CHANGELOG.md` seeded ([#14](https://github.com/frankieramirez/ripen/issues/14)).
 - [ ] Provision the Code of Conduct contact alias **before** `CODE_OF_CONDUCT.md` is written ([#14](https://github.com/frankieramirez/ripen/issues/14)).

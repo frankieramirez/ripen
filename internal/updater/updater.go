@@ -19,6 +19,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/backend"
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/proposal"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/state"
@@ -41,11 +42,11 @@ type Clock interface {
 	Sleep(duration time.Duration)
 }
 
-// EventSink receives Events. The narrow shape here is what the engine
-// needs; the Event envelope and the full catalogue arrive with the
-// daemon and Notifier PR of the migration plan (docs/rework/SPEC.md).
+// EventSink receives Events. The engine never builds an envelope itself:
+// it names the Event, says who it is about, and hands over a typed
+// payload, so the stream can stamp the rest.
 type EventSink interface {
-	Emit(name string, fields map[string]any)
+	Emit(name event.Name, subject event.Subject, data event.Data)
 }
 
 // The failures a caller has to tell apart: a name that does not exist,
@@ -118,7 +119,7 @@ func (SystemClock) Sleep(duration time.Duration) { time.Sleep(duration) }
 
 type discardSink struct{}
 
-func (discardSink) Emit(string, map[string]any) {}
+func (discardSink) Emit(event.Name, event.Subject, event.Data) {}
 
 // New builds an Updater.
 func New(options Options) (*Updater, error) {
@@ -156,9 +157,9 @@ func New(options Options) (*Updater, error) {
 // emit sends one Event. A sink that fails, blocks on nothing, or panics
 // must never change what a Transaction decided or reported, so the
 // failure stops here.
-func (u *Updater) emit(name string, fields map[string]any) {
+func (u *Updater) emit(name event.Name, subject event.Subject, data event.Data) {
 	defer func() { _ = recover() }()
-	u.events.Emit(name, fields)
+	u.events.Emit(name, subject, data)
 }
 
 // Status reads the durable state snapshot.
@@ -172,7 +173,7 @@ func (u *Updater) ClearBreaker(reason string) (state.Status, error) {
 	if err := u.state.ClearBreaker(reason, u.clock.Now()); err != nil {
 		return state.Status{}, err
 	}
-	u.emit("breaker.cleared", map[string]any{"reason": reason})
+	u.emit(event.BreakerCleared, event.Subject{}, event.Data{Reason: reason})
 	return u.Status()
 }
 
@@ -193,7 +194,7 @@ func (u *Updater) ClearProposal(stack, reason string) (state.Status, error) {
 	if !cleared {
 		return state.Status{}, fmt.Errorf("no pending proposal exists for %q", stack)
 	}
-	u.emit("proposal.cleared", map[string]any{"stack": stack, "reason": reason})
+	u.emit(event.ProposalCleared, event.Subject{Stack: stack}, event.Data{Reason: reason})
 	return u.Status()
 }
 
@@ -222,7 +223,7 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 
 	token, acquired, err := u.state.AcquireLease(started, u.policy.LeaseTTLSeconds)
 	if err != nil {
-		return Report{}, err
+		return Report{}, u.failed(report, err)
 	}
 	if !acquired {
 		report.Finished = u.clock.Now()
@@ -237,7 +238,7 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 
 	status, err := u.state.Status(started)
 	if err != nil {
-		return Report{}, err
+		return Report{}, u.failed(report, err)
 	}
 	if mode == domain.ModeApply && status.BreakerOpen {
 		// An open breaker halts every outbound action — Apply and
@@ -252,12 +253,9 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 		return report, nil
 	}
 
-	u.emit("run.started", map[string]any{
-		"run_id": report.RunID, "mode": string(mode), "actor": string(u.actor)})
-
 	unavailable, err := u.preflight()
 	if err != nil {
-		return Report{}, err
+		return Report{}, u.failed(report, err)
 	}
 
 	// Policy order is document order: with one update per run, the order
@@ -283,17 +281,24 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 	report.Finished = u.clock.Now()
 	final, err := u.state.Status(report.Finished)
 	if err != nil {
-		return Report{}, err
+		return Report{}, u.failed(report, err)
 	}
 	report.BreakerOpen = final.BreakerOpen
-	u.emit("run.finished", map[string]any{
-		"run_id":       report.RunID,
-		"mode":         string(mode),
-		"updates":      report.UpdatesApplied,
-		"breaker_open": report.BreakerOpen,
-		"results":      len(report.Results),
+	u.emit(event.RunFinished, event.Subject{RunID: report.RunID}, event.Data{
+		Mode:           string(mode),
+		UpdatesApplied: report.UpdatesApplied,
+		BreakerOpen:    report.BreakerOpen,
+		ResultCount:    len(report.Results),
 	})
 	return report, nil
+}
+
+// failed announces a run that could not finish. A daemon's only output
+// is the Event stream, so a run that dies has to say so there.
+func (u *Updater) failed(report Report, err error) error {
+	u.emit(event.RunFailed, event.Subject{RunID: report.RunID},
+		event.Data{Mode: string(report.Mode), Detail: err.Error()})
+	return err
 }
 
 // preflight proves each backend in use is usable before any inventory

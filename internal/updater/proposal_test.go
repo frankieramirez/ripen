@@ -6,6 +6,7 @@ import (
 
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 )
 
 func gitStack() config.StackPolicy {
@@ -54,7 +55,7 @@ func TestAGitBackedStackProposesInsteadOfRedeploying(t *testing.T) {
 	if change.Label != "media" {
 		t.Errorf("label = %q, want the service identity", change.Label)
 	}
-	if !harness.events.saw("proposal.created") {
+	if !harness.events.saw(event.ProposalCreated) {
 		t.Error("opening a proposal must reach the event stream")
 	}
 	pending := harness.status().PendingProposals

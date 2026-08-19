@@ -55,6 +55,9 @@
             "mode": {
               "type": "string"
             },
+            "notifier_configured": {
+              "type": "boolean"
+            },
             "proposals_configured": {
               "type": "boolean"
             },
@@ -75,6 +78,7 @@
             "lease_ttl_seconds",
             "max_updates_per_run",
             "mode",
+            "notifier_configured",
             "proposals_configured",
             "stack_count",
             "state_file",
@@ -91,6 +95,29 @@
           },
           "required": [
             "active"
+          ],
+          "type": "object"
+        },
+        "notifier": {
+          "additionalProperties": false,
+          "properties": {
+            "consecutive_failures": {
+              "type": "integer"
+            },
+            "dropped_since_start": {
+              "type": "integer"
+            },
+            "last_success_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "consecutive_failures",
+            "dropped_since_start",
+            "last_success_at"
           ],
           "type": "object"
         },
@@ -267,6 +294,7 @@
         "breaker",
         "effective_policy",
         "lease",
+        "notifier",
         "services",
         "versions"
       ],

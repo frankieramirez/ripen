@@ -43,6 +43,12 @@ func invoke(t *testing.T, configPath string, args ...string) invocation {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	full := append([]string{args[0], "--config", configPath}, args[1:]...)
+	if args[0] == "notify" {
+		// `notify test` is the only two-word verb; the config flag goes
+		// after the subcommand.
+		full = append([]string{"notify"}, args[1:]...)
+		full = append(full, "--config", configPath)
+	}
 	code := Run(full, &stdout, &stderr)
 
 	result := invocation{code: code, stdout: stdout.String(), stderr: stderr.String()}
@@ -499,5 +505,125 @@ func TestTheSchemaVerbPublishesOneSchemaPerCommand(t *testing.T) {
 		if _, present := schemas[command]; !present {
 			t.Errorf("no schema published for %q", command)
 		}
+	}
+}
+
+// portainerPolicy points at a port nothing listens on, so the run fails
+// at the identity preflight — a transient operational error, which is
+// exactly what a daemon has to survive reporting.
+func unreachablePortainerPolicy(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	keyPath := filepath.Join(directory, "api-key")
+	if err := os.WriteFile(keyPath, []byte("ptr_key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(directory, "policy.yaml")
+	policy := fmt.Sprintf(`
+mode: monitor
+check_interval_seconds: 3600
+state_file: %s
+portainer:
+  base_url: https://127.0.0.1:9443
+  api_key_file: %s
+  expected_username: ripen
+  tls_fingerprint_sha256: %s
+stacks:
+  media:
+    enabled: true
+    expected_services:
+      - web
+    health:
+      target: http://127.0.0.1:9/health
+`, filepath.Join(directory, "state", "ripen.db"), keyPath, strings.Repeat("a", 64))
+	if err := os.WriteFile(configPath, []byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return configPath
+}
+
+// TestTheDaemonWritesNothingToStdout is invariant 3: the Event stream on
+// stderr is the daemon's entire output, so a container's stdout can be
+// trusted to be empty.
+func TestTheDaemonWritesNothingToStdout(t *testing.T) {
+	configPath, _ := policyFile(t)
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"daemon", "--once", "--config", configPath}, &stdout, &stderr)
+
+	if code != ExitOK {
+		t.Fatalf("exit = %d (%s)", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing at all", stdout.String())
+	}
+	var envelope map[string]any
+	line := strings.SplitN(strings.TrimSpace(stderr.String()), "\n", 2)[0]
+	if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+		t.Fatalf("stderr is not the event stream: %s", stderr.String())
+	}
+	if envelope["actor"] != "daemon" {
+		t.Errorf("actor = %v, want the daemon that emitted it", envelope["actor"])
+	}
+}
+
+// TestDaemonOnceReportsATransientErrorAsAnEventAndExitsOne is the
+// behavior-inventory row carried across from the Python CLI.
+func TestDaemonOnceReportsATransientErrorAsAnEventAndExitsOne(t *testing.T) {
+	configPath := unreachablePortainerPolicy(t)
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"daemon", "--once", "--config", configPath}, &stdout, &stderr)
+
+	if code != ExitOperation {
+		t.Fatalf("exit = %d, want %d", code, ExitOperation)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing at all", stdout.String())
+	}
+	failed := false
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		var envelope map[string]any
+		if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+			continue
+		}
+		if envelope["event"] == "run.failed" {
+			failed = true
+		}
+	}
+	if !failed {
+		t.Errorf("stderr = %q, want a structured run.failed event", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "goroutine") {
+		t.Error("a transient error must not print a traceback")
+	}
+}
+
+func TestStatusReportsNotifierHealth(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	result := invoke(t, configPath, "status")
+
+	notifier, ok := result.data["notifier"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %v, want a notifier health block", result.data)
+	}
+	if notifier["last_success_at"] != nil || notifier["consecutive_failures"] != 0.0 {
+		t.Errorf("notifier = %v, want a cold health record", notifier)
+	}
+	policy := result.data["effective_policy"].(map[string]any)
+	if policy["notifier_configured"] != false {
+		t.Errorf("notifier_configured = %v, want false when none is configured", policy["notifier_configured"])
+	}
+}
+
+func TestNotifyTestWithoutANotifierIsRefused(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	result := invoke(t, configPath, "notify", "test")
+
+	if result.code != ExitOperation ||
+		result.envelope.Error.Code != response.CodePreconditionFailed {
+		t.Errorf("result = %d %+v, want a precondition failure", result.code, result.envelope.Error)
 	}
 }

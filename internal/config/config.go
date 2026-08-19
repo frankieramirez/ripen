@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 )
 
 // HealthPolicy is one HTTP functional health check.
@@ -77,6 +78,24 @@ type ComposeSettings struct {
 	Podman EngineSettings
 }
 
+// WebhookSettings configures the outbound webhook Notifier. Absent
+// means silent-but-logging: the Event stream still records everything.
+type WebhookSettings struct {
+	URLFile        string
+	TokenFile      string
+	Events         []event.Name
+	TimeoutSeconds int
+}
+
+// NotifierSettings holds the one outbound Notifier and its heartbeat.
+type NotifierSettings struct {
+	Webhook *WebhookSettings
+	// HeartbeatIntervalSeconds, when set, makes the Notifier deliver
+	// even a suppressed run.finished if nothing has been delivered for
+	// that long, so silence stays distinguishable from failure.
+	HeartbeatIntervalSeconds int
+}
+
 // Policy is the loaded, validated configuration.
 type Policy struct {
 	Mode                       domain.Mode
@@ -91,6 +110,7 @@ type Policy struct {
 	Stacks                     []StackPolicy
 	ExcludedStacks             []string
 	GitHub                     *GitHubPolicy
+	Notifier                   *NotifierSettings
 }
 
 var (
@@ -127,7 +147,7 @@ func Load(path string) (*Policy, error) {
 	if err := exactKeys(root, []string{
 		"mode", "max_updates_per_run", "verification_timeout_seconds",
 		"candidate_min_age_seconds", "lease_ttl_seconds", "check_interval_seconds",
-		"portainer", "github", "compose", "state_file", "stacks", "exclude",
+		"portainer", "github", "compose", "notifier", "state_file", "stacks", "exclude",
 	}, "config"); err != nil {
 		return nil, err
 	}
@@ -175,7 +195,83 @@ func Load(path string) (*Policy, error) {
 	if policy.ExcludedStacks, err = excludedStacks(root, policy.Stacks); err != nil {
 		return nil, err
 	}
+	if policy.Notifier, err = notifierSettings(root); err != nil {
+		return nil, err
+	}
 	return policy, nil
+}
+
+// notifierSettings reads the outbound Notifier. An unknown Event name is
+// a config-load error: a typo that silently pages about nothing is worse
+// than a refusal to start.
+func notifierSettings(root map[string]any) (*NotifierSettings, error) {
+	value, ok := root["notifier"]
+	if !ok {
+		return nil, nil
+	}
+	raw, err := mapping(value, "notifier")
+	if err != nil {
+		return nil, err
+	}
+	if err := exactKeys(raw, []string{"webhook", "heartbeat_interval_seconds"}, "notifier"); err != nil {
+		return nil, err
+	}
+	settings := &NotifierSettings{}
+	if heartbeat, present := raw["heartbeat_interval_seconds"]; present {
+		interval, ok := heartbeat.(int)
+		if !ok || interval <= 0 {
+			return nil, fmt.Errorf("notifier.heartbeat_interval_seconds must be a positive integer")
+		}
+		settings.HeartbeatIntervalSeconds = interval
+	}
+
+	webhookRaw, ok := raw["webhook"]
+	if !ok {
+		return settings, nil
+	}
+	webhook, err := mapping(webhookRaw, "notifier.webhook")
+	if err != nil {
+		return nil, err
+	}
+	if err := exactKeys(webhook,
+		[]string{"url_file", "token_file", "events", "timeout_seconds"}, "notifier.webhook"); err != nil {
+		return nil, err
+	}
+	settings.Webhook = &WebhookSettings{TimeoutSeconds: 10, Events: event.DefaultPaging}
+	urlFile, ok := webhook["url_file"].(string)
+	if !ok || urlFile == "" {
+		return nil, fmt.Errorf("notifier.webhook.url_file is required")
+	}
+	settings.Webhook.URLFile = urlFile
+	if tokenFile, present := webhook["token_file"]; present {
+		token, ok := tokenFile.(string)
+		if !ok || token == "" {
+			return nil, fmt.Errorf("notifier.webhook.token_file must be a non-empty path")
+		}
+		settings.Webhook.TokenFile = token
+	}
+	if timeout, present := webhook["timeout_seconds"]; present {
+		seconds, ok := timeout.(int)
+		if !ok || seconds <= 0 {
+			return nil, fmt.Errorf("notifier.webhook.timeout_seconds must be a positive integer")
+		}
+		settings.Webhook.TimeoutSeconds = seconds
+	}
+	if names, present := webhook["events"]; present {
+		list, ok := names.([]any)
+		if !ok || len(list) == 0 {
+			return nil, fmt.Errorf("notifier.webhook.events must be a non-empty list of event names")
+		}
+		settings.Webhook.Events = nil
+		for _, item := range list {
+			name, ok := item.(string)
+			if !ok || !event.Known(event.Name(name)) {
+				return nil, fmt.Errorf("notifier.webhook.events contains an unknown event name: %v", item)
+			}
+			settings.Webhook.Events = append(settings.Webhook.Events, event.Name(name))
+		}
+	}
+	return settings, nil
 }
 
 func stackPolicies(root map[string]any, order []string, github *GitHubPolicy) ([]StackPolicy, error) {
