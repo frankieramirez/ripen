@@ -11,6 +11,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/composefile"
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/proposal"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/state"
@@ -223,25 +224,31 @@ func (f *fakeProposals) Propose(change proposal.Change) (proposal.Result, error)
 }
 
 type recordedEvent struct {
-	name   string
-	fields map[string]any
+	name    event.Name
+	subject event.Subject
+	data    event.Data
 }
 
 type recordingSink struct {
 	events []recordedEvent
 	panics bool
+	onEmit func(recorded recordedEvent)
 }
 
-func (s *recordingSink) Emit(name string, fields map[string]any) {
+func (s *recordingSink) Emit(name event.Name, subject event.Subject, data event.Data) {
 	if s.panics {
 		panic("the notifier fell over")
 	}
-	s.events = append(s.events, recordedEvent{name: name, fields: fields})
+	recorded := recordedEvent{name: name, subject: subject, data: data}
+	s.events = append(s.events, recorded)
+	if s.onEmit != nil {
+		s.onEmit(recorded)
+	}
 }
 
-func (s *recordingSink) saw(name string) bool {
-	for _, event := range s.events {
-		if event.name == name {
+func (s *recordingSink) saw(name event.Name) bool {
+	for _, recorded := range s.events {
+		if recorded.name == name {
 			return true
 		}
 	}

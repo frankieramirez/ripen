@@ -20,34 +20,60 @@ func TestPublishedSchemasMatchTheGeneratedOnes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	published := map[string]bool{}
-	for _, entry := range entries {
-		published[entry.Name()] = true
+	if update {
+		for name := range published(entries) {
+			if err := os.Remove(filepath.Join(directory, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
+	remaining := published(entries)
 	for command, schema := range Schemas() {
 		name := command + ".json"
-		if !published[name] {
-			t.Errorf("docs/schema/v1/%s is missing; regenerate the published schemas", name)
+		if !remaining[name] && !update {
+			t.Errorf("docs/schema/v1/%s is missing; %s", name, howToRegenerate)
 			continue
 		}
-		delete(published, name)
+		delete(remaining, name)
 
-		onDisk, err := os.ReadFile(filepath.Join(directory, name)) // #nosec G304 -- test fixture path
-		if err != nil {
-			t.Fatal(err)
-		}
 		generated, err := json.MarshalIndent(schema, "", "  ")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if string(onDisk) != string(generated)+"\n" {
-			t.Errorf("docs/schema/v1/%s does not match `ripen schema`; regenerate it", name)
+		generated = append(generated, '\n')
+		if update {
+			if err := os.WriteFile(filepath.Join(directory, name), generated, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		onDisk, err := os.ReadFile(filepath.Join(directory, name)) // #nosec G304 -- test fixture path
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(onDisk) != string(generated) {
+			t.Errorf("docs/schema/v1/%s does not match `ripen schema`; %s", name, howToRegenerate)
 		}
 	}
-	for name := range published {
+	for name := range remaining {
 		t.Errorf("docs/schema/v1/%s has no command; delete it", name)
 	}
 }
+
+// published lists the schema files currently on disk.
+func published(entries []os.DirEntry) map[string]bool {
+	names := map[string]bool{}
+	for _, entry := range entries {
+		names[entry.Name()] = true
+	}
+	return names
+}
+
+// update regenerates the published schemas instead of checking them.
+// The generator lives here, next to the check, so the two cannot drift.
+var update = os.Getenv("RIPEN_UPDATE_SCHEMAS") != ""
+
+const howToRegenerate = "regenerate with RIPEN_UPDATE_SCHEMAS=1 go test ./internal/response/"
 
 func TestEveryCommandHasAPublishedSchema(t *testing.T) {
 	schemas := Schemas()

@@ -10,6 +10,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/backend"
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/state"
 )
@@ -81,8 +82,7 @@ func (t *transaction) failure(key state.Key, err error) Result {
 	case errors.As(err, &engine):
 		return Result{Key: key, Code: domain.ResultEngineUnavailable, Detail: err.Error()}
 	}
-	t.updater.emit("stack.error", map[string]any{
-		"run_id": t.runID, "backend": string(key.Backend), "stack": key.Stack, "error": err.Error()})
+	t.updater.emit(event.StackError, t.subject(key), event.Data{Detail: err.Error()})
 	return Result{Key: key, Code: domain.ResultError, Detail: err.Error()}
 }
 
@@ -212,6 +212,10 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 			Digest: observed.runningDigest,
 		}, false
 	}
+	// The Service is on its Baseline. If the last thing recorded about it
+	// was a failure, it has come back, whatever the registry now offers.
+	t.recovered(observed, accepted, now)
+
 	if pending != nil && pending.Digest != observed.remoteDigest {
 		return Result{
 			Key:    observed.key,
@@ -241,12 +245,13 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 	if err != nil {
 		return t.failure(observed.key, err), false
 	}
+	t.updater.emit(event.CandidateObserved, t.subject(observed.key),
+		event.Data{Digest: observed.remoteDigest, Observations: candidate.Count})
 	age := now.Sub(candidate.FirstSeen)
 	mature := candidate.Count >= 2 && age >= time.Duration(t.updater.policy.CandidateMinAgeSeconds)*time.Second
 	if mature {
-		t.updater.emit("candidate.matured", map[string]any{
-			"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-			"service": observed.key.Service, "digest": observed.remoteDigest})
+		t.updater.emit(event.CandidateMatured, t.subject(observed.key),
+			event.Data{Digest: observed.remoteDigest, Observations: candidate.Count})
 	}
 	candidateResult := Result{
 		Key:  observed.key,
@@ -270,6 +275,8 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 		if err := t.updater.state.SetAcceptedDigest(observed.key, observed.runningDigest, now); err != nil {
 			return t.failure(observed.key, err), false
 		}
+		t.updater.emit(event.BaselineRecorded, t.subject(observed.key),
+			event.Data{Digest: observed.runningDigest})
 		return Result{
 			Key:    observed.key,
 			Code:   domain.ResultBaselined,
@@ -278,6 +285,10 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 		}, false
 	}
 	if observed.imageStatus != "updated" {
+		t.updater.emit(event.BaselineBlocked, t.subject(observed.key), event.Data{
+			Digest: observed.remoteDigest,
+			Detail: "an update is already pending; the running digest cannot be proven",
+		})
 		return Result{
 			Key:    observed.key,
 			Code:   domain.ResultBaselineBlocked,
@@ -288,6 +299,8 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 	if err := t.updater.state.SetAcceptedDigest(observed.key, observed.remoteDigest, now); err != nil {
 		return t.failure(observed.key, err), false
 	}
+	t.updater.emit(event.BaselineRecorded, t.subject(observed.key),
+		event.Data{Digest: observed.remoteDigest})
 	return Result{
 		Key:    observed.key,
 		Code:   domain.ResultBaselined,
@@ -308,9 +321,7 @@ func (t *transaction) acceptGitDeployment(observed observation, accepted, propos
 			return t.failure(observed.key, err), false
 		}
 		t.recordAttempt(observed, accepted, observed.runningDigest, domain.ResultError, reason, now)
-		t.updater.emit("breaker.opened", map[string]any{
-			"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-			"service": observed.key.Service, "reason": reason})
+		t.updater.emit(event.BreakerOpened, t.subject(observed.key), event.Data{Reason: reason})
 		return Result{
 			Key:    observed.key,
 			Code:   domain.ResultError,
@@ -323,9 +334,8 @@ func (t *transaction) acceptGitDeployment(observed observation, accepted, propos
 		return t.failure(observed.key, err), false
 	}
 	t.recordAttempt(observed, accepted, observed.runningDigest, domain.ResultUpdated, detail, now)
-	t.updater.emit("proposal.deployed", map[string]any{
-		"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-		"service": observed.key.Service, "digest": observed.runningDigest, "proposal_url": proposalURL})
+	t.updater.emit(event.ProposalDeployed, t.subject(observed.key),
+		event.Data{Digest: observed.runningDigest, ProposalURL: proposalURL})
 	return Result{
 		Key:    observed.key,
 		Code:   domain.ResultUpdated,
@@ -347,8 +357,45 @@ func (t *transaction) recordAttempt(observed observation, oldDigest, newDigest s
 		Result:    code,
 		Detail:    detail,
 	}, now); err != nil {
-		t.updater.emit("stack.error", map[string]any{
-			"run_id": t.runID, "stack": observed.key.Stack, "error": err.Error()})
+		t.updater.emit(event.StackError, t.subject(observed.key), event.Data{Detail: err.Error()})
+	}
+}
+
+// recovered notices a Service coming back after a failed Transaction.
+// The audit row is written before the Event goes out, because an Event
+// must never say something `ripen status` cannot confirm.
+func (t *transaction) recovered(observed observation, accepted string, now time.Time) {
+	last, err := t.updater.state.LastAttempt(observed.key)
+	if err != nil || last == nil {
+		return
+	}
+	switch last.Result {
+	case domain.ResultError, domain.ResultRolledBack, domain.ResultRollbackFailed:
+	default:
+		return
+	}
+	if observed.runningDigest != "" && observed.runningDigest != accepted {
+		return
+	}
+	// Only a Service that is actually serving has recovered. This costs a
+	// health check, but only in the rare state where the last thing that
+	// happened to this Service was a failure.
+	if !t.healthyOnce(observed.stack) {
+		return
+	}
+	detail := "the service is running its accepted baseline again"
+	t.recordAttempt(observed, accepted, accepted, domain.ResultUpToDate, detail, now)
+	t.updater.emit(event.StackRecovered, t.subject(observed.key),
+		event.Data{Digest: accepted, Detail: detail})
+}
+
+// subject names who an Event is about.
+func (t *transaction) subject(key state.Key) event.Subject {
+	return event.Subject{
+		RunID:   t.runID,
+		Backend: key.Backend,
+		Stack:   key.Stack,
+		Service: key.Service,
 	}
 }
 

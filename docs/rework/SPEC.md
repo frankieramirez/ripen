@@ -278,12 +278,12 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### Event sink / Notifier
 
-- [ ] The stderr Event sink emits structured JSON and no Event payload carries secret material — in Go this becomes the typed-payload test from the notifications design, replacing the Python key-marker scrubber (test_adapters.py::test_json_notifier_redacts_secret_like_fields)
+- [x] The stderr Event sink emits structured JSON and no Event payload carries secret material — in Go this becomes the typed-payload test from the notifications design, replacing the Python key-marker scrubber (test_adapters.py::test_json_notifier_redacts_secret_like_fields) — Go: `event.TestNoEventPayloadFieldCanCarryASecret`, `event.TestEachEventIsOneLineOfJSON`
 
 ### CLI
 
 - [x] `run` exits 1 on an operational (adapter) error without a traceback — in Go the failure lands on stdout as an `ok: false` Response envelope plus a human-readable stderr line, per the agent-surface design (test_cli.py::test_run_reports_operational_error_without_traceback) — Go: `cli.TestRunReportsAnOperationalErrorWithoutATraceback`
-- [ ] `daemon --once` exits 1 on a transient run error, emits a structured error Event, and never sleeps (test_cli.py::test_daemon_once_reports_transient_error_without_sleep)
+- [x] `daemon --once` exits 1 on a transient run error, emits a structured error Event, and never sleeps (test_cli.py::test_daemon_once_reports_transient_error_without_sleep) — Go: `cli.TestDaemonOnceReportsATransientErrorAsAnEventAndExitsOne`
 
 ## Invariants to test explicitly
 

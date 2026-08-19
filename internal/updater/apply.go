@@ -11,6 +11,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/composefile"
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/proposal"
 )
 
@@ -73,9 +74,8 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 		}
 	}
 
-	t.updater.emit("transaction.started", map[string]any{
-		"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-		"service": observed.key.Service, "old_digest": accepted, "new_digest": observed.remoteDigest})
+	t.updater.emit(event.TransactionStarted, t.subject(observed.key),
+		event.Data{OldDigest: accepted, NewDigest: observed.remoteDigest})
 
 	var failure string
 	switch err := t.port().Deploy(fresh, deployCompose, repull); {
@@ -125,9 +125,8 @@ func (t *transaction) succeed(observed observation, accepted, detail string) (Re
 		return t.failure(observed.key, err), false
 	}
 	t.recordAttempt(observed, accepted, observed.remoteDigest, domain.ResultUpdated, detail, now)
-	t.updater.emit("transaction.succeeded", map[string]any{
-		"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-		"service": observed.key.Service, "old_digest": accepted, "new_digest": observed.remoteDigest})
+	t.updater.emit(event.TransactionSucceeded, t.subject(observed.key),
+		event.Data{OldDigest: accepted, NewDigest: observed.remoteDigest, Detail: detail})
 	return Result{
 		Key:    observed.key,
 		Code:   domain.ResultUpdated,
@@ -172,12 +171,13 @@ func (t *transaction) rollback(observed observation, accepted, failure string) (
 		detail = failure + "; rollback health verification failed; the breaker is open"
 	}
 	t.recordAttempt(observed, accepted, observed.remoteDigest, code, detail, now)
-	t.updater.emit("breaker.opened", map[string]any{
-		"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-		"service": observed.key.Service, "reason": reason})
-	t.updater.emit("rollback.finished", map[string]any{
-		"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-		"service": observed.key.Service, "result": string(code)})
+	t.updater.emit(event.BreakerOpened, t.subject(observed.key), event.Data{Reason: reason})
+	rollbackEvent := event.TransactionRolledBack
+	if code == domain.ResultRollbackFailed {
+		rollbackEvent = event.TransactionRollbackFailed
+	}
+	t.updater.emit(rollbackEvent, t.subject(observed.key), event.Data{
+		Result: string(code), OldDigest: accepted, NewDigest: observed.remoteDigest, Detail: detail})
 	return Result{Key: observed.key, Code: code, Detail: detail, Digest: accepted}, true
 }
 
@@ -268,10 +268,8 @@ func (t *transaction) propose(observed observation, fresh backend.StackState, ac
 		detail = "the digest-pin proposal is already open"
 	}
 	opened := result
-	t.updater.emit("proposal.created", map[string]any{
-		"run_id": t.runID, "backend": string(observed.key.Backend), "stack": observed.key.Stack,
-		"service": observed.key.Service, "digest": observed.remoteDigest,
-		"proposal_url": result.URL, "created": result.Created})
+	t.updater.emit(event.ProposalCreated, t.subject(observed.key), event.Data{
+		Digest: observed.remoteDigest, ProposalURL: result.URL, Created: result.Created, Detail: detail})
 	return Result{
 		Key:      observed.key,
 		Code:     domain.ResultProposed,

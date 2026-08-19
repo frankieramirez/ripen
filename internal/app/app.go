@@ -11,6 +11,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"time"
 
@@ -18,8 +19,10 @@ import (
 	"github.com/frankieramirez/ripen/internal/compose"
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/github"
 	"github.com/frankieramirez/ripen/internal/health"
+	"github.com/frankieramirez/ripen/internal/notifier"
 	"github.com/frankieramirez/ripen/internal/portainer"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/response"
@@ -51,6 +54,48 @@ func Open(configPath string) (*App, error) {
 // Close releases the state store.
 func (a *App) Close() error {
 	return a.Store.Close()
+}
+
+// Events builds the Event stream for one surface: the structured sink,
+// which is always on and writes every Event, plus the webhook Notifier
+// when the policy configures one. The returned Webhook is nil when no
+// Notifier is configured; close it to drain what is queued.
+func (a *App) Events(actor domain.Actor, stream io.Writer) (*event.Stream, *notifier.Webhook, error) {
+	events := event.NewStream(actor, event.NewWriterSink(stream))
+	if a.Policy.Notifier == nil || a.Policy.Notifier.Webhook == nil {
+		// Absent notifier configuration is silent-but-logging, not
+		// silent: the stream still records everything.
+		return events, nil, nil
+	}
+	webhook, err := notifier.New(notifier.Options{
+		Settings:  *a.Policy.Notifier.Webhook,
+		Heartbeat: time.Duration(a.Policy.Notifier.HeartbeatIntervalSeconds) * time.Second,
+		Store:     a.Store,
+		Stream:    events,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	events.Add(webhook)
+	return events, webhook, nil
+}
+
+// NotifierHealth reports what is durable about Notifier delivery, plus
+// this process's in-memory drop count.
+func (a *App) NotifierHealth(dropped int) (response.NotifierHealth, error) {
+	health, err := a.Store.NotifierHealth()
+	if err != nil {
+		return response.NotifierHealth{}, err
+	}
+	reported := response.NotifierHealth{
+		ConsecutiveFailures: health.ConsecutiveFailures,
+		DroppedSinceStart:   dropped,
+	}
+	if health.LastSuccessAt != nil {
+		stamp := response.Stamp(*health.LastSuccessAt)
+		reported.LastSuccessAt = &stamp
+	}
+	return reported, nil
 }
 
 // Updater builds the write path: backend clients, the registry client,
@@ -186,9 +231,14 @@ func (a *App) Status() (response.Status, error) {
 		return response.Status{}, err
 	}
 
+	notifierHealth, err := a.NotifierHealth(0)
+	if err != nil {
+		return response.Status{}, err
+	}
 	status := response.Status{
 		Breaker:         breaker(stored),
 		Lease:           response.Lease{Active: stored.LeaseActive},
+		Notifier:        notifierHealth,
 		Versions:        Versions(),
 		EffectivePolicy: a.effectivePolicy(),
 		Services:        []response.Service{},
@@ -408,6 +458,7 @@ func (a *App) effectivePolicy() response.EffectivePolicy {
 		Backends:                   backends,
 		StackCount:                 len(a.Policy.Stacks),
 		ProposalsConfigured:        a.Policy.GitHub != nil,
+		NotifierConfigured:         a.Policy.Notifier != nil && a.Policy.Notifier.Webhook != nil,
 	}
 }
 

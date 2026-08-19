@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 )
 
 const valid = `
@@ -510,4 +511,75 @@ func TestHealthTypeMustBeAString(t *testing.T) {
 	value := strings.Replace(valid, "      type: http", "      type: 7", 1)
 
 	assertLoadError(t, value, "type must be a string")
+}
+
+func TestNotifierWebhookIsReadWithItsDefaults(t *testing.T) {
+	policy := mustLoad(t, `
+stacks:
+  media:
+    enabled: true
+    backend: docker-compose
+    file: /srv/media/compose.yaml
+    expected_services: [web]
+    health:
+      target: http://media:8080/health
+notifier:
+  heartbeat_interval_seconds: 86400
+  webhook:
+    url_file: /run/secrets/webhook_url
+    token_file: /run/secrets/webhook_token
+`)
+
+	if policy.Notifier == nil || policy.Notifier.Webhook == nil {
+		t.Fatal("the notifier section was not loaded")
+	}
+	webhook := policy.Notifier.Webhook
+	if webhook.URLFile != "/run/secrets/webhook_url" || webhook.TokenFile != "/run/secrets/webhook_token" {
+		t.Errorf("webhook = %+v, want the configured secret paths", webhook)
+	}
+	if webhook.TimeoutSeconds != 10 {
+		t.Errorf("timeout = %d, want the default", webhook.TimeoutSeconds)
+	}
+	if len(webhook.Events) != len(event.DefaultPaging) {
+		t.Errorf("events = %v, want the default paging set", webhook.Events)
+	}
+	if policy.Notifier.HeartbeatIntervalSeconds != 86400 {
+		t.Errorf("heartbeat = %d, want the configured interval", policy.Notifier.HeartbeatIntervalSeconds)
+	}
+}
+
+func TestAnUnknownNotifierEventNameIsAConfigError(t *testing.T) {
+	assertLoadError(t, `
+stacks:
+  media:
+    enabled: true
+    backend: docker-compose
+    file: /srv/media/compose.yaml
+    expected_services: [web]
+    health:
+      target: http://media:8080/health
+notifier:
+  webhook:
+    url_file: /run/secrets/webhook_url
+    events:
+      - breaker.opened
+      - breaker.exploded
+`, "unknown event name")
+}
+
+func TestAbsentNotifierConfigurationIsSilentButLogging(t *testing.T) {
+	policy := mustLoad(t, `
+stacks:
+  media:
+    enabled: true
+    backend: docker-compose
+    file: /srv/media/compose.yaml
+    expected_services: [web]
+    health:
+      target: http://media:8080/health
+`)
+
+	if policy.Notifier != nil {
+		t.Errorf("notifier = %+v, want none configured", policy.Notifier)
+	}
 }
