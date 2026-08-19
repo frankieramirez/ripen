@@ -6,8 +6,8 @@ cover.out
 .venv/
 __pycache__/
 *.pyc
-build/
-dist/
+/build/
+/dist/
 *.egg-info/
 policy.yaml
 policy.*.yaml
@@ -22,4 +22,4 @@ secrets/
 
 # Local deployment records and one-off NAS diagnostics
 compose.portainer.backup-*.yaml
-scripts/
+/scripts/
