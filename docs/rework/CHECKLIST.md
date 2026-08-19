@@ -20,7 +20,7 @@ The ordered gate list from the [Public relaunch map](https://github.com/frankier
 - [x] Behavior inventory fully claimed (every row checked against a Go test or struck with a reason) — completed with the Event stream PR; every row names its Go test in [`SPEC.md`](./SPEC.md#behavior-inventory).
 - [x] The ten explicit invariants each have a dedicated test — each one names its Go test in [`SPEC.md`](./SPEC.md#invariants-to-test-explicitly).
 - [x] PR 13 delivers the docs surface: rewritten README, eight `docs/` pages (`configuration`, `portainer`, `compose`, `agents`, `proposals`, `notifications`, `architecture`, `troubleshooting`), `AGENTS.md` + `CLAUDE.md`, `ROADMAP.md` (non-goals seeded from the map's Out of scope), `CONTRIBUTING.md`, rewritten `SECURITY.md`, three YAML issue forms + `config.yml`, PR template, `CHANGELOG.md` seeded, and a rewritten `config.example.yaml` ([#14](https://github.com/frankieramirez/ripen/issues/14)). **`CODE_OF_CONDUCT.md` is the one piece not written** — it is blocked on the item below.
-- [ ] Provision the Code of Conduct contact alias **before** `CODE_OF_CONDUCT.md` is written ([#14](https://github.com/frankieramirez/ripen/issues/14)).
+- [ ] Provision the Code of Conduct contact alias **before** `CODE_OF_CONDUCT.md` is written ([#14](https://github.com/frankieramirez/ripen/issues/14)) — split out as [#44](https://github.com/frankieramirez/ripen/issues/44); it gates the public flip, not the rework.
 
 ## Phase 3 — release plumbing (still private)
 
