@@ -78,12 +78,15 @@ dockers_v2:
     images:
       - ghcr.io/frankieramirez/ripen
       - docker.io/frankieramirez/ripen
+    # The exact-version tags always publish. The floating tags do not move
+    # onto a release candidate: an empty tag is dropped, so a prerelease
+    # leaves `latest`, `vX` and `vX.Y` pointing at the last stable release.
     tags:
       - "{{ .Tag }}"
       - "{{ .Version }}"
-      - "v{{ .Major }}.{{ .Minor }}"
-      - "v{{ .Major }}"
-      - latest
+      - "{{ if not .Prerelease }}v{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if not .Prerelease }}v{{ .Major }}{{ end }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
     platforms:
       - linux/amd64
       - linux/arm64
