@@ -11,8 +11,8 @@ The ordered gate list from the [Public relaunch map](https://github.com/frankier
 
 ## Phase 1 — repo housekeeping (before the rework PRs start)
 
-- [ ] Merge the outstanding local branches into `main` and push: the Python rename (`0f572c6`) and the five glossary commits currently on `context/*` branches, plus this spec's branch. `main` must be the single integration line before PR 1 lands.
-- [ ] Author `docs/adr/0001-rewrite-in-go.md` (source: [#9](https://github.com/frankieramirez/ripen/issues/9)) and the release-shape ADR (source: [#12](https://github.com/frankieramirez/ripen/issues/12)).
+- [x] Merge the outstanding local branches into `main` and push. The four `context/*` branches turned out to be one stack fully contained in this spec's branch, so this was a single rebase onto `main`, not five merges. The Python rename needed no merge: it was already on `main` as the squash-merge [#20](https://github.com/frankieramirez/ripen/pull/20), and the duplicate local commit `0f572c6` dropped during the rebase. `main` is now the single integration line.
+- [x] Author `docs/adr/0001-rewrite-in-go.md` (source: [#9](https://github.com/frankieramirez/ripen/issues/9)) and [`docs/adr/0002-release-shape.md`](../adr/0002-release-shape.md) (source: [#12](https://github.com/frankieramirez/ripen/issues/12)).
 
 ## Phase 2 — the Go rework
 
