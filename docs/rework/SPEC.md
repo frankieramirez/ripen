@@ -185,13 +185,13 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 ### State store
 
-- [ ] Accepted (baseline) digests and candidate observations persist across store reopens; observing the same candidate again increments count while preserving first_seen and updating last_seen (test_state.py::test_state_persists_baseline_and_candidate_observations)
-- [ ] The store creates its parent directory if missing (test_state.py — store() helper uses tmp_path/"state"/updater.db)
-- [ ] Each service in a stack has an independent persisted accepted digest, and get_status reports all accepted digests (test_state.py::test_state_persists_independent_service_digests_for_one_stack)
-- [ ] A pending Git proposal (digest + PR URL) persists across store reopens and appears in status as pending_proposals; accepting a digest for that stack clears its pending proposal (test_state.py::test_state_persists_and_clears_pending_git_proposal)
-- [ ] clear_pending_proposal returns whether a record existed: false when nothing pending, true when it removed one, false again afterwards (test_state.py::test_clear_pending_proposal_reports_whether_record_existed)
-- [ ] The run lease excludes a concurrent acquire while unexpired; it can be acquired again after TTL expiry; status reports lease_active while any unreleased lease exists; releasing a stale (superseded) token does not deactivate the current lease; releasing the current token does (test_state.py::test_lease_excludes_concurrent_run_and_expires)
-- [ ] Clearing the circuit breaker requires a non-blank reason (blank is an error and the breaker stays open); with a reason, the breaker closes and status reflects it (test_state.py::test_breaker_requires_explicit_clear_reason)
+- [x] Accepted (baseline) digests and candidate observations persist across store reopens; observing the same candidate again increments count while preserving first_seen and updating last_seen (test_state.py::test_state_persists_baseline_and_candidate_observations) — Go: `state.TestStatePersistsBaselineAndCandidateObservations`
+- [x] The store creates its parent directory if missing (test_state.py — store() helper uses tmp_path/"state"/updater.db) — Go: `state.TestStateCreatesParentDirectoryIfMissing`
+- [x] Each service in a stack has an independent persisted accepted digest, and get_status reports all accepted digests (test_state.py::test_state_persists_independent_service_digests_for_one_stack) — Go: `state.TestStatePersistsIndependentServiceDigestsForOneStack`
+- [x] A pending Git proposal (digest + PR URL) persists across store reopens and appears in status as pending_proposals; accepting a digest for that stack clears its pending proposal (test_state.py::test_state_persists_and_clears_pending_git_proposal) — Go: `state.TestStatePersistsAndClearsPendingGitProposal`
+- [x] clear_pending_proposal returns whether a record existed: false when nothing pending, true when it removed one, false again afterwards (test_state.py::test_clear_pending_proposal_reports_whether_record_existed) — Go: `state.TestClearPendingProposalReportsWhetherRecordExisted`
+- [x] The run lease excludes a concurrent acquire while unexpired; it can be acquired again after TTL expiry; status reports lease_active while any unreleased lease exists; releasing a stale (superseded) token does not deactivate the current lease; releasing the current token does (test_state.py::test_lease_excludes_concurrent_run_and_expires) — Go: `state.TestLeaseExcludesConcurrentRunAndExpires`
+- [x] Clearing the circuit breaker requires a non-blank reason (blank is an error and the breaker stays open); with a reason, the breaker closes and status reflects it (test_state.py::test_breaker_requires_explicit_clear_reason) — Go: `state.TestBreakerRequiresExplicitClearReason`
 
 ### Digest observation / baselining (monitor)
 
