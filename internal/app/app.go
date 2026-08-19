@@ -220,6 +220,63 @@ func (a *App) Services() []ServiceRef {
 	return refs
 }
 
+// --- payloads shared by every surface ---
+
+// RunPayload renders a run report on the wire. Every surface renders it
+// the same way, because they all call this.
+func RunPayload(report updater.Report) response.Run {
+	payload := response.Run{
+		RunID:          report.RunID,
+		Mode:           string(report.Mode),
+		Actor:          string(report.Actor),
+		StartedAt:      response.Stamp(report.Started),
+		FinishedAt:     response.Stamp(report.Finished),
+		UpdatesApplied: report.UpdatesApplied,
+		BreakerOpen:    report.BreakerOpen,
+		Results:        []response.RunResult{},
+	}
+	for _, result := range report.Results {
+		payload.Results = append(payload.Results, response.RunResult{
+			Backend: response.Optional(string(result.Key.Backend)),
+			Stack:   result.Key.Stack,
+			Service: response.Optional(result.Key.Service),
+			Result:  string(result.Code),
+			Detail:  result.Detail,
+			Digest:  response.Optional(result.Digest),
+		})
+	}
+	return payload
+}
+
+// NeedsAttention reports whether a run is one a person has to look at:
+// an open breaker or a failed rollback, and nothing else.
+func NeedsAttention(report updater.Report) bool {
+	if report.BreakerOpen {
+		return true
+	}
+	for _, result := range report.Results {
+		if result.Code == domain.ResultRollbackFailed || result.Code == domain.ResultBreakerOpen {
+			return true
+		}
+	}
+	return false
+}
+
+// ProposedPayload renders a Proposal on the wire.
+func ProposedPayload(result updater.Result, runID string) response.Proposed {
+	payload := response.Proposed{
+		Identity: identity(result.Key),
+		Digest:   result.Digest,
+		RunID:    runID,
+		Detail:   result.Detail,
+	}
+	if result.Proposal != nil {
+		payload.URL = result.Proposal.URL
+		payload.Created = result.Proposal.Created
+	}
+	return payload
+}
+
 // --- reads ---
 
 // Status answers `ripen status`: policy-driven, with every configured

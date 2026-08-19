@@ -188,3 +188,30 @@ func TestAnOperatorCanClearAReviewedStaleProposal(t *testing.T) {
 		t.Error("clearing nothing must be an error, not a silent success")
 	}
 }
+
+func TestAnOpenBreakerBlocksProposalsAsWellAsApplies(t *testing.T) {
+	engine := gitBackend()
+	harness := singleHarness(t, gitStack(), engine)
+	ripen(harness, engine, newDigest)
+	if err := harness.store.OpenBreaker("media: rollback failed", harness.clock.now); err != nil {
+		t.Fatal(err)
+	}
+
+	report := harness.run(domain.ModeApply)
+	if len(report.Results) != 1 || report.Results[0].Code != domain.ResultBreakerOpen {
+		t.Errorf("run = %+v, want the run halted", report.Results)
+	}
+
+	// The propose verb takes the same route to the same refusal.
+	result, _, err := harness.updater.Propose("media")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Code != domain.ResultBreakerOpen {
+		t.Errorf("propose = %s, want breaker_open: the breaker halts every outbound action", result.Code)
+	}
+	if len(harness.proposals.changes) != 0 {
+		t.Error("no proposal may be opened while the breaker is open")
+	}
+}

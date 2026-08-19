@@ -22,10 +22,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/frankieramirez/ripen/internal/app"
 	"github.com/frankieramirez/ripen/internal/backend"
 	"github.com/frankieramirez/ripen/internal/daemon"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/mcpserver"
 	"github.com/frankieramirez/ripen/internal/response"
 	"github.com/frankieramirez/ripen/internal/state"
 	"github.com/frankieramirez/ripen/internal/updater"
@@ -46,6 +50,12 @@ const DefaultConfigPath = "/etc/ripen/policy.yaml"
 
 // Run executes one command and returns the process exit code.
 func Run(args []string, stdout, stderr io.Writer) int {
+	return RunWithInput(args, os.Stdin, stdout, stderr)
+}
+
+// RunWithInput is Run with an explicit input stream, which only the MCP
+// server needs: its transport is stdin and stdout.
+func RunWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		usage(stderr)
 		return write(stdout, stderr, response.Fail("", now(), response.CodeUsage,
@@ -58,10 +68,14 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return ExitOK
 	}
 
-	// The daemon owns its process: the Event stream on stderr is its
-	// whole output, and nothing is ever written to stdout.
-	if command == "daemon" {
+	// Two verbs own their process and never write a Response envelope.
+	// The daemon's whole output is the Event stream on stderr; the MCP
+	// server's stdout belongs to the protocol alone.
+	switch command {
+	case "daemon":
 		return daemonVerb(rest, stderr)
+	case "mcp":
+		return mcpVerb(rest, stdin, stdout, stderr)
 	}
 
 	envelope, code := dispatch(command, rest, stderr)
@@ -254,35 +268,11 @@ func runVerb(loaded *app.App, options *verbOptions, stream io.Writer) (response.
 		return failure("run", err)
 	}
 
-	payload := response.Run{
-		RunID:          report.RunID,
-		Mode:           string(report.Mode),
-		Actor:          string(report.Actor),
-		StartedAt:      response.Stamp(report.Started),
-		FinishedAt:     response.Stamp(report.Finished),
-		UpdatesApplied: report.UpdatesApplied,
-		BreakerOpen:    report.BreakerOpen,
-		Results:        []response.RunResult{},
-	}
-	attention := report.BreakerOpen
-	for _, result := range report.Results {
-		payload.Results = append(payload.Results, response.RunResult{
-			Backend: response.Optional(string(result.Key.Backend)),
-			Stack:   result.Key.Stack,
-			Service: response.Optional(result.Key.Service),
-			Result:  string(result.Code),
-			Detail:  result.Detail,
-			Digest:  response.Optional(result.Digest),
-		})
-		if result.Code == domain.ResultRollbackFailed || result.Code == domain.ResultBreakerOpen {
-			attention = true
-		}
-	}
 	code := ExitOK
-	if attention {
+	if app.NeedsAttention(report) {
 		code = ExitAttention
 	}
-	return response.Succeed("run", now(), payload), code
+	return response.Succeed("run", now(), app.RunPayload(report)), code
 }
 
 func proposeVerb(loaded *app.App, options *verbOptions, stream io.Writer) (response.Envelope, int) {
@@ -301,21 +291,7 @@ func proposeVerb(loaded *app.App, options *verbOptions, stream io.Writer) (respo
 	}
 	switch result.Code {
 	case domain.ResultProposed:
-		payload := response.Proposed{
-			Identity: response.Identity{
-				Backend: string(result.Key.Backend),
-				Stack:   result.Key.Stack,
-				Service: response.Optional(result.Key.Service),
-			},
-			Digest: result.Digest,
-			RunID:  runID,
-			Detail: result.Detail,
-		}
-		if result.Proposal != nil {
-			payload.URL = result.Proposal.URL
-			payload.Created = result.Proposal.Created
-		}
-		return response.Succeed("propose", now(), payload), ExitOK
+		return response.Succeed("propose", now(), app.ProposedPayload(result, runID)), ExitOK
 	case domain.ResultBreakerOpen:
 		return response.Fail("propose", now(), response.CodeBreakerOpen, result.Detail), ExitAttention
 	case domain.ResultBusy:
@@ -485,6 +461,72 @@ func daemonVerb(args []string, stream io.Writer) int {
 	return ExitOK
 }
 
+// mcpVerb serves MCP over stdio. Nothing but the protocol is ever
+// written to stdout — not a log line, not an envelope, not a warning.
+func mcpVerb(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	configPath := flags.String("config", defaultConfigPath(), "path to the policy file")
+	enableWrites := flags.Bool("enable-writes", false,
+		"register the three write tools; apply mode and clear-breaker are never available")
+	if err := flags.Parse(args); err != nil {
+		fmt.Fprintf(stderr, "ripen: usage: %v\n", err)
+		return ExitUsage
+	}
+
+	loaded, err := app.Open(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "ripen: config_invalid: %v\n", err)
+		return ExitUsage
+	}
+	defer func() { _ = loaded.Close() }()
+
+	server, err := mcpserver.New(mcpserver.Options{
+		App:          loaded,
+		EnableWrites: *enableWrites,
+		Stream:       stderr,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "ripen: %v\n", err)
+		return ExitOperation
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	transport := &mcp.IOTransport{
+		Reader: io.NopCloser(stdin),
+		Writer: nopCloser{stdout},
+	}
+	if err := server.Run(ctx, transport); err != nil && !sessionEnded(err) {
+		fmt.Fprintf(stderr, "ripen: %v\n", err)
+		return ExitOperation
+	}
+	return ExitOK
+}
+
+// sessionEnded reports whether the server stopped because the client
+// hung up, which is how an MCP session normally ends — the host closes
+// the pipe — and not a failure to report.
+func sessionEnded(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var wire *jsonrpc.Error
+	return errors.As(err, &wire) && wire.Code == serverClosingCode
+}
+
+// serverClosingCode is the JSON-RPC code the SDK uses for calls that
+// arrive while the connection is shutting down.
+const serverClosingCode = -32004
+
+// nopCloser lets the transport own a writer it must not close: stdout
+// belongs to the process, not to one session.
+type nopCloser struct {
+	io.Writer
+}
+
+func (nopCloser) Close() error { return nil }
+
 func argument(command string, options *verbOptions, message string) (string, response.Envelope, bool) {
 	if len(options.arguments) != 1 || options.arguments[0] == "" {
 		return "", response.Fail(command, now(), response.CodeUsage, message), false
@@ -536,6 +578,7 @@ func usage(writer io.Writer) {
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "  daemon [--once]             run on the configured interval")
 	fmt.Fprintln(writer, "  notify test                 send a real event through the webhook")
+	fmt.Fprintln(writer, "  mcp [--enable-writes]       serve the agent surface over stdio")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "other:")
 	fmt.Fprintln(writer, "  schema                      the response schemas")

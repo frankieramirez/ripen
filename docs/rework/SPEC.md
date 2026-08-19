@@ -289,13 +289,13 @@ Extracted from the Python test suite (2026-08-18). **This list gates the Python-
 
 Collected from the design tickets; each gets a dedicated test in the Go suite:
 
-1. Every paging Event corresponds to a durable state change already written ([#18](https://github.com/frankieramirez/ripen/issues/18)).
-2. Nothing writes to stdout in the `ripen mcp` process ([#17](https://github.com/frankieramirez/ripen/issues/17)).
-3. `ripen daemon` writes nothing to stdout ([#17](https://github.com/frankieramirez/ripen/issues/17)).
-4. MCP read-only mode registers no write tools and constructs no network clients ([#17](https://github.com/frankieramirez/ripen/issues/17)).
-5. `actor` is set by the surface and cannot be supplied by a caller ([#17](https://github.com/frankieramirez/ripen/issues/17)).
-6. An open breaker blocks Apply *and* Proposal creation; Monitor observation and reads continue ([#17](https://github.com/frankieramirez/ripen/issues/17)).
-7. Proposal creation is guarded on an existing pending proposal — no re-propose while a PR sits unmerged ([#16](https://github.com/frankieramirez/ripen/issues/16)).
-8. `ripen schema` output matches `docs/schema/v1/` (CI assertion, [#17](https://github.com/frankieramirez/ripen/issues/17)).
-9. No Event payload field name matches the secret-marker list ([#18](https://github.com/frankieramirez/ripen/issues/18)).
-10. A configured compose socket resolving to the privileged docker socket refuses at config load ([#21](https://github.com/frankieramirez/ripen/issues/21)).
+1. Every paging Event corresponds to a durable state change already written ([#18](https://github.com/frankieramirez/ripen/issues/18)). — Go: `updater.TestEveryPagingEventFollowsADurableStateChange`
+2. Nothing writes to stdout in the `ripen mcp` process ([#17](https://github.com/frankieramirez/ripen/issues/17)). — Go: `cli.TestTheMCPServerWritesNothingButProtocolToStdout`
+3. `ripen daemon` writes nothing to stdout ([#17](https://github.com/frankieramirez/ripen/issues/17)). — Go: `cli.TestTheDaemonWritesNothingToStdout`
+4. MCP read-only mode registers no write tools and constructs no network clients ([#17](https://github.com/frankieramirez/ripen/issues/17)). — Go: `mcpserver.TestReadOnlyRegistersNoWriteToolsAndBuildsNoClients`
+5. `actor` is set by the surface and cannot be supplied by a caller ([#17](https://github.com/frankieramirez/ripen/issues/17)). — Go: `updater.TestEveryWriteRecordsTheRunAndTheSurfaceThatMadeIt`, `mcpserver.TestAWriteThroughMCPIsRecordedAsTheMCPActor`
+6. An open breaker blocks Apply *and* Proposal creation; Monitor observation and reads continue ([#17](https://github.com/frankieramirez/ripen/issues/17)). — Go: `updater.TestAnOpenBreakerBlocksApplyButNotMonitor`, `updater.TestAnOpenBreakerBlocksProposalsAsWellAsApplies`
+7. Proposal creation is guarded on an existing pending proposal — no re-propose while a PR sits unmerged ([#16](https://github.com/frankieramirez/ripen/issues/16)). — Go: `updater.TestNoSecondProposalIsOpenedWhileOneIsPendingReview`
+8. `ripen schema` output matches `docs/schema/v1/` (CI assertion, [#17](https://github.com/frankieramirez/ripen/issues/17)). — Go: `response.TestPublishedSchemasMatchTheGeneratedOnes`
+9. No Event payload field name matches the secret-marker list ([#18](https://github.com/frankieramirez/ripen/issues/18)). — Go: `event.TestNoEventPayloadFieldCanCarryASecret`
+10. A configured compose socket resolving to the privileged docker socket refuses at config load ([#21](https://github.com/frankieramirez/ripen/issues/21)). — Go: `config.TestPrivilegedDockerSocketRefusesAtConfigLoad`, `config.TestSymlinkToPrivilegedDockerSocketRefusesAtConfigLoad`

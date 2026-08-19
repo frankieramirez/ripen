@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -625,5 +627,113 @@ func TestNotifyTestWithoutANotifierIsRefused(t *testing.T) {
 	if result.code != ExitOperation ||
 		result.envelope.Error.Code != response.CodePreconditionFailed {
 		t.Errorf("result = %d %+v, want a precondition failure", result.code, result.envelope.Error)
+	}
+}
+
+// syncBuffer collects output written from the server's goroutines.
+type syncBuffer struct {
+	mutex   sync.Mutex
+	written bytes.Buffer
+}
+
+func (s *syncBuffer) Write(data []byte) (int, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.written.Write(data)
+}
+
+func (s *syncBuffer) String() string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.written.String()
+}
+
+func (s *syncBuffer) lines() int {
+	return len(strings.Fields(strings.ReplaceAll(strings.TrimSpace(s.String()), " ", "")))
+}
+
+// mcpSession drives a real stdio session: initialize, initialized, and
+// one tools/list. Stdin stays open until the answers arrive, the way a
+// host holds the pipe open.
+func mcpSession(t *testing.T, args ...string) (int, string, string) {
+	t.Helper()
+	requests := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18",` +
+			`"capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`,
+	}, "\n") + "\n"
+
+	reader, writer := io.Pipe()
+	stdout, stderr := &syncBuffer{}, &syncBuffer{}
+	finished := make(chan int, 1)
+	go func() { finished <- RunWithInput(args, reader, stdout, stderr) }()
+
+	if _, err := writer.Write([]byte(requests)); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for stdout.lines() < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case code := <-finished:
+		return code, stdout.String(), stderr.String()
+	case <-time.After(10 * time.Second):
+		t.Fatal("the mcp server did not stop when stdin closed")
+		return 0, "", ""
+	}
+}
+
+// TestTheMCPServerWritesNothingButProtocolToStdout is invariant 2. The
+// transport owns stdout, so anything else written there — a log line, a
+// warning, an envelope — would corrupt the session.
+func TestTheMCPServerWritesNothingButProtocolToStdout(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	code, stdout, stderr := mcpSession(t, "mcp", "--config", configPath)
+
+	if code != ExitOK {
+		t.Fatalf("exit = %d (%s)", code, stderr)
+	}
+	responses := 0
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+		if line == "" {
+			continue
+		}
+		var message map[string]any
+		if err := json.Unmarshal([]byte(line), &message); err != nil {
+			t.Fatalf("stdout carried something that is not a protocol message: %q", line)
+		}
+		if message["jsonrpc"] != "2.0" {
+			t.Errorf("stdout carried a non-protocol JSON object: %q", line)
+		}
+		responses++
+	}
+	if responses < 2 {
+		t.Errorf("responses = %d, want the initialize and tools/list answers", responses)
+	}
+}
+
+func TestTheMCPServerRegistersWriteToolsOnlyWhenAsked(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	_, readOnly, _ := mcpSession(t, "mcp", "--config", configPath)
+	_, writable, _ := mcpSession(t, "mcp", "--config", configPath, "--enable-writes")
+
+	for _, tool := range []string{"run_monitor_cycle", "create_proposal", "clear_proposal"} {
+		if strings.Contains(readOnly, tool) {
+			t.Errorf("the read-only server offered %q", tool)
+		}
+		if !strings.Contains(writable, tool) {
+			t.Errorf("the writes-enabled server did not offer %q", tool)
+		}
+	}
+	if strings.Contains(writable, "clear_breaker") {
+		t.Error("clear_breaker must not exist on any MCP surface")
 	}
 }
