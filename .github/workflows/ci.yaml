@@ -1,0 +1,85 @@
+# The Go CI from the rework migration plan (docs/rework/SPEC.md). The Python
+# suite keeps its own workflow (ci.yml) until the Python-removal PR.
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test -race ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  build:
+    # Cross-compiles the full release matrix (linux/darwin x amd64/arm64)
+    # from ubuntu-latest; no macOS runners.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: build --snapshot --clean
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-linux-amd64
+          path: dist/ripen_linux_amd64_v1/ripen
+
+  smoke:
+    # Runs the built binary to catch packaging breaks. Only `version` exists
+    # so far; `status` and `schema` join once the CLI PR of the migration
+    # plan lands (docs/rework/SPEC.md).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapshot-linux-amd64
+      - name: Run version
+        run: |
+          chmod +x ./ripen
+          ./ripen version
