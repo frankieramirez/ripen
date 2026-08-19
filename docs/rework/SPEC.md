@@ -152,7 +152,7 @@ New SQLite schema, from [Plan the rework migration](https://github.com/frankiera
 
 - First public tag **`v1.0.0`**; semver is the compatibility promise afterward (CLI/MCP breaks need a major bump). Pre-public work stays untagged or `v0.x`.
 - Images `linux/amd64` + `linux/arm64`, `FROM scratch`, published to GHCR and Docker Hub with tags `v1.0.0`, `1.0.0`, `v1.0`, `v1`, `latest`. Release binaries add `darwin/amd64` + `darwin/arm64`. No Windows, no 32-bit.
-- Channels: GitHub Releases (GoReleaser on annotated tag), `go install .../cmd/ripen@vX.Y.Z`, Homebrew tap `frankieramirez/homebrew-tap` (GoReleaser-updated), in-repo `flake.nix`. No `curl | sh`, no AUR/scoop, nixpkgs and homebrew-core post-launch.
+- Channels: GitHub Releases (GoReleaser on annotated tag), GHCR and Docker Hub, `go install .../cmd/ripen@vX.Y.Z`, in-repo `flake.nix`. No `curl | sh`, no AUR/scoop, no macOS tap ([ADR 0003](../adr/0003-distribution-channels-at-v1.md)); nixpkgs post-launch.
 - Hand-written `CHANGELOG.md` (Keep a Changelog); GoReleaser publishes it as the Release body. No Changesets/Node.
 - Checksums, Syft SBOM, cosign keyless (GitHub OIDC) on binaries and images, GitHub `attest-build-provenance`. No long-lived key.
 - Docker MCP Catalog listing (read-only container form) at public launch — see the checklist.

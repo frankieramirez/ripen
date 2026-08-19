@@ -107,25 +107,6 @@ docker_signs:
       - "${artifact}@${digest}"
       - --yes
 
-# Homebrew ships binaries as casks now. The tap repository has to exist
-# before the first release: frankieramirez/homebrew-tap.
-homebrew_casks:
-  - name: ripen
-    ids:
-      - ripen
-    binaries:
-      - ripen
-    repository:
-      owner: frankieramirez
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: https://github.com/frankieramirez/ripen
-    description: Ripen, a fail-closed image updater for Portainer and Compose
-    license: MIT
-    commit_author:
-      name: ripen-release
-      email: noreply@github.com
-
 # The release notes are the hand-written CHANGELOG section for this tag,
 # passed in by the workflow. GoReleaser's commit-log generator is off:
 # a changelog is writing, not a diff.

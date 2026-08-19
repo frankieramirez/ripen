@@ -33,8 +33,8 @@ Ripen needs a policy file and somewhere to keep its state. Nothing else.
 ```bash
 # 1. Get the binary
 go install github.com/frankieramirez/ripen/cmd/ripen@latest
-# or: brew install frankieramirez/tap/ripen
 # or: docker pull ghcr.io/frankieramirez/ripen
+# or: grab a signed archive from the Releases page
 
 # 2. Describe exactly what Ripen may look at
 cp config.example.yaml policy.yaml
