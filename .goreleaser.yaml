@@ -1,10 +1,17 @@
-# Build configuration only, so CI can cross-compile the release matrix with
-# `goreleaser build --snapshot`. Full distribution wiring (archives, images,
-# signing, SBOM, release workflow) lands with the distribution PR of the
-# rework migration plan (docs/rework/SPEC.md).
+# Release configuration for Ripen. `goreleaser build --snapshot` in CI
+# cross-compiles the matrix on every push; the full pipeline below runs
+# only on an annotated v* tag, from .github/workflows/release.yaml.
+#
+# Everything published is verifiable: checksums, an SBOM per archive,
+# keyless cosign signatures on the checksum file and on every image, and
+# GitHub build provenance attested in the workflow.
 version: 2
 
 project_name: ripen
+
+before:
+  hooks:
+    - go mod tidy
 
 builds:
   - id: ripen
@@ -23,3 +30,121 @@ builds:
       - -X github.com/frankieramirez/ripen/internal/version.Version={{.Version}}
       - -X github.com/frankieramirez/ripen/internal/version.Commit={{.ShortCommit}}
       - -X github.com/frankieramirez/ripen/internal/version.Date={{.Date}}
+    # Reproducibility: the binary's timestamp is the commit's, not the
+    # moment the release happened to run.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: ripen
+    ids:
+      - ripen
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - src: docs/schema/v1/*.json
+        dst: schema/v1
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+
+sboms:
+  - id: archives
+    artifacts: archive
+
+# Keyless signing: the certificate comes from the workflow's OIDC
+# identity, so there is no long-lived key to lose.
+signs:
+  - id: checksums
+    cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+dockers_v2:
+  - id: images
+    ids:
+      - ripen
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - ghcr.io/frankieramirez/ripen
+      - docker.io/frankieramirez/ripen
+    tags:
+      - "{{ .Tag }}"
+      - "{{ .Version }}"
+      - "v{{ .Major }}.{{ .Minor }}"
+      - "v{{ .Major }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: Ripen
+      org.opencontainers.image.description: Ripen, a fail-closed image updater
+      org.opencontainers.image.url: https://github.com/frankieramirez/ripen
+      org.opencontainers.image.source: https://github.com/frankieramirez/ripen
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.licenses: MIT
+
+docker_signs:
+  - id: images
+    cmd: cosign
+    artifacts: manifests
+    output: true
+    args:
+      - sign
+      - "${artifact}@${digest}"
+      - --yes
+
+# Homebrew ships binaries as casks now. The tap repository has to exist
+# before the first release: frankieramirez/homebrew-tap.
+homebrew_casks:
+  - name: ripen
+    ids:
+      - ripen
+    binaries:
+      - ripen
+    repository:
+      owner: frankieramirez
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/frankieramirez/ripen
+    description: Ripen, a fail-closed image updater for Portainer and Compose
+    license: MIT
+    commit_author:
+      name: ripen-release
+      email: noreply@github.com
+
+# The release notes are the hand-written CHANGELOG section for this tag,
+# passed in by the workflow. GoReleaser's commit-log generator is off:
+# a changelog is writing, not a diff.
+changelog:
+  disable: true
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    ---
+
+    Verify a download:
+
+    ```
+    cosign verify-blob \
+      --certificate ripen_{{ .Version }}_checksums.txt.pem \
+      --signature ripen_{{ .Version }}_checksums.txt.sig \
+      --certificate-identity-regexp 'https://github\.com/frankieramirez/ripen/\.github/workflows/release\.yaml@refs/tags/.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      ripen_{{ .Version }}_checksums.txt
+    ```
