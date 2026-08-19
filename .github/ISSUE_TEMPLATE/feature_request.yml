@@ -1,0 +1,34 @@
+name: Feature request
+description: Something Ripen could do that it does not.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the [non-goals](https://github.com/frankieramirez/ripen/blob/main/ROADMAP.md#non-goals)
+        first. Several things are decided rather than deferred, and an issue
+        asking for one of them will be closed with a link.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        The situation, not the feature. What does your setup look like, and
+        where does Ripen leave you stuck?
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you think would help
+      description: If you have a shape in mind, describe it. It is fine not to.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: I have read the non-goals and this is not one of them.
+          required: true

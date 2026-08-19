@@ -17,5 +17,7 @@ Each release's section here is what GitHub shows as the release notes.
   MCP agent surface, a webhook Notifier, and an optional read-only Web
   UI. See `docs/rework/SPEC.md` for the design and the behavior
   inventory it was verified against.
+- Documentation for the whole surface: eight `docs/` pages, a rewritten README,
+  `AGENTS.md`, `ROADMAP.md` with the permanent non-goals, and `CONTRIBUTING.md`.
 
 [Unreleased]: https://github.com/frankieramirez/ripen/compare/main...HEAD

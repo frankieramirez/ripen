@@ -1,164 +1,154 @@
 # Ripen
 
-Fail-closed image updates for Portainer. A digest ripens. You apply.
+[![CI](https://github.com/frankieramirez/ripen/actions/workflows/ci.yaml/badge.svg)](https://github.com/frankieramirez/ripen/actions/workflows/ci.yaml)
+[![Latest release](https://img.shields.io/github/v/release/frankieramirez/ripen)](https://github.com/frankieramirez/ripen/releases)
+[![License](https://img.shields.io/github/license/frankieramirez/ripen)](LICENSE)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/frankieramirez/ripen/badge)](https://securityscorecards.dev/viewer/?uri=github.com/frankieramirez/ripen)
 
-A safety-focused updater for Portainer-managed Docker Compose stacks. It checks
-OCI registries for image changes without mounting the Docker socket, waits for a
-candidate release to mature, redeploys an explicitly authorized stack, verifies
-functional health, and rolls back to the previously accepted digest when needed.
-For Git-backed stacks, it opens an exact digest-pin pull request and waits for
-the repository's existing deployment workflow instead of mutating Portainer.
+**Fail-closed image updates for Portainer and Compose. A digest ripens. You apply.**
+
+Ripen watches the registries behind the images you already run. When a new digest
+appears it waits, watches it again, and tells you. If you have said so explicitly,
+it will update one service — pinned to an exact digest, verified afterwards, and
+rolled back the moment health fails. Then it stops and waits for you.
+
+It never mounts the Docker socket.
+
+```console
+$ ripen status
+{"schema_version":1,"command":"status","occurred_at":"2026-08-19T09:14:22Z","ok":true,"data":{
+  "breaker":{"open":false,"reason":null},
+  "services":[{"backend":"docker-compose","stack":"media","service":null,
+    "baseline":"sha256:6f8c…","candidate":{"digest":"sha256:19ab…","observations":2,"mature":true}}]}}
+```
 
 > [!WARNING]
-> This project is alpha software that can recreate containers. Start in monitor
-> mode, use a least-privilege Portainer account, and maintain tested backups.
-
-## Safety defaults
-
-- Runs in monitor mode unless apply mode is explicitly selected.
-- Uses a dedicated Portainer Standard User and sees only stacks assigned to it.
-- Requires two observations of a candidate digest separated by 24 hours.
-- Updates at most one service in one stack per run.
-- Opens a circuit breaker after every rollback.
-- Never cleans up images or activates stopped stacks.
-- Never merges its own pull requests or directly mutates Git-backed stacks.
-- Allows up to ten minutes for Portainer image pulls and stack redeployments.
-- Treats a timed-out redeploy response as successful only when both the image status and functional health check prove the update completed.
-
-## Current scope
-
-The updater intentionally supports a narrow transaction:
-
-- Portainer-managed single-service stacks and explicitly reviewed multi-service stacks;
-- one literal OCI image reference per managed service;
-- public registries that support the OCI/Docker Registry HTTP API;
-- HTTP functional health verification; and
-- one service update per run.
-
-Multi-service policies must define every expected service separately. Before and
-after changing one service, the updater verifies every configured sibling's
-health. The changed image remains on its reviewed tag but is pinned to the
-selected platform digest, and rollback changes only that service. Private
-registry credentials, scheduled maintenance windows, and image cleanup are not
-currently supported.
-
-For a Git-backed stack, set `github` at the policy root and `git_path` on the
-stack. A mature candidate creates one deterministic, idempotent pull request.
-The repository file must exactly match Portainer's reviewed live Compose source,
-or the transaction fails closed. After an external merge and deployment, the
-updater accepts the new baseline only when the running digest, committed digest
-pin, and every configured health check agree.
-
-A service may set `enabled: false` when its image channel is intentionally
-retired or otherwise unsuitable for registry monitoring. It remains part of
-the exact Compose shape and its health check still gates sibling updates, but
-the updater does not resolve, baseline, or mutate its image.
-
-When a running container was created from a `tag@sha256:digest` reference, that
-container-level pin is authoritative. This remains unambiguous even when the
-Docker image cache lists multiple repository digests for one local image ID.
+> Ripen recreates containers. Start in monitor mode, read what it records, and
+> only then decide whether any stack should carry `auto_apply: true`.
 
 ## Quick start
 
-1. Create a dedicated Portainer Standard User and grant it access only to the
-   stacks the updater may manage.
-2. Copy `config.example.yaml` to `policy.yaml` and keep that file out of Git.
-3. Store the user's Portainer API key in `secrets/portainer-api-key` with mode
-   `600`.
-4. For Git proposals, store a fine-grained token in `secrets/github-token` with
-   mode `600`. Scope it to one repository with Metadata read, Contents
-   read/write, and Pull requests read/write. Do not grant administration or
-   workflow permissions.
-5. Create the private external Docker networks referenced by the Compose file
-   and attach Portainer plus the health-checked application as appropriate.
-6. Start with `docker compose -f compose.monitor.yaml up --build -d` and inspect
-   the baseline before enabling apply mode.
-
-## Local verification
+Ripen needs a policy file and somewhere to keep its state. Nothing else.
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
-.venv/bin/pytest
-.venv/bin/python -m compileall -q src tests
+# 1. Get the binary
+go install github.com/frankieramirez/ripen/cmd/ripen@latest
+# or: brew install frankieramirez/tap/ripen
+# or: docker pull ghcr.io/frankieramirez/ripen
+
+# 2. Describe exactly what Ripen may look at
+cp config.example.yaml policy.yaml
+$EDITOR policy.yaml
+
+# 3. Watch, and only watch
+ripen run --mode monitor --config policy.yaml
 ```
 
-## Commands
+A minimal policy for one Compose stack:
+
+```yaml
+mode: monitor
+state_file: /var/lib/ripen/ripen.db
+
+stacks:
+  media:
+    enabled: true
+    backend: docker-compose
+    file: /srv/media/compose.yaml
+    expected_services: [jellyfin]
+    health:
+      target: http://127.0.0.1:8096/health
+```
+
+Or as a container, which is how most people run it:
+
+```yaml
+services:
+  ripen:
+    image: ghcr.io/frankieramirez/ripen:latest
+    command: ["daemon", "--config", "/config/policy.yaml"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./policy.yaml:/config/policy.yaml:ro
+      - ./data:/data
+      - /srv/media/compose.yaml:/srv/media/compose.yaml   # only for compose backends
+```
+
+No socket mount. Ever.
+
+The first run records what is running now as the **Baseline** — nothing else.
+Later runs report a **Candidate** when the registry moves. After
+`candidate_min_age_seconds` (a day, by default) and a second sighting, that
+Candidate is mature and apply mode may act on it.
 
 ```bash
-ripen --config policy.yaml run --mode monitor
-ripen --config policy.yaml status
-ripen --config policy.yaml clear-breaker --reason "health verified manually"
-ripen --config policy.yaml clear-proposal --stack arr/radarr --reason "PR closed"
-ripen --config policy.yaml daemon --mode monitor
+ripen status       # every configured service and where it stands
+ripen candidates   # what is waiting, and whether it has matured
+ripen explain media  # why the next run would, or would not, act
+ripen audit        # what Ripen has actually done
 ```
 
-`clear-breaker` requires a human reason. Apply mode is additionally gated by `auto_apply: true`, a mature candidate, unchanged Compose/environment hashes, an available update slot, and a closed breaker.
+Run it on a schedule with `ripen daemon`, which does the same thing every
+`check_interval_seconds` and writes its Event stream to stderr.
 
-## Configuration
+## How a Transaction works
 
-Copy `config.example.yaml` to `policy.yaml`. Unknown fields are rejected. Configure exactly one TLS trust mechanism:
+1. **Observe.** Read what is deployed and what is running, and ask the registry
+   what the tag points at now.
+2. **Baseline.** The first time, record the running digest — and only if it can
+   be proven. If an update is already pending, Ripen refuses to guess.
+3. **Ripen.** A new digest becomes a Candidate. It must be seen twice and be
+   older than the maturity window before it is eligible for anything.
+4. **Apply**, in apply mode, on a stack that opted in: check every configured
+   service's health first, pin exactly one image to `tag@sha256:…`, deploy, and
+   verify every service again.
+5. **Roll back** if verification fails: restore the Baseline digest and open the
+   Circuit breaker. Ripen takes no further outbound action until a person clears
+   it with a reason.
 
-- `tls_ca_file` for a certificate chain trusted from a mounted CA file; or
-- `tls_fingerprint_sha256` for the exact Portainer server certificate.
+Git-backed stacks replace step 4 with a Proposal: one deterministic pull request
+pinning the digest, which Ripen opens and never merges.
 
-There is no insecure TLS mode.
+## What it will not do
 
-Each enabled stack must list its exact expected service names. A multi-service
-stack must also define an exact `services` map with per-service `auto_apply` and
-health policy; ambiguous stack-level settings are rejected. If its Compose
-shape, service set, running digest, or Portainer environment changes after
-observation, the updater fails closed instead of applying an unreviewed
-deployment.
+- **No privileged Docker socket.** Permanently out of scope, not a roadmap item.
+- **No unattended sprees.** One service per run, and only where you opted in.
+- **No self-merging.** A Proposal is a pull request for a human to review.
+- **No insecure TLS.** A CA file or an exact fingerprint. There is no bypass.
+- **No agent path to apply.** The MCP surface cannot apply an update or clear
+  the breaker; those tools do not exist.
 
-## Container deployment
+[`ROADMAP.md`](ROADMAP.md) has the full list of non-goals and what may come later.
 
-`compose.monitor.yaml` is the safest starting point. It has no published ports
-and no Docker socket. It expects:
+## Documentation
 
-- the protected API key at `./secrets/portainer-api-key`;
-- the optional fine-grained GitHub token at `./secrets/github-token`;
-- a writable `./data` directory owned by UID/GID `1031`;
-- an external private Docker network named `stack-control` shared with Portainer;
-- any additional private network needed to reach the application's health URL;
-- a completed `policy.yaml` next to the Compose file.
+| Page | What it covers |
+| --- | --- |
+| [Configuration](docs/configuration.md) | Every policy field, and what refusing to start protects |
+| [Portainer](docs/portainer.md) | The API backend, its least-privilege user, and TLS trust |
+| [Compose](docs/compose.md) | Docker and Podman Compose, drift, and rootless sockets |
+| [Agents](docs/agents.md) | The CLI and MCP surface, envelopes, exit codes |
+| [Proposals](docs/proposals.md) | Git-backed stacks and the pull-request transaction |
+| [Notifications](docs/notifications.md) | The Event stream, the webhook Notifier, suppression |
+| [Architecture](docs/architecture.md) | How the pieces fit and why they are shaped this way |
+| [Troubleshooting](docs/troubleshooting.md) | What each result code means and what to do about it |
 
-`compose.portainer.yaml` is a generic Portainer stack example using relative
-bind mounts. Adjust its UID/GID, image publishing strategy, paths, and private
-network names for your host. Creating networks and attaching existing services
-are deployment operations and are intentionally not automated here.
-
-## Update lifecycle
-
-1. The first successful observation records each service's proven running digest.
-2. A new digest must be observed twice and remain present for
-   `candidate_min_age_seconds`.
-3. Apply mode verifies the Portainer identity, stack shape, Compose hash,
-   environment hash, running digest, and all configured service health checks.
-4. Only the selected service image is changed to `tag@sha256:digest`; sibling
-   service image references remain untouched.
-5. Every configured service must pass its health check after deployment.
-6. A failed update pins only the selected service back to its accepted digest
-   and opens the circuit breaker for human review.
-
-For Git-backed stacks, steps 4–6 are replaced by a pull-request transaction:
-the updater verifies source parity and health, creates or reuses one deterministic
-PR, records it as pending, and performs no deployment. Merge and deployment stay
-outside the updater. A later cycle records success only after the live digest,
-Compose pin, and health checks prove that exact proposal was deployed.
-
-## Development
-
-Pull requests should keep fail-closed behavior and include regression tests for
-changes to update, timeout, health, or rollback handling. Run the local
-verification commands before opening a pull request.
+The vocabulary in all of them is defined once in [`CONTEXT.md`](CONTEXT.md).
 
 ## Security
 
-See [SECURITY.md](SECURITY.md). Never commit a real policy, Portainer API key,
-GitHub token, state database, certificate, Compose environment secret, or
-private host data.
+Ripen holds credentials for the systems that run your services. Read
+[`SECURITY.md`](SECURITY.md) before deploying it, and report anything you find
+through GitHub's private vulnerability reporting rather than an issue.
+
+## Contributing
+
+Issue first, then a pull request — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+This is a project maintained for its author's own use; contributions are
+welcome and reviewed on a best-effort basis.
 
 ## License
 
-MIT
+MIT. See [`LICENSE`](LICENSE).

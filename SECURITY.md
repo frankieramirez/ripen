@@ -1,24 +1,67 @@
-# Security Policy
+# Security policy
 
 ## Reporting a vulnerability
 
 Do not open a public issue for a suspected vulnerability. Use GitHub's private
-vulnerability reporting feature for this repository.
+vulnerability reporting for this repository.
 
-Include the affected version, reproduction steps, and impact. Do not include
-real Portainer API keys, GitHub tokens, Compose environment secrets, or private
-network data.
+Include the affected version, reproduction steps, and impact. Do not include real
+Portainer API keys, GitHub tokens, webhook URLs, Compose environment secrets, or
+anything else from a private network.
 
-## Deployment boundaries
+## What Ripen can do, and what that means
 
-`ripen` can redeploy authorized Portainer stacks. Treat its API key,
-policy file, state database, and Docker networks as sensitive infrastructure.
+Ripen can redeploy the stacks its policy names. Treat its policy file, its
+credential files, its state database, and the networks it sits on as
+infrastructure with the same sensitivity as the services it updates.
 
-- Give the Portainer automation user access only to stacks it may update.
-- Multi-service updates read running container image digests through the
-  authorized Portainer Docker proxy; keep Portainer RBAC limited to reviewed
-  stacks and do not grant direct Docker-socket access.
-- Mount the API key from a read-only file; never put it in Compose or Git.
-- Do not mount the Docker socket.
-- Use HTTPS with a CA file or an exact certificate fingerprint.
-- Begin in monitor mode and inspect the baseline before enabling apply mode.
+- **Start in monitor mode.** Read what it records before any stack carries
+  `auto_apply: true`.
+- **Give the Portainer automation user access to only the stacks Ripen may
+  update.** It is checked against `expected_username` on every run, before any
+  inventory work, and a mismatch stops the run.
+- **Do not mount the privileged Docker socket.** Ripen never asks for one, and a
+  configured Compose socket that resolves to `/var/run/docker.sock` or
+  `/run/docker.sock` — through any symlink chain — refuses at config load.
+- **Mount every secret from a read-only file.** API keys, GitHub tokens, webhook
+  URLs and tokens, and the UI token are all file paths. None of them belong in
+  the policy document, in Compose, or in Git.
+- **Use HTTPS with a CA file or an exact certificate fingerprint.** There is no
+  insecure mode.
+
+## Credential handling
+
+| Secret | Requirements |
+| --- | --- |
+| Portainer API key | Mode `0600`. Rejected at startup if it contains interior whitespace. |
+| GitHub token | Mode `0600` — a file readable by group or others is refused. Fine-grained, one repository, Metadata read plus Contents and Pull requests read/write. Nothing more. |
+| Webhook URL and token | Files. The URL must be https unless it points at this host. Only a hash of the destination is stored, and it never appears in a failure report. |
+| Web UI token | A file or `RIPEN_UI_TOKEN`. Required for any bind that is not loopback. |
+
+Nothing Ripen emits carries a secret. Event payloads are a closed set of fields
+with nowhere to put one, and a test walks that type to keep it so.
+
+## Surface boundaries
+
+- **`ripen mcp`** is read-only by default: the write tools are never registered
+  and no network client is built, so the process holds no credentials at all.
+  With `--enable-writes` it gains exactly three tools — a Monitor cycle, opening
+  a Proposal, and clearing a Proposal. Applying an update and clearing the
+  Circuit breaker have no MCP tool in either mode.
+- **The Web UI** is off unless enabled, reads only, and offers nothing
+  clickable that changes state. A non-loopback bind requires a bearer token.
+  `/healthz` is the only unauthenticated route and returns nothing but `ok`.
+- **The daemon** writes nothing to stdout; its Event stream goes to stderr.
+
+## Supply chain
+
+Releases are built by GitHub Actions from a tag and published with checksums, an
+SBOM per archive, keyless cosign signatures on the checksums and on every image,
+and GitHub build provenance. The release notes carry the exact `cosign
+verify-blob` invocation. Images are `FROM scratch` with a CA bundle and the
+binary — no shell, no package manager, a non-root uid.
+
+## Supported versions
+
+The latest release. Ripen is maintained for its author's own use; fixes land on
+`main` and go out in the next tag.
