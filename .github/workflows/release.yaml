@@ -117,6 +117,33 @@ jobs:
           fi
           cat "$RUNNER_TEMP/release-notes.md"
 
+      # actions/attest-build-provenance cannot persist an attestation for
+      # a user-owned private repository: GitHub refuses the API call with
+      # "Feature not available for user-owned private repositories". The
+      # first rehearsal run to get this far published the archives, the
+      # images, the signatures and the Release, and only then failed on
+      # it (#54) -- leaving a release carrying the provenance the README
+      # tells people to check, except that it does not exist.
+      #
+      # So the question is asked before anything is published rather than
+      # after. Nothing about this is permanent: the repository goes public
+      # in Phase 6 of docs/rework/CHECKLIST.md, and provenance starts
+      # working at that moment. Until then a release is refused, which is
+      # the honest outcome -- an unattestable release is one nobody can
+      # verify, and README.md promises every archive can be.
+      - name: Refuse a release that cannot be attested
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY" -q .private)" = "true" ]; then
+            echo "$GITHUB_REPOSITORY is private, and GitHub does not persist build" >&2
+            echo "provenance for user-owned private repositories. README.md tells" >&2
+            echo "people to verify every archive with 'gh attestation verify', so" >&2
+            echo "this refuses rather than publish a release that cannot be." >&2
+            echo "The repository goes public in Phase 6 of docs/rework/CHECKLIST.md." >&2
+            exit 1
+          fi
+
       # A flake cannot read the tag it was fetched by, so flake.nix carries
       # the version as a constant and `nix run github:...` reports whatever
       # that constant says. A tag that disagrees with it would publish a Nix
