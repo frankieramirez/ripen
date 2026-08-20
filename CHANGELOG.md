@@ -33,15 +33,17 @@ Each release's section here is what GitHub shows as the release notes.
   caught up. A floor is not a pin, so CI and the release now resolve the newest
   patch explicitly rather than building on whatever the runner had cached.
 
-## [0.1.0-rc.1]
+### Fixed
 
-### Added
+- Four faults in the release pipeline, each found by rehearsing a real release
+  and none of them reachable by `goreleaser release --snapshot`, which
+  authenticates to nothing, signs nothing and attests nothing. The release
+  installed a cosign it could not verify; wrote its notes file into the work
+  tree, which GoReleaser then refused as dirty; dropped the hand-written
+  changelog section from the release body entirely; and left the archives
+  without the build provenance the README tells people to check. Three are
+  fixed. The fourth cannot be: GitHub does not persist provenance for
+  user-owned private repositories, so a release is now refused before it
+  publishes anything rather than after.
 
-- A release candidate cut only to rehearse the release pipeline against
-  real registries, a real keyless signature and a real attestation. It
-  carries no changes of its own; everything in it is already described
-  under Unreleased. This section and the tag it belongs to are removed
-  once the rehearsal has been checked.
-
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/v0.1.0-rc.1...HEAD
-[0.1.0-rc.1]: https://github.com/frankieramirez/ripen/releases/tag/v0.1.0-rc.1
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/main...HEAD
