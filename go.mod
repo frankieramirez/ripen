@@ -1,6 +1,6 @@
 module github.com/frankieramirez/ripen
 
-go 1.26.6
+go 1.26
 
 require (
 	github.com/google/go-containerregistry v0.21.9
