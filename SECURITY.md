@@ -87,6 +87,32 @@ The checksums file names every archive and every SBOM by digest, so attesting it
 reaches those too. The images carry no provenance attestation — the cosign
 signature on each manifest is the claim there.
 
+### The Nix channel trails on standard-library patches
+
+The four archive channels are built with the newest Go patch release. The flake
+is built with whatever Go nixpkgs ships, and nixpkgs moves a Go bump through a
+rebuild queue that has historically taken two to three weeks to reach
+`nixos-unstable`. So a binary from `nix run` can carry standard-library
+vulnerabilities that the same version downloaded as an archive does not.
+
+This is a standing lag rather than a one-off, and it is accepted rather than
+worked around: pinning a newer toolchain by hand goes stale inside the same
+fortnight and then holds the channel *behind* nixpkgs instead of ahead of it.
+What is not accepted is not knowing. CI scans the binary the flake builds on
+every push, and refuses anything not already named in
+[`.github/nix-vuln-baseline.txt`](.github/nix-vuln-baseline.txt), which records
+what the channel currently carries and why each entry was judged tolerable.
+
+To check for yourself:
+
+```bash
+nix build github:frankieramirez/ripen
+govulncheck -mode=binary ./result/bin/ripen
+```
+
+If that matters for your deployment, take an archive or an image instead — those
+are built with the patched toolchain, and both are verifiable as described above.
+
 ## Supported versions
 
 The latest release. Ripen is maintained for its author's own use; fixes land on

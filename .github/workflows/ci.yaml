@@ -147,3 +147,19 @@ jobs:
             exit 1
           fi
           ./result/bin/ripen schema > /dev/null
+      # The one channel nothing scanned. `govulncheck` in the job below reads
+      # the module with the toolchain setup-go installed, which is never the
+      # toolchain nixpkgs built this with -- so the only artifact that can
+      # carry a standard-library vulnerability was the only one nobody looked
+      # at, and it did (#69). Scanning the binary rather than the source
+      # because the source is identical across channels; the toolchain is not.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Scan what the flake actually built
+        run: |
+          ./.github/ci/check-nix-vulnerabilities.sh \
+            ./result/bin/ripen .github/nix-vuln-baseline.txt
