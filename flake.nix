@@ -52,6 +52,20 @@
     in
     {
       packages = perSystemPkgs (pkgs: rec {
+        # The Go here is nixpkgs', not the newest patch release, and that is a
+        # deliberate open gap rather than an oversight. nixpkgs packages a Go
+        # patch the day upstream tags it, but the bump rides a rebuild queue
+        # that has taken 13 to 23 days to reach nixos-unstable -- so this
+        # channel trails the four GoReleaser ones on standard-library fixes,
+        # permanently and by roughly a fortnight.
+        #
+        # Do not "fix" this by overriding the toolchain. An overrideAttrs pin
+        # is obsolete within that same fortnight and then holds the channel
+        # *behind* nixpkgs until someone remembers it exists, which trades a
+        # known lag for an unknown one. The remedy is the weekly flake.lock
+        # bump plus CI scanning what this actually builds; what it currently
+        # carries, and why each entry was judged tolerable, is recorded in
+        # .github/nix-vuln-baseline.txt. See #69.
         ripen = pkgs.buildGoModule {
           pname = "ripen";
           inherit version;

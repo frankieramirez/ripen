@@ -1,0 +1,53 @@
+# Standard-library vulnerabilities the Nix channel is known to carry, and
+# which are accepted rather than fixed.
+#
+# Why they exist: the flake builds with whatever Go nixpkgs ships, while the
+# four GoReleaser channels build with the newest patch (#70). nixpkgs lands a
+# Go patch release the same day upstream tags it, but the bump rides the
+# staging -> staging-next -> master train, which historically takes 13 to 23
+# days to reach nixos-unstable. So this channel trails the archives on
+# standard-library patches, permanently and by roughly a fortnight. See #69.
+#
+# Why they are accepted rather than fixed: every entry below is denial of
+# service or self-XSS, none yields code execution, and none can produce a
+# fail-open update. Pinning a newer Go by hand would be obsolete within the
+# fortnight and would then silently hold the channel *behind* nixpkgs.
+#
+# How to change this file: entries come out when a scan stops finding them.
+# Nothing goes in without the reachability judgement that the ones below got.
+#
+# last confirmed: 2026-08-19
+
+# Reached through http.Client redirect handling, so it needs a registry you
+# already trust to answer with a malicious Location header. Burns CPU.
+GO-2026-6218
+
+# Rendered data reaches html/template from the state DB, originating in
+# Compose files and registry responses. Every route is behind `guard`, the
+# bind defaults to 127.0.0.1:7476, and the UI is read-only -- so the worst
+# case is XSS in the operator's own browser.
+GO-2026-6091
+
+# Needs Ripen to be a TLS *server*. It never is: the Web UI serves plain HTTP
+# by design and all TLS is client-side. No primitive.
+GO-2026-6090
+
+# Needs unencrypted HTTP/2. The Web UI enables no such thing and already sets
+# ReadHeaderTimeout. No primitive.
+GO-2026-6089
+
+# encoding/xml is not imported anywhere in the tree. Unreachable.
+GO-2026-6088
+
+# The sharpest of the eight: crypto/x509 parses the peer's DER before the pin
+# and CA checks in internal/portainer, so a hostile chain crashes the process.
+# The peer is the Portainer host the operator configured.
+GO-2026-5972
+
+# Affected symbol is net.LookupCNAME, which Ripen never calls, and it does no
+# DNS parsing of its own.
+GO-2026-5942
+
+# The hostname checks it would bypass all fail closed against a Punycode
+# label, and every hostname is operator-supplied policy. No bypass primitive.
+GO-2026-5026
