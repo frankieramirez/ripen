@@ -37,6 +37,15 @@ Each release's section here is what GitHub shows as the release notes.
   caught up. A floor is not a pin, so CI and the release now resolve the newest
   patch explicitly rather than building on whatever the runner had cached.
 
+### Removed
+
+- The Python implementation and everything that packaged it: `src/ripen/`,
+  the `pytest` suite, `pyproject.toml`, its `Dockerfile` and CI workflow, and
+  two Compose examples that still pinned the `0.3.0` image. Ripen is one Go
+  binary and nothing else. Nothing is orphaned by this: the Python version was
+  never published to a package index, only ever built from this repository, and
+  every deleted file remains in Git history.
+
 ### Fixed
 
 - Four faults in the release pipeline, each found by rehearsing a real release

@@ -1,5 +1,9 @@
-# The Go CI from the rework migration plan (docs/rework/SPEC.md). The Python
-# suite keeps its own workflow (ci.yml) until the Python-removal PR.
+# The Go CI from the rework migration plan (docs/rework/SPEC.md), and now the
+# only CI there is: the Python suite's `ci.yml` went with the Python
+# implementation. Do not rename this file or its `name:` to reclaim the plain
+# "CI" the other one had: the README badge URL addresses the file name and a
+# required status check addresses `name:`, and either rename detaches one
+# silently rather than failing.
 name: Go CI
 
 on:
