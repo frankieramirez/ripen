@@ -26,9 +26,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # See ci.yaml: `go 1.26` in go.mod is a floor, so without this the
+      # release is built by whatever Go patch the runner cached. The
+      # published binaries are the last place to find that out.
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
 
       - name: Verify the tree before publishing anything
         run: |
