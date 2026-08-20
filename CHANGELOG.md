@@ -30,6 +30,7 @@ Each release's section here is what GitHub shows as the release notes.
 - `go.mod` asks for `go 1.26` rather than the exact patch `1.26.6`. Pinning the
   patch put the module's floor above the newest Go any distribution had
   packaged, which made every from-source install path unbuildable until they
-  caught up.
+  caught up. A floor is not a pin, so CI and the release now resolve the newest
+  patch explicitly rather than building on whatever the runner had cached.
 
 [Unreleased]: https://github.com/frankieramirez/ripen/compare/main...HEAD
