@@ -15,6 +15,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Every `run:` below is a guard or a publish step, and the default
+    # `bash -e` lets a failure in the middle of a pipeline pass as the
+    # exit status of the last command. A guard that cannot fail is not a
+    # guard.
+    defaults:
+      run:
+        shell: bash -euo pipefail {0}
     permissions:
       contents: write # create the release and upload artifacts
       packages: write # push to ghcr
@@ -108,7 +115,7 @@ jobs:
             # is always that last section. Without this the notes carry them.
             collecting && /^\[[^]]+\]: / { exit }
             collecting { print }
-          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          ' CHANGELOG.md | tr -d '\r' > "$RUNNER_TEMP/release-notes.md"
           # Non-empty, not merely present: a section header with nothing
           # under it collects a blank line, which -s would accept.
           if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
@@ -135,12 +142,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "$(gh api "repos/$GITHUB_REPOSITORY" -q .private)" = "true" ]; then
-            echo "$GITHUB_REPOSITORY is private, and GitHub does not persist build" >&2
-            echo "provenance for user-owned private repositories. README.md tells" >&2
+          # Asked so that only a positive "public" proceeds. Reading the
+          # answer with `[ "$(...)" = "true" ]` would have let a rate
+          # limit, an outage or a token scope answer the question with an
+          # empty string and publish -- a fail-open in the step whose
+          # whole purpose is closing one.
+          if ! private="$(gh api "repos/$GITHUB_REPOSITORY" -q .private)"; then
+            echo "could not read whether $GITHUB_REPOSITORY is private, so whether" >&2
+            echo "this release can carry build provenance is unknown; refusing" >&2
+            exit 1
+          fi
+          if [ "$private" != "false" ]; then
+            echo "$GITHUB_REPOSITORY is private, and github does not persist build" >&2
+            echo "provenance for user-owned private repositories. readme.md tells" >&2
             echo "people to verify every archive with 'gh attestation verify', so" >&2
             echo "this refuses rather than publish a release that cannot be." >&2
-            echo "The repository goes public in Phase 6 of docs/rework/CHECKLIST.md." >&2
+            echo "the repository goes public in phase 6 of docs/rework/checklist.md." >&2
             exit 1
           fi
 
