@@ -6,6 +6,12 @@ request may sit for a while.
 
 There is no CLA and no DCO. Contributions are MIT, like the rest of the project.
 
+The [Code of Conduct](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1 — covers
+issues, pull requests, and anywhere else this project happens. Reports go
+through [GitHub's private reporting
+form](https://github.com/frankieramirez/ripen/security/advisories/new), never a
+public issue.
+
 ## Issue first
 
 Open an issue before writing code. Not for bureaucracy: Ripen has a small,
