@@ -86,9 +86,15 @@ jobs:
           awk -v version="$version" '
             $0 ~ "^## \\[" version "\\]" { collecting = 1; next }
             collecting && /^## / { exit }
+            # Keep a Changelog keeps its link definitions at the end of the
+            # file, after the last section -- and the section being released
+            # is always that last section. Without this the notes carry them.
+            collecting && /^\[[^]]+\]: / { exit }
             collecting { print }
           ' CHANGELOG.md > release-notes.md
-          if [ ! -s release-notes.md ]; then
+          # Non-empty, not merely present: a section header with nothing
+          # under it collects a blank line, which -s would accept.
+          if ! grep -q '[^[:space:]]' release-notes.md; then
             echo "CHANGELOG.md has no section for $version" >&2
             exit 1
           fi

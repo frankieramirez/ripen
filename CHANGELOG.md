@@ -33,4 +33,15 @@ Each release's section here is what GitHub shows as the release notes.
   caught up. A floor is not a pin, so CI and the release now resolve the newest
   patch explicitly rather than building on whatever the runner had cached.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/main...HEAD
+## [0.1.0-rc.1]
+
+### Added
+
+- A release candidate cut only to rehearse the release pipeline against
+  real registries, a real keyless signature and a real attestation. It
+  carries no changes of its own; everything in it is already described
+  under Unreleased. This section and the tag it belongs to are removed
+  once the rehearsal has been checked.
+
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v0.1.0-rc.1...HEAD
+[0.1.0-rc.1]: https://github.com/frankieramirez/ripen/releases/tag/v0.1.0-rc.1
