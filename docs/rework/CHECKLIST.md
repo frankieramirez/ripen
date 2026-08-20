@@ -27,6 +27,7 @@ The ordered gate list from the [Public relaunch map](https://github.com/frankier
 - [ ] GoReleaser config: linux/amd64+arm64 `FROM scratch` images to GHCR + Docker Hub (tags `vX.Y.Z`, `X.Y.Z`, `vX.Y`, `vX`, `latest`), linux+darwin binaries, checksums, Syft SBOM, keyless cosign, `attest-build-provenance`, CHANGELOG.md as release body ([#12](https://github.com/frankieramirez/ripen/issues/12)).
 - [x] `flake.nix` in-repo builds from source ([#12](https://github.com/frankieramirez/ripen/issues/12)) — written and verified on a real Nix install, with a `nix build` CI job so it cannot rot ([#52](https://github.com/frankieramirez/ripen/issues/52)). Its `version` is a constant a flake cannot derive from a tag: bump it in the release commit.
 - [ ] Dry-run: `goreleaser release --snapshot` produces the full artifact set locally.
+- [x] Provision the private Docker Hub repository and the release token ([#51](https://github.com/frankieramirez/ripen/issues/51)). Done 2026-08-19 with [`.github/release/provision-dockerhub.sh`](../../.github/release/provision-dockerhub.sh), which is also the rotation procedure. The repo is private with the #19 description, both secrets are set, and the token is account-wide Read & Write — per-repository scope is a Pro/Team feature. Scope, storage and rotation: [release credentials](../release-credentials.md).
 
 ## Phase 4 — Python removal
 
