@@ -128,6 +128,29 @@ jobs:
       # v22 is the current major and already runs on Node 24, so this new
       # action arrives on the footing #66 put the rest of the file on.
       - uses: DeterminateSystems/nix-installer-action@v22
+      # The lock is what decides which Go this channel ships, so a lock
+      # nobody bumps is a channel frozen at whatever toolchain was current
+      # when it was written. .github/workflows/flake-lock.yaml bumps it
+      # weekly; this is what notices when that stops happening -- including
+      # the quiet way, where GitHub disables a scheduled workflow after 60
+      # days without repository activity and nothing says so.
+      #
+      # Deliberately generous. It is asserting that the channel is still
+      # tracking nixpkgs at all, not policing the weekly cadence, and it
+      # should survive a few missed runs without manufacturing a red build.
+      - name: Check the lock is still tracking nixpkgs
+        run: |
+          locked="$(jq -r '.nodes.nixpkgs.locked.lastModified' flake.lock)"
+          age=$(( ( $(date -u +%s) - locked ) / 86400 ))
+          echo "nixpkgs in flake.lock is $age days old"
+          if [ "$age" -gt 45 ]; then
+            echo "flake.lock has not been bumped in $age days, so the nix channel is" >&2
+            echo "building against a stale nixpkgs and no longer picks up go patch" >&2
+            echo "releases. check .github/workflows/flake-lock.yaml is still running;" >&2
+            echo "github disables scheduled workflows after 60 days of inactivity." >&2
+            exit 1
+          fi
+
       - name: Build the flake
         run: nix build .#ripen --print-build-logs
       # A binary that reports the internal/version defaults built fine and
