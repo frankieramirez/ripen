@@ -26,9 +26,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Floats to the newest 1.26.x rather than the runner's cached patch,
+      # for the reason spelled out in ci.yaml. It matters more here: this is
+      # the toolchain the published binaries are built with, and go.mod's
+      # `go 1.26` would otherwise ship them off whatever patch the runner
+      # happened to have.
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
 
       - name: Verify the tree before publishing anything
         run: |

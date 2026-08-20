@@ -16,9 +16,17 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      # `go 1.26` in go.mod is a language floor, not a toolchain pin, and
+      # without check-latest setup-go is satisfied by whatever 1.26.x the
+      # runner already has cached. That was 1.26.5, which carries six
+      # standard-library vulnerabilities fixed in 1.26.6 -- govulncheck went
+      # red the moment #67 relaxed the exact patch. Floating to the newest
+      # matching patch is what the floor was relaxed *for*: the module still
+      # builds on any 1.26, and CI still tests on a patched one.
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
       - name: Test
         run: go test -race ./...
 
@@ -30,6 +38,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
       - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
@@ -42,6 +51,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
@@ -59,6 +69,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
