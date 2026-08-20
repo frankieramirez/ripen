@@ -138,6 +138,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # GoReleaser's changelog pipe is the only thing that reads
+      # --release-notes, and it publishes a release whether or not that
+      # file ever reached the body. It already had not: `changelog.disable`
+      # skipped the pipe, the notes were dropped, and the release went out
+      # with a body that was only the footer (#54). Nothing failed.
+      #
+      # So the check is here, and it is the same argument as
+      # sign-blob.sh: the step that could silently produce nothing is the
+      # step that has to prove it produced something. The notes are the
+      # body's exact prefix -- GoReleaser renders release notes, then the
+      # footer -- so this compares bytes rather than looking for a
+      # substring and hoping.
+      - name: Refuse a release whose body is not the changelog section
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --json body -q .body | tr -d '\r' > "$RUNNER_TEMP/published-body.md"
+          notes_bytes="$(wc -c < "$RUNNER_TEMP/release-notes.md")"
+          if ! head -c "$notes_bytes" "$RUNNER_TEMP/published-body.md" \
+               | cmp -s - "$RUNNER_TEMP/release-notes.md"; then
+            echo "the published release body does not start with the CHANGELOG section" >&2
+            echo "--- expected ---" >&2
+            cat "$RUNNER_TEMP/release-notes.md" >&2
+            echo "--- published ---" >&2
+            cat "$RUNNER_TEMP/published-body.md" >&2
+            exit 1
+          fi
+
       # Provenance covers what the Release actually carries: the four
       # archives and the checksums file. The raw binaries live in
       # per-target directories under dist/ and are build intermediates

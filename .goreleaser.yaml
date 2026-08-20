@@ -116,10 +116,19 @@ docker_signs:
       - --yes
 
 # The release notes are the hand-written CHANGELOG section for this tag,
-# passed in by the workflow. GoReleaser's commit-log generator is off:
-# a changelog is writing, not a diff.
-changelog:
-  disable: true
+# passed in by the workflow with --release-notes. A changelog is writing,
+# not a diff, so nothing here is generated from commits.
+#
+# There is deliberately no `changelog: disable: true`. It reads like the
+# way to turn the commit-log generator off, and it is not: `disable`
+# skips the whole changelog pipe, and that pipe is the only thing that
+# ever reads --release-notes. With it set, the flag was accepted,
+# ignored, and the release published with a body that was nothing but
+# the footer below -- the hand-written section silently dropped, and two
+# guards in the workflow spent protecting a file nobody read (#54).
+#
+# --release-notes is what turns generation off: given one, the pipe uses
+# it and returns before it can build anything from the git log.
 
 release:
   draft: false
