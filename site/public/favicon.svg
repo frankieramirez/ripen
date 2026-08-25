@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Ripen">
+  <!--
+    The glyph, centred in a square: hollow `muted` circle, filled `ripe`
+    circle. Same construction as src/components/Glyph.astro, a stroked circle
+    beside a bare disc sized so both come out 14 units across, with one
+    deliberate difference.
+
+    The stroke is 2.5 here against the component's 2. At 16 CSS pixels the
+    whole 32-unit box is 16px, so a 2-unit stroke lands as a 1px hairline and
+    the observed circle reads as a faint smudge next to a solid disc. 2.5
+    holds its colour at that size and still leaves the hole open; 3 starts
+    rounding into a square. The pair does not collapse into two dots at
+    either weight. This is an optical adjustment at icon size, not a fix.
+
+    A standalone file cannot read the page's tokens, so the values are
+    written out and kept in step by hand. Light is the default and dark is
+    the override: a favicon is judged against browser chrome, and a reader
+    who has expressed no preference gets the light one.
+
+    Note for anyone editing this comment: SVG is parsed as XML, where a
+    double hyphen inside a comment is a syntax error and the whole file
+    fails to render. The prose here uses commas for that reason.
+  -->
+  <style>
+    .hollow { fill: none; stroke: #6E675F; stroke-width: 2.5 }
+    .filled { fill: #9F630A }
+    @media (prefers-color-scheme: dark) {
+      .hollow { stroke: #948B82 }
+      .filled { fill: #E09520 }
+    }
+  </style>
+  <circle class="hollow" cx="7.5" cy="16" r="5.75"/>
+  <circle class="filled" cx="24.5" cy="16" r="7"/>
+</svg>

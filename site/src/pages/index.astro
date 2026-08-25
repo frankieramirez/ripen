@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
+import Wordmark from "../components/Wordmark.astro";
 
 // Still the placeholder. The landing page is built in #115 and #116; this
 // page is now on the design system rather than unstyled, so what the deploy
@@ -15,7 +16,7 @@ import ThemeToggle from "../components/ThemeToggle.astro";
 >
   <main class="frame">
     <header class="head">
-      <p class="label">ripen.dev</p>
+      <Wordmark />
       <ThemeToggle />
     </header>
 
@@ -50,10 +51,6 @@ import ThemeToggle from "../components/ThemeToggle.astro";
     gap: var(--space-6);
     flex-wrap: wrap;
     margin-bottom: var(--space-16);
-  }
-
-  .head .label {
-    margin: 0;
   }
 
   .lede {
