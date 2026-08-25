@@ -256,6 +256,13 @@ jobs:
       - name: Install
         working-directory: site
         run: npm ci
+      # Type check as well as build. `astro check` covers the .astro files and
+      # the TypeScript beside them -- the sidebar map, the loader and the two
+      # build plugins -- which `astro build` will happily run without ever
+      # type checking.
+      - name: Check types
+        working-directory: site
+        run: npm run check
       - name: Build
         working-directory: site
         run: npm run build

@@ -27,6 +27,13 @@ import { DOCS_MAP } from "../docs-map";
  * an anchor the built site does not have -- on every page, including the ones
  * written by hand.
  *
+ * The third check is that every SVG in the build is well-formed XML, which
+ * [#114](https://github.com/frankieramirez/ripen/issues/114) handed here. A
+ * comment written in this repo's `--` style shipped a broken favicon: SVG is
+ * parsed as XML, where `--` inside a comment is a syntax error, and an HTML
+ * page parses an inline copy anyway -- so the component looked right while
+ * the shipped icon rendered as nothing. The build said nothing either.
+ *
  * The other check is that each docs page has a body. Astro's glob loader
  * catches an error thrown while rendering an entry, logs it, and stores the
  * entry unrendered -- which ships a page with its title, its sidebar and its
@@ -54,7 +61,8 @@ export function buildChecks(): AstroIntegration {
       "astro:build:done": ({ dir, logger }) => {
         const root = fileURLToPath(dir);
         logger.info(`${docsRendered(root)} docs pages rendered with a body.`);
-        const pages = htmlFilesIn(root).map((file) => ({
+        logger.info(`${svgsParse(root)} SVGs parse as XML.`);
+        const pages = filesIn(root, ".html").map((file) => ({
           route: routeOf(relative(root, file)),
           file,
           html: readFileSync(file, "utf-8"),
@@ -99,12 +107,48 @@ export function buildChecks(): AstroIntegration {
   };
 }
 
-function htmlFilesIn(dir: string): string[] {
+function filesIn(dir: string, extension: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) return htmlFilesIn(path);
-    return path.endsWith(".html") ? [path] : [];
+    if (statSync(path).isDirectory()) return filesIn(path, extension);
+    return path.endsWith(extension) ? [path] : [];
   });
+}
+
+/**
+ * Every SVG the build ships, checked for the one XML rule an SVG written by
+ * hand actually trips over: `--` may not appear inside a comment, and an
+ * unterminated comment is not a comment at all. Both make the whole file fail
+ * to render, silently, in the one place it matters -- as a file, which is how
+ * an icon is fetched.
+ */
+function svgsParse(root: string): number {
+  const svgs = filesIn(root, ".svg");
+  const broken = svgs.flatMap((file) => {
+    const bad = commentFaults(readFileSync(file, "utf-8"));
+    return bad ? [`${relative(root, file)}: ${bad}`] : [];
+  });
+
+  if (broken.length > 0) {
+    throw new Error(
+      `SVG is parsed as XML, and these do not parse:\n  ${broken.join("\n  ")}`,
+    );
+  }
+  return svgs.length;
+}
+
+function commentFaults(svg: string): string | undefined {
+  let from = 0;
+  for (;;) {
+    const open = svg.indexOf("<!--", from);
+    if (open === -1) return undefined;
+    const close = svg.indexOf("-->", open + 4);
+    if (close === -1) return "a comment is never closed";
+    if (svg.slice(open + 4, close).includes("--")) {
+      return "a comment contains `--`, which XML does not allow";
+    }
+    from = close + 3;
+  }
 }
 
 /** `docs/agents/index.html` is the route `/docs/agents/`. */
