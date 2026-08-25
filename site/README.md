@@ -502,10 +502,20 @@ built in [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues
   logs it, and stores the entry unrendered — a red line in the output and a
   build that exits 0. The rule has to be enforced somewhere that can stop.
 
-  The same hook checks that each docs page rendered a body, for the same
-  reason: a page can ship with its title, its sidebar and its search entry and
-  nothing in the middle, on a green build. Each page has to render as many
-  `<h2>`s as its source has `##` headings.
+  The same hook checks two more things. That each docs page rendered a body,
+  for the same reason: a page can ship with its title, its sidebar and its
+  search entry and nothing in the middle, on a green build. Each page has to
+  render as many `<h2>`s as its source has `##` headings. And that every SVG
+  in the build parses as XML, through `sax` in strict mode — the parser SVGO
+  uses. A comment containing `--` makes the whole file fail to render, which
+  is how [the wordmark ticket](https://github.com/frankieramirez/ripen/issues/114)
+  shipped a broken favicon that looked fine inline and rendered as nothing as
+  a file; a real parser refuses an unclosed tag and a bare `&` on the same
+  terms.
+
+  `ci.yaml` runs `npm run check` beside `npm run build`. `astro check` covers
+  the `.astro` files and the TypeScript beside them — the sidebar map, the
+  loader and the two build plugins — none of which `astro build` type checks.
 
 - **Code blocks.** Expressive Code, with two global settings changed and no
   per-block customization. Both changes are the browser arguing with the

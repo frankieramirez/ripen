@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, posix, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AstroIntegration } from "astro";
+import sax from "sax";
 
 import { DOCS_MAP } from "../docs-map";
 
@@ -26,6 +27,13 @@ import { DOCS_MAP } from "../docs-map";
  * it can prove and leaves the rest alone; this refuses an href to a route or
  * an anchor the built site does not have -- on every page, including the ones
  * written by hand.
+ *
+ * The third check is that every SVG in the build is well-formed XML, which
+ * [#114](https://github.com/frankieramirez/ripen/issues/114) handed here. A
+ * comment written in this repo's `--` style shipped a broken favicon: SVG is
+ * parsed as XML, where `--` inside a comment is a syntax error, and an HTML
+ * page parses an inline copy anyway -- so the component looked right while
+ * the shipped icon rendered as nothing. The build said nothing either.
  *
  * The other check is that each docs page has a body. Astro's glob loader
  * catches an error thrown while rendering an entry, logs it, and stores the
@@ -54,7 +62,8 @@ export function buildChecks(): AstroIntegration {
       "astro:build:done": ({ dir, logger }) => {
         const root = fileURLToPath(dir);
         logger.info(`${docsRendered(root)} docs pages rendered with a body.`);
-        const pages = htmlFilesIn(root).map((file) => ({
+        logger.info(`${svgsParse(root)} SVGs parse as XML.`);
+        const pages = filesIn(root, ".html").map((file) => ({
           route: routeOf(relative(root, file)),
           file,
           html: readFileSync(file, "utf-8"),
@@ -99,12 +108,50 @@ export function buildChecks(): AstroIntegration {
   };
 }
 
-function htmlFilesIn(dir: string): string[] {
+function filesIn(dir: string, extension: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) return htmlFilesIn(path);
-    return path.endsWith(".html") ? [path] : [];
+    if (statSync(path).isDirectory()) return filesIn(path, extension);
+    return path.endsWith(extension) ? [path] : [];
   });
+}
+
+/**
+ * Every SVG the build ships, put through a real XML parser rather than a
+ * pattern that knows about the one fault already seen. `sax` in strict mode
+ * is the parser SVGO uses, and it refuses an unclosed tag and a bare `&` as
+ * readily as the `--` that broke the favicon.
+ */
+function svgsParse(root: string): number {
+  const svgs = filesIn(root, ".svg");
+  const broken = svgs.flatMap((file) => {
+    const fault = xmlFault(readFileSync(file, "utf-8"));
+    return fault ? [`${relative(root, file)}: ${fault}`] : [];
+  });
+
+  if (broken.length > 0) {
+    throw new Error(
+      `SVG is parsed as XML, and these do not parse:\n  ${broken.join("\n  ")}`,
+    );
+  }
+  return svgs.length;
+}
+
+function xmlFault(xml: string): string | undefined {
+  let fault: string | undefined;
+  const parser = sax.parser(true);
+  // Strict sax reports through the handler and keeps going once resumed, so
+  // the first fault is kept and the rest of the document is not walked twice.
+  parser.onerror = (error) => {
+    fault ??= error.message.split("\n")[0];
+    parser.resume();
+  };
+  try {
+    parser.write(xml).close();
+  } catch (error) {
+    fault ??= error instanceof Error ? error.message.split("\n")[0] : String(error);
+  }
+  return fault;
 }
 
 /** `docs/agents/index.html` is the route `/docs/agents/`. */
