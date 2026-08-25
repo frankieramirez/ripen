@@ -47,6 +47,8 @@ Decided on
 - **Astro**, static output, no adapter. Starlight for `/docs`, custom pages
   for `/`. Pin the Node version with `.node-version` — Cloudflare has moved
   Node majors across products before, and `package.json` engines is not read.
+  Pinned to major `24`, newest patch, matching how `ci.yaml` treats Go: the
+  major is the thing Cloudflare moves, and a full pin only rots.
 - **Cloudflare Workers Static Assets**, deployed from GitHub Actions by
   `wrangler deploy`, authenticated by a Cloudflare API token stored as a repo
   secret and scoped to Workers on this account. Not the Cloudflare GitHub App
@@ -62,12 +64,21 @@ Decided on
   HSTS-preloaded: HTTPS is mandatory, and a certificate gap is an outage, not
   a downgrade. Use a Workers Custom Domain on the apex so Cloudflare manages
   DNS records and certificates.
-- **CI.** `ci.yaml` gets path filters so site edits do not fire the Go matrix,
+- **CI.** `ci.yaml` filters so site edits do not fire the Go matrix,
   `govulncheck`, the cross-compile, or the Nix build. The site build runs on
   PRs touching `site/**`, `docs/**`, or the published root markdown files
   (`CONTEXT.md`), so a docs edit that breaks the site shows as a visible
   failing check. Heavy assets stay out of git — the module zip ships to every
   `go install`.
+
+  Not `on.pull_request.paths`: a workflow filtered out at the trigger never
+  reports its checks, so a required check sits pending forever, where a job
+  skipped by an `if:` reports success. A `changes` job computes the two
+  booleans in `.github/ci/changed-halves.sh` and every job is gated on them.
+  The Go half is skipped only when a pull request touches nothing outside
+  `site/`; anything the script is unsure of runs everything. `docs/` does not
+  skip the Go jobs, because a test asserts `ripen schema` and
+  `docs/schema/v1/` are identical.
 
 ## Analytics
 
