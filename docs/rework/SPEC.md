@@ -127,7 +127,7 @@ New SQLite schema, from [Plan the rework migration](https://github.com/frankiera
 12. GoReleaser + distribution wiring
 13. Docs + issue forms + repo scaffolding
 
-**Python code**: stays in-tree until the Go binary survives the live NAS cutover, then removed in one final PR before the visibility flip. That removal PR requires the behavior inventory (below) fully claimed.
+**Python code**: removed in one PR, gated on the behavior inventory (below) being fully claimed. This spec originally held the removal until after the live NAS cutover, on the theory that the Python implementation was the rollback. It is not: the rollback for the cutover is the stopped Portainer stack 150 running the already-built `0.3.0` image, and every deleted file stays in Git history regardless. Keeping the source in-tree bought nothing and left a second CI workflow and a second packaging manifest to mislead the first public reader, so the [checklist](./CHECKLIST.md) orders the removal ahead of the cutover and that is the order executed.
 
 **Test parity**: tests are written fresh in Go with the Python suite as reference. The behavior inventory in this spec is the verification gate — each Go module PR claims its rows.
 
@@ -160,7 +160,7 @@ New SQLite schema, from [Plan the rework migration](https://github.com/frankiera
 
 ## Behavior inventory
 
-Extracted from the Python test suite (2026-08-18). **This list gates the Python-removal PR**: every row must be claimed by a Go test (check the box and note the Go test) or explicitly struck with a reason (e.g. behavior deliberately changed by a design ticket — note which). Where a v1 design ticket supersedes the Python behavior (e.g. Portainer-only assumptions, the JSON-log redaction scrubber, CLI error output), the Go test asserts the *new* decided behavior and the row is claimed against it.
+Extracted from the Python test suite (2026-08-18). **This list gated the Python-removal PR**: every row had to be claimed by a Go test (check the box and note the Go test) or explicitly struck with a reason (e.g. behavior deliberately changed by a design ticket — note which). All 78 rows were claimed and none struck, which is what let the Python source go. The `test_*.py::test_*` citations stay: with the suite deleted, this list is the only record of where each behavior was read from, and a row must not be edited without editing the Go test it names. Where a v1 design ticket supersedes the Python behavior (e.g. Portainer-only assumptions, the JSON-log redaction scrubber, CLI error output), the Go test asserts the *new* decided behavior and the row is claimed against it.
 
 ### Config parsing/validation
 

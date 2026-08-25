@@ -37,8 +37,8 @@ Charted and worked as the [Release plumbing map](https://github.com/frankieramir
 
 ## Phase 4 — Python removal
 
-- [ ] Behavior inventory confirmed fully claimed (gate for this PR).
-- [ ] One PR removes `src/ripen/*.py`, `tests/*.py`, `pyproject.toml`, the Python Dockerfile bits, and any Python-era compose/config examples superseded by the Go docs.
+- [x] Behavior inventory confirmed fully claimed (gate for this PR). All 78 rows of the [inventory](./SPEC.md#behavior-inventory) are checked and none struck. They name 74 distinct Go tests between them — a few rows share one — and every Go test the spec names anywhere, all 83 counting the ten invariants', was confirmed present in the tree before a single Python file was deleted. Every row keeps its `test_*.py::test_*` citation: the file is gone, but the citation is the only remaining record of where that behavior was read from.
+- [x] One PR removes `src/ripen/*.py`, `tests/*.py`, `pyproject.toml`, the Python Dockerfile bits, and any Python-era compose/config examples superseded by the Go docs. The Python `Dockerfile` went whole rather than in bits — the published image is built from `Dockerfile.goreleaser`, and nothing referenced the root one. Also removed: `.github/workflows/ci.yml` (the Python suite's workflow, distinct from the Go `ci.yaml` the README badge points at), the root `.dockerignore` (no Docker build has a repo-root context any more), and `compose.monitor.yaml` / `compose.portainer.yaml`, which pinned `ripen:0.3.0`, ran as the Python image's uid 1031, put the config flag ahead of the subcommand as the Python CLI required, and built from the deleted `Dockerfile`. The README and [`docs/portainer.md`](../portainer.md) / [`docs/compose.md`](../compose.md) carry the Go-era container examples that supersede them.
 
 ## Phase 5 — live NAS cutover (final validation gate)
 

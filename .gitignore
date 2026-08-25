@@ -2,17 +2,13 @@
 /ripen
 cover.out
 
+# GoReleaser's output
+/dist/
+
 # nix build's output symlinks
 /result
 /result-*
 
-.pytest_cache/
-.venv/
-__pycache__/
-*.pyc
-/build/
-/dist/
-*.egg-info/
 policy.yaml
 policy.*.yaml
 updater.db*
