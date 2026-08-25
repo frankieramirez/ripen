@@ -178,7 +178,11 @@ section — the Transaction walkthrough is the feature list.
    purpose: a reader who has just been told what Ripen refuses to do reads
    Watchtower's socket mount as a choice, not a flaw.
 6. **Comparison.** Watchtower and Diun only, per
-   [the comparison research](https://github.com/frankieramirez/ripen/issues/100):
+   [the comparison research](https://github.com/frankieramirez/ripen/issues/100).
+   **The rows, their wording, the footnotes and the dateline are approved in
+   [Approve the comparison table rows](https://github.com/frankieramirez/ripen/issues/117)
+   and are built from there without interpretation.** The constraints that
+   produced them, which still bind any later edit:
    - The Watchtower column heads the live fork, `nicholas-fedor/watchtower`
      (`containrrr/watchtower` was archived 2025-12-17). The table never says
      "unmaintained".
@@ -186,15 +190,25 @@ section — the Transaction walkthrough is the feature list.
      window as unique. Ripen's row states the real difference: Ripen clocks
      its own first sighting and requires a second, Watchtower trusts the
      registry-reported build time.
-   - The rows Ripen honestly loses stay in (time to first useful run,
-     notification targets, platforms watched, watching images you don't run,
-     non-Compose orchestrators). No red cells for rows Diun deliberately does
-     not play.
+   - The rows Ripen honestly loses stay in. **Departure, decided on #117:**
+     the five losses are carried by four rows, not five — `non-Compose
+     orchestrators` folded into `platforms watched`, because they are the same
+     fact stated twice. No fact was dropped. No red cells for rows Diun
+     deliberately does not play; no marks of any kind, since amber means ripe
+     and only ripe, so there is no green and no red to render a tick in.
    - The table dates itself and prefers architecture rows over
      missing-feature rows, because absences in a weekly-shipping fork have a
      shelf life.
    - Renovate and Dependabot get one sentence as a different category, not
      columns.
+   - **Three silences, on purpose.** The word "unmaintained" appears nowhere,
+     about anything. The table never counts maintainers, because Ripen and
+     Diun both have one and section 5 already says so about Ripen. "Diun's
+     docs mount the socket read-write" is stated only as the documentation
+     gap it is, never as a security claim.
+   - Cells are one short clause; the load-bearing qualifiers live in eight
+     numbered footnotes under the table, so nothing accurate is lost and
+     nothing competes for the same eye.
 7. **Footer.** One row, small type: the privacy note, GitHub, docs, license,
    security policy, and a changelog link to GitHub Releases.
 
