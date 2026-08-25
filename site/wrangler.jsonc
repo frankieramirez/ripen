@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // An assets-only Worker: no `main`, so there is no script in the request
+  // path -- Workers Static Assets serves the built directory directly. The
+  // Astro build is `output: "static"` for the same reason.
+  "name": "ripen-site",
+  "compatibility_date": "2026-08-25",
+  "assets": {
+    // Relative to this file, so `wrangler deploy` runs from site/.
+    "directory": "./dist"
+  },
+  // Declared, not defaulted. Cloudflare documents wrangler re-asserting
+  // routing state on every deploy: a route toggled in the dashboard but left
+  // out of this file comes back on the next deploy. So the routing this
+  // Worker has is written down here, where a merge to main cannot quietly
+  // undo it. Attaching the apex is #123 and #121, and it changes this line.
+  "workers_dev": true
+}
