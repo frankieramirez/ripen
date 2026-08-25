@@ -8,6 +8,22 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, Astro.site);
+
+/*
+ * The link preview. Absolute, because a crawler resolves it against nothing
+ * -- a root-relative href is the standard way to ship a card with no image.
+ *
+ * `Astro.site` is ripen.dev, so on the workers.dev deploy these point at a
+ * host that is still dark. That is the same choice the canonical link above
+ * already makes, and it is the right one: the preview a reader shares has to
+ * name the site, not the address it happened to be built for.
+ */
+const OG_IMAGE = new URL("/og.png", Astro.site);
+const OG_ALT =
+  "A digest ripens. You apply. — ripen.dev, set in white monospace on " +
+  "near-black beside Ripen's two-circle mark.";
 ---
 
 <html lang="en">
@@ -16,7 +32,36 @@ const { title, description } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <link rel="canonical" href={canonical} />
+
+    <!--
+      The link preview. The card is one static image for the whole site,
+      dark whichever theme the reader keeps, because it renders on somebody
+      else's surface and answers no media query there.
+
+      There is no `twitter:title` or `twitter:description`: X reads the
+      `og:` pair when the `twitter:` one is absent, and a second copy of the
+      same two strings is a second place for them to fall out of step.
+
+      No `theme-color` either. It can only answer `prefers-color-scheme`, and
+      this site has a toggle that outranks the system -- so the tag would be
+      right in two of the three theme states and wrong in the third, which is
+      worse than colouring nothing.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ripen" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content="en" />
+    <meta property="og:image" content={OG_IMAGE} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={OG_ALT} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={OG_IMAGE} />
+    <meta name="twitter:image:alt" content={OG_ALT} />
 
     <!--
       Icons. The SVG is the real one: it carries its own light and dark

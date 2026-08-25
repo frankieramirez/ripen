@@ -438,7 +438,77 @@ preview:
   feature list; a preview card is read in under a second.
 - No terminal screenshot, no JSON: at card size it renders as noise.
 
-Same composition, square-cropped, for any surface that wants 1:1.
+Same composition, laid out square, for any surface that wants 1:1.
+
+Built in [OG image and meta tags](https://github.com/frankieramirez/ripen/issues/119).
+
+- **Generated, then committed**, by `npm run og` — `site/scripts/og.mjs`. Not
+  a build step: `astro build` runs in CI on a runner with no browser, and a
+  card that regenerates on every deploy is a binary that changes when nothing
+  about it did. The renderer is headless Chrome over the DevTools protocol,
+  driven by Node's own global `WebSocket` with no dependency, and it is
+  deliberately the same engine that renders the site — the card is set in the
+  real subsetted `woff2` with the browser's own hinting, not by a second text
+  shaper that would set the same string slightly differently.
+
+  The script reads the six dark values out of `tokens.css` and the two circles
+  out of `Glyph.astro` rather than repeating either. One geometry: the card
+  cannot end up carrying a near-miss of the site's mark, because it is not
+  drawing a second one.
+
+- **The break is the landing's own** — "A digest ripens." / "You apply." The
+  card and the hero are the same sentence, and a preview that re-breaks it
+  reads as a different one. Sixteen characters at 104px in a face that is
+  0.6em wide is 998px, against 1040px between the gutters.
+
+- **The 1:1 is laid out, not cropped.** A centre crop of the wide card cuts a
+  998px headline down to 630px of room and takes the verb off the end of it.
+  Same gutter, same sizes, same order, same alignment; the one thing that
+  changes is that the glyph is not pinned to the top edge, because held there
+  against a square it leaves 700px of nothing in the middle and the card reads
+  as a mistake. One centred stack instead of two edges.
+
+- **`ripen.dev` is set at 38 card-pixels, not the 30 it was drawn at.** Found
+  by looking at it at the size it is read: a Slack unfurl is about 360 CSS px
+  wide, where 30 card-pixels is 9, which is past quiet and into unreadable.
+  38 is the smallest that survives that scale.
+
+- **File sizes.** 34.5 KB wide, 38.2 KB square; tracked tree 1.35 → 1.42 MB,
+  which is the same comfortable as the fonts were. X crops
+  `summary_large_image` to 2:1, which takes 15px off the top and bottom of a
+  1200×630; nothing on the card is within 80px of an edge.
+
+- **One `og:image`, and it is the wide one.** Declaring both would let a
+  crawler choose, and some choose by area — which would send the square to a
+  wide card and letterbox it. `og-square.png` is shipped for hand-use, not
+  advertised in the head.
+
+### Meta tags
+
+- The landing writes the whole set in `BaseLayout.astro`: `og:type`,
+  `og:site_name`, `og:title`, `og:description`, `og:url`, `og:locale`, the
+  image with its type, dimensions and alt, `twitter:card` and
+  `twitter:image`. Starlight already writes everything but the image from each
+  page's own frontmatter, so the docs get the image tags and nothing else,
+  through `head` in `astro.config.ts`.
+
+- **No `twitter:title` or `twitter:description`.** X reads the `og:` pair when
+  the `twitter:` one is absent, and a second copy of the same two strings is a
+  second place for them to fall out of step.
+
+- **No `theme-color`.** It can only answer `prefers-color-scheme`, and this
+  site has a toggle that outranks the system — so the tag would be right in
+  two of the three theme states and wrong in the third, which is worse than
+  colouring nothing.
+
+- The image URL is absolute against `site`, so on the workers.dev deploy it
+  names `ripen.dev`, which is still dark. That is the same choice the
+  canonical link already makes and it is the right one: the preview a reader
+  shares has to name the site, not the address it was built for. The
+  consequence is that no third-party card debugger can render this until the
+  apex is attached — the card was checked here instead, against the real
+  image at 200, 360, 400 and 504 CSS px, on a light and a dark surface, and
+  with X's 2:1 crop applied.
 
 ## Docs pipeline
 
@@ -502,7 +572,7 @@ built in [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues
   logs it, and stores the entry unrendered — a red line in the output and a
   build that exits 0. The rule has to be enforced somewhere that can stop.
 
-  The same hook checks two more things. That each docs page rendered a body,
+  The same hook checks three more things. That each docs page rendered a body,
   for the same reason: a page can ship with its title, its sidebar and its
   search entry and nothing in the middle, on a green build. Each page has to
   render as many `<h2>`s as its source has `##` headings. And that every SVG
@@ -511,7 +581,11 @@ built in [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues
   is how [the wordmark ticket](https://github.com/frankieramirez/ripen/issues/114)
   shipped a broken favicon that looked fine inline and rendered as nothing as
   a file; a real parser refuses an unclosed tag and a bare `&` on the same
-  terms.
+  terms. And that every page names an `og:image` and that the file it names is
+  in the build — a card is checked by a crawler on somebody else's machine,
+  days later, and a wrong path shows up as a bare grey link with no error
+  anywhere for anyone to see. Astro's redirect stubs are skipped: a page whose
+  whole body is a meta refresh is never what a link resolves to.
 
   `ci.yaml` runs `npm run check` beside `npm run build`. `astro check` covers
   the `.astro` files and the TypeScript beside them — the sidebar map, the

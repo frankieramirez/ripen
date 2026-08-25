@@ -7,8 +7,8 @@ import sax from "sax";
 import { DOCS_MAP } from "../docs-map";
 
 /*
- * The two things `astro build` refuses to finish on, checked against the
- * built directory.
+ * The things `astro build` refuses to finish on, checked against the built
+ * directory.
  *
  * It reads the built HTML rather than the sources, which is what makes it
  * trustworthy: it checks the hrefs the reader will actually click against the
@@ -34,6 +34,11 @@ import { DOCS_MAP } from "../docs-map";
  * parsed as XML, where `--` inside a comment is a syntax error, and an HTML
  * page parses an inline copy anyway -- so the component looked right while
  * the shipped icon rendered as nothing. The build said nothing either.
+ *
+ * The fourth is the link preview: every page has to name an `og:image`, and
+ * the image it names has to be a file in this build. A card is checked by a
+ * crawler somewhere else, days later, on a page nobody is watching -- there
+ * is no error to see, just a bare grey link, so the build looks instead.
  *
  * The other check is that each docs page has a body. Astro's glob loader
  * catches an error thrown while rendering an entry, logs it, and stores the
@@ -63,6 +68,7 @@ export function buildChecks(): AstroIntegration {
         const root = fileURLToPath(dir);
         logger.info(`${docsRendered(root)} docs pages rendered with a body.`);
         logger.info(`${svgsParse(root)} SVGs parse as XML.`);
+        logger.info(`${cardsShipped(root)} pages carry a link preview that is on disk.`);
         const pages = filesIn(root, ".html").map((file) => ({
           route: routeOf(relative(root, file)),
           file,
@@ -191,6 +197,57 @@ function resolve(href: string, from: string): Target | null {
   if (/\.[a-z0-9]+$/i.test(route)) return null;
 
   return { path: route.endsWith("/") ? route : `${route}/`, anchor };
+}
+
+/*
+ * Every page names a card, and every card it names is in the build.
+ *
+ * The image is absolute -- a crawler resolves it against nothing -- so this
+ * has to strip the site origin back off before it can look for the file. An
+ * absolute URL on some other host is somebody else's asset and not ours to
+ * check.
+ */
+const CARD = /<meta\s[^>]*?(?:property|name)="(?:og|twitter):image"[^>]*?content="([^"]+)"/g;
+const SITE = "https://ripen.dev";
+const REDIRECT = /<meta\s[^>]*http-equiv="refresh"/i;
+
+function cardsShipped(root: string): number {
+  const faults: string[] = [];
+  const pages = filesIn(root, ".html");
+  let redirects = 0;
+
+  for (const file of pages) {
+    const route = routeOf(relative(root, file));
+    const html = readFileSync(file, "utf-8");
+
+    // `/docs` is a redirect stub -- a meta refresh and nothing else. It is
+    // never the page a link resolves to, so it has no preview to carry.
+    if (REDIRECT.test(html)) {
+      redirects += 1;
+      continue;
+    }
+
+    // De-duplicated: `og:image` and `twitter:image` name the same file, and
+    // one missing card should read as one fault rather than two.
+    const cards = new Set([...html.matchAll(CARD)].map(([, url]) => url!));
+
+    if (cards.size === 0) {
+      faults.push(`${route} -- no og:image, so it shares as a bare grey link.`);
+      continue;
+    }
+    for (const url of cards) {
+      if (!url.startsWith(`${SITE}/`)) {
+        faults.push(`${route} -> ${url} -- not on ${SITE}, so this build cannot vouch for it.`);
+      } else if (read(join(root, ...url.slice(SITE.length + 1).split("/"))) === undefined) {
+        faults.push(`${route} -> ${url} -- named as the card, but not in the build.`);
+      }
+    }
+  }
+
+  if (faults.length > 0) {
+    throw new Error(`${faults.length} link preview fault(s):\n  ${faults.join("\n  ")}`);
+  }
+  return pages.length - redirects;
 }
 
 /** Every page in the sidebar map is on disk, with the headings its source has. */
