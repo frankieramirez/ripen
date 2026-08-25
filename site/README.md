@@ -48,7 +48,10 @@ Decided on
   for `/`. Pin the Node version with `.node-version` — Cloudflare has moved
   Node majors across products before, and `package.json` engines is not read.
   Pinned to major `24`, newest patch, matching how `ci.yaml` treats Go: the
-  major is the thing Cloudflare moves, and a full pin only rots.
+  major is the thing Cloudflare moves, and a full pin only rots. Scaffolded
+  on Astro 7 and Starlight 0.41 in
+  [Scaffold Astro in `site/` and path-filter CI](https://github.com/frankieramirez/ripen/issues/111);
+  `npm run build`, `dev`, `preview` and `check` are the scripts.
 - **Cloudflare Workers Static Assets**, deployed from GitHub Actions by
   `wrangler deploy`, authenticated by a Cloudflare API token stored as a repo
   secret and scoped to Workers on this account. Not the Cloudflare GitHub App
