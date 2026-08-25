@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, posix, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AstroIntegration } from "astro";
+import sax from "sax";
 
 import { DOCS_MAP } from "../docs-map";
 
@@ -116,17 +117,16 @@ function filesIn(dir: string, extension: string): string[] {
 }
 
 /**
- * Every SVG the build ships, checked for the one XML rule an SVG written by
- * hand actually trips over: `--` may not appear inside a comment, and an
- * unterminated comment is not a comment at all. Both make the whole file fail
- * to render, silently, in the one place it matters -- as a file, which is how
- * an icon is fetched.
+ * Every SVG the build ships, put through a real XML parser rather than a
+ * pattern that knows about the one fault already seen. `sax` in strict mode
+ * is the parser SVGO uses, and it refuses an unclosed tag and a bare `&` as
+ * readily as the `--` that broke the favicon.
  */
 function svgsParse(root: string): number {
   const svgs = filesIn(root, ".svg");
   const broken = svgs.flatMap((file) => {
-    const bad = commentFaults(readFileSync(file, "utf-8"));
-    return bad ? [`${relative(root, file)}: ${bad}`] : [];
+    const fault = xmlFault(readFileSync(file, "utf-8"));
+    return fault ? [`${relative(root, file)}: ${fault}`] : [];
   });
 
   if (broken.length > 0) {
@@ -137,18 +137,21 @@ function svgsParse(root: string): number {
   return svgs.length;
 }
 
-function commentFaults(svg: string): string | undefined {
-  let from = 0;
-  for (;;) {
-    const open = svg.indexOf("<!--", from);
-    if (open === -1) return undefined;
-    const close = svg.indexOf("-->", open + 4);
-    if (close === -1) return "a comment is never closed";
-    if (svg.slice(open + 4, close).includes("--")) {
-      return "a comment contains `--`, which XML does not allow";
-    }
-    from = close + 3;
+function xmlFault(xml: string): string | undefined {
+  let fault: string | undefined;
+  const parser = sax.parser(true);
+  // Strict sax reports through the handler and keeps going once resumed, so
+  // the first fault is kept and the rest of the document is not walked twice.
+  parser.onerror = (error) => {
+    fault ??= error.message.split("\n")[0];
+    parser.resume();
+  };
+  try {
+    parser.write(xml).close();
+  } catch (error) {
+    fault ??= error instanceof Error ? error.message.split("\n")[0] : String(error);
   }
+  return fault;
 }
 
 /** `docs/agents/index.html` is the route `/docs/agents/`. */
