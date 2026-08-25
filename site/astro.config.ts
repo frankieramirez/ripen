@@ -8,6 +8,13 @@ import { buildChecks } from "./src/plugins/build-checks";
 import { codeThemes } from "./src/styles/code-theme";
 import { repoDocsMarkdown } from "./src/plugins/repo-docs-markdown";
 
+// Kept identical to BaseLayout.astro's, by hand: the two surfaces are wired
+// by different mechanisms and there is nothing either of them can import that
+// an .astro frontmatter and a config object both reach.
+const OG_ALT =
+  "A digest ripens. You apply. — ripen.dev, set in white monospace on " +
+  "near-black beside Ripen's two-circle mark.";
+
 // Static output, no adapter: the build is a directory of files that Cloudflare
 // Workers Static Assets serves. An adapter would put a server in the request
 // path that nothing here needs.
@@ -118,6 +125,31 @@ export default defineConfig({
             crossorigin: true,
           },
         },
+        /*
+         * The link preview. Starlight already writes the `og:` pair, the url,
+         * the locale, the site name and `twitter:card` from each page's own
+         * frontmatter -- what it has no opinion about is the image, because
+         * there is no per-page one to have an opinion about. One card for the
+         * whole site, the same one the landing carries; see BaseLayout.astro
+         * for why there is no `twitter:title` and no `theme-color`.
+         *
+         * Absolute, spelled out rather than built from `site`, because
+         * Starlight's head entries are plain attribute objects evaluated at
+         * config time with no page context to resolve a URL against.
+         */
+        {
+          tag: "meta",
+          attrs: { property: "og:image", content: "https://ripen.dev/og.png" },
+        },
+        { tag: "meta", attrs: { property: "og:image:type", content: "image/png" } },
+        { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
+        { tag: "meta", attrs: { property: "og:image:alt", content: OG_ALT } },
+        {
+          tag: "meta",
+          attrs: { name: "twitter:image", content: "https://ripen.dev/og.png" },
+        },
+        { tag: "meta", attrs: { name: "twitter:image:alt", content: OG_ALT } },
       ],
     }),
     // Last, so it runs against the finished directory.
