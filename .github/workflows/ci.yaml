@@ -348,19 +348,33 @@ jobs:
       # succeeded failed on a root that was still seconds behind its own
       # stamp. Anything the edge can serve late has to be retried with
       # everything else, not after it.
+      # Both hosts, in the same pass, for the same reason the stamp and the
+      # root are checked together: anything the edge can serve late has to be
+      # retried with everything else. The apex is here because this file now
+      # declares the routes that hold it up (#121) -- a deploy that reverts or
+      # breaks ripen.dev has to fail the run that caused it, rather than
+      # waiting to be noticed by someone visiting.
       - name: Check the served site is this commit
         env:
-          URL: https://ripen-site.cloudflare-punctual727.workers.dev
+          URLS: >-
+            https://ripen-site.cloudflare-punctual727.workers.dev
+            https://ripen.dev
         run: |
           for attempt in $(seq 1 10); do
-            stamp="$(curl -sS --max-time 20 "$URL/_deploy.txt" || true)"
-            root="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$URL" || true)"
-            echo "attempt $attempt: stamp '$stamp', root $root"
-            if [ "$stamp" = "$GITHUB_SHA" ] && [ "$root" = "200" ]; then
-              echo "$URL is serving $GITHUB_SHA"
+            settled=1
+            for url in $URLS; do
+              stamp="$(curl -sS --max-time 20 "$url/_deploy.txt" || true)"
+              root="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$url" || true)"
+              echo "attempt $attempt: $url stamp '$stamp', root $root"
+              if [ "$stamp" != "$GITHUB_SHA" ] || [ "$root" != "200" ]; then
+                settled=0
+              fi
+            done
+            if [ "$settled" = "1" ]; then
+              echo "every host is serving $GITHUB_SHA"
               exit 0
             fi
             sleep 5
           done
-          echo "$URL did not settle on $GITHUB_SHA with a 200 at the root" >&2
+          echo "not every host settled on $GITHUB_SHA with a 200 at the root" >&2
           exit 1

@@ -104,8 +104,23 @@ Decided on
   key deletes that script's undeclared routes, which is why both of the apex
   routes are written down rather than one.
 
+  **The token carries three permission rows**, and two of them are
+  zone-scoped: `Account · Workers Scripts · Edit`, `Zone · Workers Routes ·
+  Edit`, and `Zone · Zone · Read`, with Zone Resources set to the `ripen.dev`
+  zone specifically rather than all zones. `Zone: Read` is what lets
+  `wrangler` resolve the `zone_name` in each route to an id. The scope was
+  widened in [Go live: apex Custom Domain and Web Analytics](https://github.com/frankieramirez/ripen/issues/121) *before*
+  the `routes` key landed; the other order turns every merge on `main` red,
+  and editing a token keeps its value, so neither repo secret changed.
+
+  Worth knowing if you ever re-create it: **Workers Routes is a zone-level
+  permission, not an account-level one.** With the row's scope left on
+  `Account` — its default — the permission cannot be found at all, and the
+  search offers Workers R2 Storage, Workers Agents Configuration and friends
+  instead.
+
   Two secrets, not one. `CLOUDFLARE_ACCOUNT_ID` is needed because the token
-  carries a single permission row and cannot enumerate accounts, so `wrangler`
+  cannot enumerate accounts, so `wrangler`
   has no way to discover which account to deploy to.
 - **Deploy on `main` only.** The `deploy` job in `ci.yaml` runs on push to
   `main`, gated on the `site` build passing, so a broken build never reaches
@@ -135,17 +150,15 @@ Decided on
   in any case — those are exact hostnames — so keeping the wildcard settles
   the mechanism on its own.
 
-  **Both routes get declared in `site/wrangler.jsonc`, and both have to be** —
-  in [Go live: apex Custom Domain and Web Analytics](https://github.com/frankieramirez/ripen/issues/121),
-  after the deploy token is widened, because a config declaring routes against
-  a token without `Workers Routes: Edit` fails every deploy. Both, not one:
-  see the routing rules below — once the config declares a `routes` key,
-  wrangler makes that script's routes exactly the declared list, so an
-  undeclared sibling is deleted on the next merge.
-
-  Until that lands the apex is held only by the dashboard, which is why the
-  comment in `wrangler.jsonc` says so rather than claiming the routing is
-  written down.
+  **Both routes are declared in `site/wrangler.jsonc`, and both have to be** —
+  landed in [Go live: apex Custom Domain and Web Analytics](https://github.com/frankieramirez/ripen/issues/121),
+  after the deploy token was widened, because a config declaring routes
+  against a token without `Workers Routes: Edit` fails every deploy. Both, not
+  one: once the config declares a `routes` key, wrangler makes that script's
+  routes exactly the declared list, so an undeclared sibling is deleted on the
+  next merge. The apex is now held by this repository rather than by the
+  dashboard, and the post-deploy check reads the commit stamp back off
+  `ripen.dev` as well as the workers.dev URL, both in the same pass.
 
   `www.ripen.dev` has no DNS record, so the wildcard serves nothing today —
   a route without a record matches nothing. It is kept for the subdomain that
