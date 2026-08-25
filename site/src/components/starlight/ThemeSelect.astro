@@ -1,0 +1,13 @@
+---
+// Starlight's theme picker, replaced by the site's own.
+//
+// Not a styling choice. Starlight stores its preference under
+// `starlight-theme` and writes an explicit `dark` or `light` on every load;
+// the landing page stores `ripen-theme` and treats the attribute's absence as
+// "follow the system". Two mechanisms would mean the docs and the landing
+// disagreeing about the reader's choice, which is one navigation away from
+// being obvious.
+import ThemeToggle from "../ThemeToggle.astro";
+---
+
+<ThemeToggle />
