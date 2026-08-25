@@ -10,6 +10,13 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- `status`, `candidates`, `audit`, and `explain` accept `--pretty`, which
+  renders the same payload as text. The default is still the JSON envelope,
+  and the flag is never inferred from a TTY, so an agent in a pty cannot
+  accidentally get prose.
+
 ### Fixed
 
 - `go install github.com/frankieramirez/ripen/cmd/ripen@version` reported

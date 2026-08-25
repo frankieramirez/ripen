@@ -1,7 +1,8 @@
 // Package response is Ripen's wire surface: the Response envelope every
-// verb answers in, and the typed payloads inside it. JSON is not a mode
-// here, it is the output — there is no --json flag and no second,
-// human-only shape that could drift from this one.
+// verb answers in, and the typed payloads inside it. JSON is the output
+// of this package — there is no --json flag. A human-readable view of
+// the same payload lives on the CLI as --pretty, and is not a second
+// schema.
 //
 // Two rules hold everywhere in this package. Identity is always the
 // three parts backend/stack/service, never the state store's internal
