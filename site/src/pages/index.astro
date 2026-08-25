@@ -3,10 +3,10 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import Wordmark from "../components/Wordmark.astro";
 import Snippet from "../components/Snippet.astro";
+import Comparison from "../components/Comparison.astro";
 
-// Sections 1-3 of the seven in site/README.md: hero, warning, install.
-// Sections 4-7 -- the Transaction walkthrough, the non-goals, the comparison
-// and the footer -- are #116.
+// All seven sections of site/README.md: hero, the warning, install, the
+// Transaction walkthrough, the non-goals, the comparison, the footer.
 //
 // Everything in the terminal block below is real output. It was produced by
 // building this repo's binary, seeding a state database with a baseline and
@@ -47,6 +47,97 @@ const prompt = (command: string) =>
 const MONITOR = "ripen run --mode monitor --config policy.yaml";
 const GO_INSTALL = "go install github.com/frankieramirez/ripen/cmd/ripen@latest";
 const NIX_RUN = "nix run github:frankieramirez/ripen -- version";
+
+// Section 4. The five steps are the README's, at the length the page can
+// afford and the README cannot. This is the feature list -- the spec has no
+// separate features section on purpose, because a Transaction explained in
+// full is the answer to "how is this different from Watchtower" without
+// naming Watchtower on the way.
+const STEPS = [
+  {
+    name: "Observe",
+    body: `Ripen asks what the orchestrator has deployed, what is running right
+      now, and what the tag points at in the registry today. Those three
+      answers are allowed to disagree, and the disagreement is the thing Ripen
+      exists to notice. Anything it cannot read, it declines to guess at.`,
+  },
+  {
+    name: "Baseline",
+    body: `The first time Ripen sees a Service it writes down the digest that is
+      running and stops there. Nothing to compare yet, so nothing to do. If the
+      running digest cannot be proven, or an update is already waiting on a
+      person, Ripen records nothing at all.`,
+  },
+  {
+    name: "Ripen",
+    body: `When the registry moves, the new digest becomes a Candidate and the
+      clock starts on Ripen's own first sighting of it. A Candidate has to be
+      seen twice and be older than the maturity window, a day by default,
+      before it is eligible for anything. Most of a Candidate's life is spent
+      waiting.`,
+  },
+  {
+    name: "Apply",
+    body: `In apply mode, on a stack that opted in, one Service. Ripen checks
+      the health of every Service you configured a check for, pins that one
+      image to <code>tag@sha256:…</code>, deploys, then checks all of them
+      again. A sibling that was already unhealthy stops the update before it
+      starts.`,
+  },
+  {
+    name: "Roll back",
+    body: `If the health check after the deploy fails, Ripen puts the Baseline
+      digest back and opens the Circuit breaker. Apply stops, Proposals stop,
+      and both stay stopped until a person clears the breaker with a reason
+      that gets recorded. Monitoring and reads carry on the whole time.`,
+  },
+];
+
+// Section 5. ROADMAP.md's headings, the README's framing, and the maintainer
+// line the spec asks to be carried among them rather than tucked into a
+// footer -- the smallness is the pitch, so it is stated in the same voice as
+// everything else here.
+const NON_GOALS = [
+  {
+    name: "The privileged Docker socket",
+    body: `A socket that hands over the whole engine API is root on the host,
+      and an updater with root on the host is a worse problem than an old
+      image. A rootless user socket is a narrower connection and is supported.
+      The privileged one refuses at config load, symlinks followed.`,
+  },
+  {
+    name: "Unattended updating",
+    body: `One Service per run, only where the policy opted in, only after a
+      Candidate has matured. There will be no mode that sweeps a host. The
+      latency is the feature.`,
+  },
+  {
+    name: "Merging its own Proposals",
+    body: `Ripen opens a pull request and stops. It will not merge, will not
+      close, and will not deploy from Git. The review in the middle is why the
+      Proposal exists.`,
+  },
+  {
+    name: "Insecure TLS",
+    body: `A CA file or an exact certificate fingerprint. There will be no
+      <code>insecure_skip_verify</code>, no "just this once" flag, and no
+      environment variable that turns verification off.`,
+  },
+  {
+    name: "An agent or browser path to applying",
+    body: `The MCP surface has no tool to apply an update or clear the breaker,
+      and the Web UI has no button for either. Absent rather than disabled.
+      Those are decisions a person makes at a terminal, with a reason that gets
+      written down.`,
+  },
+  {
+    name: "A second maintainer",
+    body: `Ripen is one person's tool for their own machines, and the list above
+      is short because that is what one person can hold in their head. Read it
+      as the scope, and weigh it the way you would weigh any other dependency
+      of that size.`,
+  },
+];
 ---
 
 <BaseLayout
@@ -193,7 +284,104 @@ services:
         </div>
       </details>
     </section>
+
+    <!--
+      The centre of gravity. There is deliberately no features section on the
+      page; a Transaction explained in full is the feature list, and it
+      answers "how is this different from Watchtower" three sections before
+      Watchtower is named.
+    -->
+    <section class="frame transaction" id="how-it-works">
+      <h2>How a Transaction works</h2>
+      <p class="measure">
+        Every run is one Transaction, and it either finishes or it undoes
+        itself. There is no partial state to clean up afterwards, and no step
+        that acts on something the step before it could not prove.
+      </p>
+
+      <ol class="steps">
+        {
+          STEPS.map((step, index) => (
+            <li>
+              <p class="step-head">
+                <span class="step-index label">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span class="step-name">{step.name}</span>
+              </p>
+              <p class="measure" set:html={step.body} />
+            </li>
+          ))
+        }
+      </ol>
+
+      <p class="measure note">
+        Git-backed stacks swap step four for a Proposal: one deterministic pull
+        request that pins the digest, which Ripen opens and never merges.
+      </p>
+    </section>
+
+    <!--
+      Placed before the comparison on purpose. A reader who has just been told
+      what Ripen refuses to do reads the socket row below as a choice someone
+      made, rather than as a flaw being scored.
+    -->
+    <section class="frame limits" id="limits">
+      <h2>What it will not do</h2>
+      <p class="measure">
+        These are decided. An issue asking for one is closed with a link to the
+        same list in <a
+          href="https://github.com/frankieramirez/ripen/blob/main/ROADMAP.md"
+          >ROADMAP.md</a
+        >, which also has the things that may come later.
+      </p>
+
+      <dl class="limit-list">
+        {
+          NON_GOALS.map((goal) => (
+            <div class="limit">
+              <dt>{goal.name}</dt>
+              <dd set:html={goal.body} />
+            </div>
+          ))
+        }
+      </dl>
+    </section>
+
+    <section class="frame compare" id="comparison">
+      <h2>Ripen, Watchtower, Diun</h2>
+      <p class="measure">
+        Both of these do the job they chose, and both say so in their own
+        words. Watchtower's documentation says they do not recommend using it
+        in a commercial or production environment. Diun's author has said since
+        2019 that it "is not intended to update containers but only to send
+        notifications when an image is updated on a registry." Neither is a
+        worse Ripen. They answer a different question about the same problem,
+        and the table is where the answers separate.
+      </p>
+
+      <Comparison />
+    </section>
   </main>
+
+  <footer class="frame foot">
+    <p class="privacy">
+      Cloudflare Web Analytics counts the pages read here. It sets no cookie
+      and writes nothing to your browser.
+    </p>
+    <nav class="foot-links" aria-label="Elsewhere">
+      <a href="https://github.com/frankieramirez/ripen">GitHub</a>
+      <a href="/docs/">Docs</a>
+      <a href="https://github.com/frankieramirez/ripen/releases">Changelog</a>
+      <a
+        href="https://github.com/frankieramirez/ripen/blob/main/SECURITY.md"
+        >Security</a
+      >
+      <a href="https://github.com/frankieramirez/ripen/blob/main/LICENSE"
+        >Apache-2.0</a
+      >
+    </nav>
+  </footer>
 </BaseLayout>
 
 <style>
@@ -359,6 +547,155 @@ services:
     color: var(--muted);
   }
 
+  /* --- 4. How a Transaction works ----------------------------------- */
+
+  .transaction {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-16);
+    padding-bottom: var(--space-16);
+  }
+
+  .transaction h2 {
+    margin-bottom: var(--space-6);
+  }
+
+  /*
+   * The steps hang off one rule, which is the only thing on the page drawing
+   * a sequence. Numbers rather than icons: the order is the argument, and a
+   * row of glyphs beside it would be the feature grid this page was written
+   * to avoid.
+   */
+  .steps {
+    list-style: none;
+    margin: var(--space-12) 0 0;
+    padding: 0 0 0 var(--space-6);
+    border-left: 1px solid var(--border);
+  }
+
+  .steps > li {
+    padding-bottom: var(--space-8);
+  }
+
+  .steps > li:last-child {
+    padding-bottom: 0;
+  }
+
+  .step-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
+    margin-bottom: var(--space-2);
+  }
+
+  /* The number reads with the name, not out in the gutter beside the rule.
+     Hung out there it lost the name it belongs to and picked up the rule
+     instead, which made it look like a stray mark rather than an index. */
+  .step-index {
+    font-size: var(--step-small);
+    flex: none;
+  }
+
+  .step-name {
+    font-family: var(--font-mono);
+    font-size: var(--step-heading);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* --- 5. What it will not do --------------------------------------- */
+
+  .limits {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-16);
+    padding-bottom: var(--space-16);
+  }
+
+  .limits h2 {
+    margin-bottom: var(--space-6);
+  }
+
+  .limit-list {
+    margin: var(--space-12) 0 0;
+  }
+
+  .limit {
+    padding-bottom: var(--space-8);
+  }
+
+  .limit:last-child {
+    padding-bottom: 0;
+  }
+
+  .limit dt {
+    font-family: var(--font-mono);
+    font-size: var(--step-heading);
+    font-weight: 500;
+    margin-bottom: var(--space-2);
+  }
+
+  .limit dd {
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  /* --- 6. Comparison ------------------------------------------------ */
+
+  .compare {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-16);
+    padding-bottom: var(--space-16);
+  }
+
+  .compare h2 {
+    margin-bottom: var(--space-6);
+  }
+
+  .compare > .measure {
+    margin-bottom: var(--space-12);
+  }
+
+  /* --- 7. Footer ---------------------------------------------------- */
+
+  .foot {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-16);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-6);
+    flex-wrap: wrap;
+    font-size: var(--step-small);
+  }
+
+  .privacy {
+    color: var(--muted);
+    margin: 0;
+    max-width: 28rem;
+  }
+
+  /* Row-gap is tighter than column-gap on purpose: below about 26rem the
+     five links wrap, and a wide row-gap leaves the last one looking stranded
+     on a line of its own rather than reading as part of one block. */
+  .foot-links {
+    display: flex;
+    gap: var(--space-3) var(--space-6);
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: var(--step-small);
+  }
+
+  .foot-links a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .foot-links a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+  }
+
   /*
    * The orchestrated load: five beats over about a second, once. Each beat is
    * a group of lines that belong together -- a command, then its output -- so
@@ -411,6 +748,13 @@ services:
 
     .run {
       text-align: center;
+    }
+
+    /* One row at desktop, stacked here -- the links would otherwise wrap into
+       a ragged second line under a privacy note they are not part of. */
+    .foot {
+      flex-direction: column;
+      gap: var(--space-8);
     }
   }
 </style>

@@ -240,6 +240,30 @@ Found in the browser while building sections 1–3, and applied:
   it.** A wide snippet scrolls sideways inside its own container, and an
   overlaid button eats the end of whatever line the reader has scrolled to.
 
+Found in the browser while building sections 4–7, and applied:
+
+- **The scrolling comparison table has to say that it scrolls.** Below about
+  55rem the three columns no longer fit and the container scrolls, which is
+  what the inventory asked for — but a phone reader sees a Ripen-only table
+  whose rows have unexplained gaps under them, because the row heights are set
+  by cells that are still off-screen. It reads as a broken table rather than a
+  scrollable one. A muted `Scroll the table sideways →` line above it, shown
+  only under 55rem, is the whole fix.
+- **The step numbers in section 4 sit with their names, not out in the
+  gutter.** Hung on the far side of the sequence rule they lost the name they
+  belonged to and picked up the rule instead, so `01` read as a stray mark. The
+  rule alone carries the sequence; the numbers are set at `--step-small` beside
+  the step name.
+- **Section 6 is headed `Ripen, Watchtower, Diun`.** The inventory names the
+  section "Comparison", which is a label for a spec and not a heading for a
+  reader. Naming all three is also the fair version: the page is not headed by
+  its own verdict.
+- **The footer links to `/docs/`**, which does not exist until
+  [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues/118)
+  lands. It is a dead link on the workers.dev URL until then, and it is the
+  right final state, so it ships now rather than being pointed at GitHub and
+  changed back.
+
 ## Visual direction
 
 Decided on [the visual direction brief](https://github.com/frankieramirez/ripen/issues/102).
