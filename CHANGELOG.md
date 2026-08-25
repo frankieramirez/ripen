@@ -8,6 +8,16 @@ are the public surface, and breaking any of them needs a major bump.
 
 Each release's section here is what GitHub shows as the release notes.
 
+## [Unreleased]
+
+### Fixed
+
+- `go install github.com/frankieramirez/ripen/cmd/ripen@version` reported
+  `dev` / `none` because only GoReleaser and the flake stamped the version
+  ldflags. The binary now falls back to the toolchain's build info, so an
+  install from a module version reports that version, and a local checkout
+  reports its VCS revision.
+
 ## [1.0.0] - 2026-08-25
 
 ### Added
