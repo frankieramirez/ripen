@@ -70,14 +70,9 @@ Decided on
   for attention.
 
   Registering Starlight also brought three things nobody specified, all of them
-  defaults and all of them now live: a themed **404 page** for the whole site,
-  a **sitemap** (`@astrojs/sitemap`, which Starlight registers itself, listing
-  `/`, `/design/` and the nine docs routes), and **Pagefind search**. Pagefind
-  indexes only what Starlight marks as a page body, so the index is the nine
-  docs pages and not the landing or `/design`. Whether each of them stays, and
-  what `robots.txt` should say about `/design` and `_deploy.txt`, is the small
-  print still carried as fog on
-  [the map](https://github.com/frankieramirez/ripen/issues/109).
+  defaults: a **404 page**, a **sitemap**, and **Pagefind search**. Two were
+  kept and one was replaced, on purpose rather than by not looking — see
+  [Crawling, search and the 404](#crawling-search-and-the-404).
 - **Cloudflare Workers Static Assets**, deployed from GitHub Actions by
   `wrangler deploy`, authenticated by a Cloudflare API token stored as a repo
   secret and scoped to Workers on this account. Not the Cloudflare GitHub App
@@ -682,6 +677,85 @@ built in [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues
   to hang the one plugin off it. `markdown.remarkPlugins` also works and is
   deprecated, and it quietly swaps the whole processor for unified — a
   different Markdown implementation, adopted by accident.
+
+## Crawling, search and the 404
+
+Decided on
+[The small print](https://github.com/frankieramirez/ripen/issues/134). None of
+it was in this spec: three of the five arrived as Starlight defaults, and the
+other two are the questions those defaults raised about the pages that are
+served but not meant to be found.
+
+- **`robots.txt` exists and disallows nothing.** `User-agent: *`, `Allow: /`,
+  and a `Sitemap:` line. That line is the whole reason the file is there:
+  it is where every crawler looks for the sitemap, and Astro emits
+  `<link rel="sitemap">` on Starlight's pages only, so the landing advertises
+  it nowhere else. Absent the file, every crawler takes a 404 on every visit.
+
+  There is no bot list. Blocking the crawlers that AI assistants read from
+  would be an odd position for a site that publishes `/docs/agents`, and such
+  a list rots faster than the file is ever edited.
+
+- **`/design` ships, and carries `<meta name="robots" content="noindex">`.**
+  It stays because it is the only place the AA contrast claim is computed from
+  the live token values, so it is what a human opens the next time a token
+  moves. Building it in dev only would put it outside the deployed site the
+  review checkpoint actually reads, and a page that exists only on a laptop
+  rots unnoticed.
+
+  The tag, and deliberately not a robots.txt `Disallow`. The two mechanisms
+  are not additive and cannot both be used: a crawler forbidden to fetch the
+  page never reads the tag telling it to drop the page, so a `Disallow` leaves
+  the URL indexable by reference and removes the one instruction that would
+  have taken it out.
+
+- **The sitemap is ours, with a filter.** Starlight registers
+  `@astrojs/sitemap` itself and exposes no way to configure it, but only if
+  the integration is not already in the list — so declaring it in
+  `astro.config.ts` replaces Starlight's rather than adding a second. The
+  filter is `src/noindex.ts`, the list of routes that carry the tag.
+
+  `astro build` refuses a build where the sitemap and the tags disagree, in
+  both directions: a `noindex` page still listed is the site inviting a crawl
+  it then asks the crawler to forget, and a page that is neither `noindex` nor
+  listed has been dropped by an over-broad filter and will be found by nobody.
+  Both failures are silent, and the symptom is a search result that does or
+  does not exist, months later.
+
+- **`_deploy.txt` is named nowhere.** The deploy stamp stays exactly where the
+  `deploy` job writes it. Crawlers find URLs from links and sitemaps, and
+  nothing links it or lists it, so a `Disallow` line would be the only thing
+  on the site advertising that the file exists — and the sha it holds is the
+  public repo's HEAD either way.
+
+- **Pagefind stays on.** The weight argument dissolves on measurement: the
+  eager cost on a docs page is 2.9 KB, the `<site-search>` element's own
+  script. `pagefind.js`, the 72 KB wasm and the index are a dynamic import
+  that fires when the modal opens, so a reader who never searches pays for
+  none of it. The index is the nine docs pages, which include `configuration`
+  and `troubleshooting` — the look-up-a-field-name pages search earns its
+  place on.
+
+- **The 404 is `src/pages/404.astro`, and the edge has to be told to serve
+  it.** Cloudflare's `not_found_handling` defaults to `none`: until #134 the
+  built `404.html` was never served at all, and both workers.dev and the apex
+  answered an unknown path with a bare 404 and `content-length: 0`.
+  `wrangler.jsonc` now sets `"not_found_handling": "404-page"`.
+
+  Ours rather than Starlight's, whose copy sends a lost reader to "the search
+  bar" — an index of nine docs pages, no use at all to someone who mistyped a
+  landing URL, and the only way out it offers. Starlight's is switched off
+  with `disable404Route` rather than shadowed, because a page at the same
+  pattern wins on precedence but logs the collision as a warning on every
+  build, and a permanent warning is what teaches people to stop reading them.
+  The cost, accepted: a lost docs reader loses the search box and gets a link
+  to the docs instead.
+
+  It carries `noindex` too, because the same file is served at `/404` with a
+  200, where the status code that normally keeps it out of an index does not
+  apply. The two ways out are set in the landing hero's primary treatment,
+  stacked below 40rem like the hero's own CTA: side by side they clear a
+  390px screen by four pixels.
 
 ## Deferred, on purpose
 

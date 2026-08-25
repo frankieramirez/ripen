@@ -1,0 +1,144 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+import Wordmark from "../components/Wordmark.astro";
+
+/*
+ * The site's 404, for the landing and the docs alike.
+ *
+ * Ours rather than Starlight's, which is what served this route until #134.
+ * Starlight's page is themed and its wordmark does link home, but its copy
+ * sends a lost reader to "the search bar" -- an index of the nine docs pages,
+ * which is no help at all to someone who mistyped a landing URL, and which is
+ * the only route out it offers. Starlight's is switched off by
+ * `disable404Route` rather than shadowed, so this is the only page at /404.
+ *
+ * The cost, accepted: a lost docs reader loses the search box, and gets a
+ * link to the docs instead.
+ *
+ * `noindex` because this file is also served at /404 with a 200, where the
+ * status code that normally keeps it out of an index does not apply.
+ */
+---
+
+<BaseLayout
+  title="Not found — Ripen"
+  description="No page is served at this URL."
+  noindex
+>
+  <header class="frame head">
+    <Wordmark />
+    <ThemeToggle />
+  </header>
+
+  <main class="frame miss">
+    <p class="label">404</p>
+    <h1>No such page.</h1>
+
+    <p>
+      Nothing is served at this URL. It may have moved, or it may never have
+      been here.
+    </p>
+
+    <nav class="ways" aria-label="Where to go instead">
+      <a href="/">Landing page</a>
+      <a href="/docs/">Documentation</a>
+    </nav>
+  </main>
+</BaseLayout>
+
+<style>
+  .frame {
+    max-width: var(--frame);
+    margin: 0 auto;
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    flex-wrap: wrap;
+    padding-top: var(--space-8);
+  }
+
+  /*
+   * Centred in what is left below the header. This page has no footer to
+   * hold the bottom of a tall window, so a block pinned under the header
+   * leaves most of the screen empty and reads as a page that failed to
+   * finish loading -- which is the wrong thing for a page about failure to
+   * suggest. `svh` rather than `vh`: mobile browsers report `vh` against a
+   * chrome-less window they may not be showing.
+   */
+  .miss {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(100svh - 10rem);
+    padding-top: var(--space-12);
+    padding-bottom: var(--space-16);
+  }
+
+  /*
+   * Title size, not hero. The hero step is the landing's "A digest ripens.
+   * You apply." -- four and a half rem of the site's one argument. A refusal
+   * set that large reads as shouting at someone who has only mistyped.
+   */
+  .miss h1 {
+    font-size: var(--step-title);
+    line-height: var(--leading-title);
+    margin-bottom: var(--space-6);
+  }
+
+  .miss .label {
+    display: block;
+    margin-bottom: var(--space-2);
+  }
+
+  /*
+   * The two ways out, in the landing hero's primary treatment. Left as bare
+   * links they inherit the site's near-invisible underline, which is right
+   * for a link inside a sentence and wrong for the only thing on the page
+   * there is to do. Neither is the primary one: a mistyped docs URL and a
+   * mistyped landing URL are equally likely to have landed here.
+   */
+  .ways {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin-top: var(--space-8);
+  }
+
+  .ways a {
+    font-family: var(--font-mono);
+    font-size: var(--step-body);
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: var(--space-3) var(--space-4);
+    text-decoration: none;
+  }
+
+  .ways a:hover {
+    border-color: var(--muted);
+  }
+
+  /*
+   * Stacked, the same treatment and the same breakpoint as the landing hero's
+   * CTA. Side by side the two boxes clear a 390px screen by four pixels,
+   * which is not a margin worth shipping -- one longer word, or one narrower
+   * phone, and the second one wraps to a line of its own anyway.
+   */
+  @media (max-width: 40rem) {
+    .ways {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .ways a {
+      text-align: center;
+    }
+  }
+</style>

@@ -1,9 +1,11 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import sitemap from "@astrojs/sitemap";
 import { satteri } from "@astrojs/markdown-satteri";
 
 import { DOCS_MAP, routeFor } from "./src/docs-map";
+import { NOINDEX_ROUTES } from "./src/noindex";
 import { buildChecks } from "./src/plugins/build-checks";
 import { codeThemes } from "./src/styles/code-theme";
 import { repoDocsMarkdown } from "./src/plugins/repo-docs-markdown";
@@ -48,6 +50,12 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Ripen",
+      // The site's 404 is src/pages/404.astro, for the landing and the docs
+      // alike. Without this Starlight injects its own at the same pattern,
+      // ours wins on route precedence, and every build logs the collision as
+      // a warning -- a permanent warning being the thing that teaches people
+      // to stop reading them.
+      disable404Route: true,
       description:
         "Ripen watches what :latest actually points at, waits for a new image to prove itself, and updates one service -- only where you said it may.",
       // The landing page owns `/`. Starlight's routes all live under the
@@ -151,6 +159,17 @@ export default defineConfig({
         },
         { tag: "meta", attrs: { name: "twitter:image:alt", content: OG_ALT } },
       ],
+    }),
+    /*
+     * Ours, so it can take a filter. Starlight registers `@astrojs/sitemap`
+     * itself with no way to configure it -- but only if the integration is
+     * not already in the list, so declaring it here replaces Starlight's
+     * rather than adding a second one. That also promotes the package from a
+     * transitive dependency to a direct one, which is what importing it makes
+     * it anyway.
+     */
+    sitemap({
+      filter: (page) => !NOINDEX_ROUTES.includes(new URL(page).pathname),
     }),
     // Last, so it runs against the finished directory.
     buildChecks(),

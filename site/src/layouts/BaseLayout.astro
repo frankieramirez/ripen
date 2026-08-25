@@ -5,9 +5,17 @@ import "../styles/base.css";
 interface Props {
   title: string;
   description: string;
+  /**
+   * Keep this page out of search results. `noindex` and not a robots.txt
+   * `Disallow`, because the two are not additive: a crawler forbidden to
+   * fetch a page never reads the tag telling it to drop the page, so the
+   * Disallow hides the noindex. A page carrying this must also be absent
+   * from the sitemap, which the build refuses to let drift.
+   */
+  noindex?: boolean;
 }
 
-const { title, description } = Astro.props;
+const { title, description, noindex = false } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
 
@@ -33,6 +41,7 @@ const OG_ALT =
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex" />}
 
     <!--
       The link preview. The card is one static image for the whole site,

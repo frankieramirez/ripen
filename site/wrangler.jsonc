@@ -7,7 +7,13 @@
   "compatibility_date": "2026-08-25",
   "assets": {
     // Relative to this file, so `wrangler deploy` runs from site/.
-    "directory": "./dist"
+    "directory": "./dist",
+    // Without this the edge answers an unknown path with a bare 404 and
+    // `content-length: 0`, and the themed `dist/404.html` the build produces
+    // is never served -- which is what it did until #134 looked. The default
+    // is "none". This key lives under `assets` and is nothing like `routes`:
+    // it asserts about this deploy only.
+    "not_found_handling": "404-page"
   },
   // Declared, not defaulted, because `workers_dev` has a default and so an
   // absent key still asserts something: a route toggled off in the dashboard
