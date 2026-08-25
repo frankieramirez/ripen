@@ -75,10 +75,11 @@ Decided on
   `main`, gated on the `site` build passing, so a broken build never reaches
   the edge and the two failures stay distinguishable. It stamps the commit
   sha into `dist/_deploy.txt` after the build, then reads that path back off
-  the served URL until it matches — retried, because `wrangler` returns when
-  the upload is accepted, not when the edge has caught up. A 200 alone would
-  not be a proof: this Worker has served *something* since it was
-  provisioned. Serialised by a `concurrency`
+  the served URL until it matches *and* the root returns 200 — both in the
+  same pass, retried, because `wrangler` returns when the upload is accepted
+  and the edge can then serve two paths out of step for several seconds. A
+  200 alone would not be a proof: this Worker has served *something* since it
+  was provisioned. Serialised by a `concurrency`
   group, queueing rather than cancelling, so two quick merges cannot leave the
   live site older than `main`. No preview deploys in v1. If a shareable
   preview is ever wanted, a PR-triggered `wrangler versions upload` job adds
