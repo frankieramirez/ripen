@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
+import Wordmark from "../components/Wordmark.astro";
 
 // The specimen page. It exists so the design system can be looked at rather
 // than argued about, and so the review checkpoint has somewhere to stand that
@@ -85,6 +86,37 @@ const tokenNames = ["ground", "surface", "ink", "muted", "border", "ripe"] as co
       something is ripe. Everything else is warm neutral, because an unripe
       state is the normal case and does not deserve a colour.
     </p>
+
+    <hr />
+
+    <section>
+      <p class="label">Marks</p>
+      <ul class="marks">
+        <li><Wordmark as="span" size={32} /></li>
+        <li><Wordmark as="span" size={20} /></li>
+        <li><Wordmark as="span" size={14} /></li>
+      </ul>
+      <p class="note">
+        Lowercase, always, in the mono. The glyph is two circles: observed,
+        then mature. It is set to the x-height of the word rather than its
+        caps, because <code>ripen</code> has nothing tall in it to align to.
+      </p>
+
+      <ul class="icons">
+        <li><img src="/favicon.svg" width="16" height="16" alt="" /><span class="label">16</span></li>
+        <li><img src="/favicon.svg" width="32" height="32" alt="" /><span class="label">32</span></li>
+        <li><img src="/favicon.svg" width="64" height="64" alt="" /><span class="label">64</span></li>
+        <li><img src="/apple-touch-icon.png" width="60" height="60" alt="" /><span class="label">touch</span></li>
+      </ul>
+      <p class="note">
+        Shown at the sizes a browser actually asks for. At 16px the hollow
+        circle keeps its hole — it does not collapse into a second dot — but
+        the icon carries a slightly heavier stroke than the inline glyph, so
+        that the ring holds its colour when it is one pixel wide. These four
+        follow the operating system rather than the toggle above: an icon is
+        read against browser chrome, which does not know this page exists.
+      </p>
+    </section>
 
     <hr />
 
@@ -190,6 +222,38 @@ const tokenNames = ["ground", "surface", "ink", "muted", "border", "ripe"] as co
 </BaseLayout>
 
 <style>
+  .marks {
+    list-style: none;
+    margin: 0 0 var(--space-6);
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .icons {
+    list-style: none;
+    margin: 0 0 var(--space-6);
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-8);
+  }
+
+  /* On `surface`, not on the page: a favicon is judged against browser
+     chrome, which is never the same colour as the page behind it. */
+  .icons li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: var(--space-3);
+  }
+
   .frame {
     max-width: var(--frame);
     margin: 0 auto;

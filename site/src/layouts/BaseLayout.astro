@@ -19,6 +19,24 @@ const { title, description } = Astro.props;
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
 
     <!--
+      Icons. The SVG is the real one: it carries its own light and dark
+      variants, so the mark is legible against either browser chrome without
+      shipping two files.
+
+      The 32px PNG is the fallback for anything that will not take an SVG
+      icon, and it is deliberately the light-theme cut -- a fallback cannot
+      answer a media query, so it takes the side that renders on the pale tab
+      strips that are still the default nearly everywhere.
+
+      The Apple touch icon is opaque, on `ground`: iOS composites a
+      transparent icon onto whatever it likes and the mark would come back
+      floating on white.
+    -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!--
       The no-flash path, and the reason it is inline and first.
 
       A theme that repaints after first paint is very visible on a

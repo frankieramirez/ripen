@@ -280,6 +280,36 @@ snippet.
 circles side by side, left hollow (stroke, `muted`), right filled (`ripe`) —
 observed→mature. Doubles as the favicon. No fruit illustration, ever.
 
+Drawn on a 32-unit grid: the hollow circle is `r=6` under a 2-unit stroke and
+the filled one is a bare `r=7`, so both come out 14 units across — a stroke
+straddles its path, and matching the *outer* diameters is what makes the pair
+look like one size. Centres 17 apart. In the wordmark the glyph is set to 62%
+of the font size, which lands it on the mono's x-height; aligning to cap
+height leaves the circles floating above a word with no ascenders. The word
+is live text, not outlines — the mono is already preloaded, so setting it
+costs nothing and keeps it selectable. The OG card (#119) is the one place
+that has to draw it instead.
+
+The icons are `favicon.svg` (light and dark cuts in one file, via
+`prefers-color-scheme`), a 32px PNG fallback in the light cut for anything
+that will not take an SVG icon, and a 180px `apple-touch-icon.png` that is
+opaque on `ground`, because iOS composites a transparent icon onto whatever
+it likes. 3.5 KB for all three.
+
+**At 16px the glyph holds** — the hollow circle keeps a visible hole and the
+pair does not collapse into two dots, in either cut. The icon does carry a
+2.5-unit stroke against the inline glyph's 2: at 16px the whole box is 16px,
+so a 2-unit stroke is a 1px hairline and the observed circle goes faint
+beside a solid disc. 3 units starts rounding the ring into a square. That is
+an optical adjustment at icon size, not a redraw. What a square icon cannot
+fix is that a mark this wide fills the width and leaves the top and bottom
+thirds empty, so it reads a size smaller than a square icon would.
+
+One trap, learned the hard way: SVG is parsed as XML, where `--` inside a
+comment is a syntax error that makes the whole file fail to render. An HTML
+page will parse it anyway, so an inline copy looks fine while the shipped
+icon is broken. Test icon files as files.
+
 **The floor (must not look like).** Gradient-mesh heroes; three-feature-card
 grids with icons; purple/indigo accents; screenshots in floating browser
 chrome; sparkle/rocket/lightning iconography; testimonial or logo walls;

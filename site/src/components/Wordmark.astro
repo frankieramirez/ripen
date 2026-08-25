@@ -1,0 +1,66 @@
+---
+import Glyph from "./Glyph.astro";
+
+/*
+ * The wordmark: the glyph, then lowercase `ripen` in IBM Plex Mono.
+ *
+ * Live text, not an outlined path. The mono is already downloaded and
+ * preloaded for the page's display type, so setting the word costs nothing,
+ * stays selectable, and is read aloud correctly. The one place that cannot
+ * rely on the reader having the font is the OG card (#119), which is drawn
+ * rather than rendered.
+ *
+ * A link by default, because in a nav that is what it is; `as="span"` for the
+ * places that only want the mark.
+ */
+
+interface Props {
+  href?: string;
+  as?: "a" | "span";
+  /** Cap height of the word, in CSS pixels. The glyph is sized off it. */
+  size?: number;
+  class?: string;
+}
+
+const {
+  href = "/",
+  as = "a",
+  size = 16,
+  class: className,
+}: Props = Astro.props;
+
+const Tag = as;
+const attrs = as === "a" ? { href, "aria-label": "Ripen, home" } : {};
+---
+
+<Tag class:list={["wordmark", className]} {...attrs} style={`--mark-size: ${size}px`}>
+  <Glyph size={size * 0.62} />
+  <span class="word">ripen</span>
+</Tag>
+
+<style>
+  /*
+   * The glyph is set to 62% of the word's font size, which lands the circles
+   * on the x-height of the mono rather than on its cap height. Aligning to
+   * the caps would leave the pair floating above a word that has no
+   * ascenders past the `i` dot.
+   */
+  .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    font-family: var(--font-mono);
+    font-size: var(--mark-size);
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  a.wordmark:hover .word {
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+    text-underline-offset: 0.3em;
+  }
+</style>
