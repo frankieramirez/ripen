@@ -176,9 +176,12 @@ const tokenNames = ["ground", "surface", "ink", "muted", "border", "ripe"] as co
       <p class="label">Display — IBM Plex Mono</p>
       <h1>A digest ripens. You apply.</h1>
       <p class="note">
-        Mono, medium, clamp(2.5rem, 7vw, 4.5rem), tight leading. The largest
-        type on the page is the monospace: it is the product's own voice, not
-        a decoration applied to it.
+        Mono, medium, clamp(1.75rem, 8.5vw, 4.5rem), tight leading. The
+        largest type on the page is the monospace: it is the product's own
+        voice, not a decoration applied to it. The floor is low because every
+        character in a monospace is 0.6em wide — the old 2.5rem floor put the
+        landing headline 42px wider than a 390px phone, and took the page off
+        the right edge with it.
       </p>
     </section>
 

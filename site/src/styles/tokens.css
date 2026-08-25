@@ -36,7 +36,15 @@
    * on the page is the monospace, which is the whole voice of the thing. The
    * serif carries body prose only.
    */
-  --step-hero: clamp(2.5rem, 7vw, 4.5rem);
+  /*
+   * The floor is 1.75rem, not the 2.5rem this scale was first drawn with.
+   * The hero line is "A digest ripens." set in a monospace, where every
+   * character is 0.6em wide: sixteen of them at 2.5rem is 384px, and a 390px
+   * phone has 342px between the frame's gutters. The old floor did not
+   * overflow the heading, it overflowed the document, and took the theme
+   * toggle and the whole page off the right edge with it.
+   */
+  --step-hero: clamp(1.75rem, 8.5vw, 4.5rem);
   --step-title: clamp(1.75rem, 3.5vw, 2.5rem);
   --step-heading: 1.25rem;
   --step-body: 1.0625rem; /* 17px */

@@ -1,0 +1,82 @@
+---
+/*
+ * A copyable snippet: a bare code block with a copy button in its corner.
+ *
+ * Only install paths get one. The hero terminal deliberately does not: it is
+ * evidence of what Ripen prints, not a thing to paste into a shell, and a
+ * copy button on it would invite the reader to run someone else's output.
+ *
+ * The button is written by the component but wired by one delegated listener
+ * on the page, so a page with six snippets still has one handler.
+ */
+
+interface Props {
+  /** Shown above the block, mono and tracked out. */
+  label: string;
+  /**
+   * The block as it is rendered, markup and all. A string rather than a slot:
+   * Astro drops whitespace-only text nodes between elements in a component
+   * slot, which silently folds a twelve-line compose file onto one line.
+   */
+  markup: string;
+  /** What the copy button puts on the clipboard, prompts stripped. */
+  copy: string;
+  class?: string;
+}
+
+const { label, markup, copy, class: className }: Props = Astro.props;
+---
+
+<figure class:list={["snippet", className]}>
+  <figcaption class="head">
+    <span class="label">{label}</span>
+    <button
+      type="button"
+      class="copy"
+      data-copy={copy}
+      aria-label={`Copy the ${label.toLowerCase()}`}
+    >
+      <span class="label" data-copy-text>Copy</span>
+    </button>
+  </figcaption>
+  <pre class="terminal"><code set:html={markup} /></pre>
+</figure>
+
+<style>
+  .snippet {
+    margin: 0 0 var(--space-6);
+  }
+
+  /*
+   * The button sits in the caption row, not over the block. A wide compose
+   * file scrolls sideways inside its own container, and anything floating on
+   * top of that container has the text sliding under it -- the reader loses
+   * the end of the line they are reading to a button.
+   */
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+
+  .copy {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: var(--space-1) var(--space-2);
+    cursor: pointer;
+    font: inherit;
+    flex: none;
+  }
+
+  .copy:hover {
+    border-color: var(--muted);
+    color: var(--ink);
+  }
+
+  .copy .label {
+    color: inherit;
+  }
+</style>

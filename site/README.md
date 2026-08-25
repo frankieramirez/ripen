@@ -135,14 +135,34 @@ section — the Transaction walkthrough is the feature list.
 1. **Hero.** "A digest ripens. You apply." at largest type. Sub-headline:
    *"Tags move. Ripen watches what `:latest` actually points at, waits for a
    new image to prove itself, and updates one service — only where you said it
-   may."* The artifact is a static terminal block showing **two commands**:
-   `ripen status` with the amber `"mature":true` token, then `ripen explain`
-   with the blockers array — it is ripe, and it still will not act until you
-   say so. (This supersedes the single-block wording in the inventory and the
-   visual brief.) Designed against today's JSON envelope; `--pretty`
-   ([#107](https://github.com/frankieramirez/ripen/issues/107)) now exists, so
-   swapping the block is a one-line edit here. Primary CTA: the monitor-mode
-   run command, the zero-risk action. GitHub is a quiet secondary.
+   may."* The artifact is a static terminal block showing **two commands** —
+   it is ripe, and it still will not act until you say so. (This supersedes
+   the single-block wording in the inventory and the visual brief.) Primary
+   CTA: the monitor-mode run command, the zero-risk action. GitHub is a quiet
+   secondary.
+
+   The two commands are `ripen candidates --pretty` and
+   `ripen explain media --pretty`, and **the block is real output**, produced
+   by building the binary, seeding a state database with a baseline and two
+   sightings of a second digest, and running the two commands against it.
+   Nothing is trimmed, re-indented or invented; the digests are full 64-character
+   digests, because that is what Ripen prints. Two departures from the earlier
+   wording, both settled on
+   [Landing: hero, warning, install](https://github.com/frankieramirez/ripen/issues/115):
+
+   - **`--pretty`, not the JSON envelope.** `ripen status` prints its envelope
+     as a **single unindented line**. The pretty-printed JSON in the earlier
+     draft was therefore never something Ripen prints — reproducing it honestly
+     needs `| jq`, which puts a second tool in the story the hero is telling.
+     `--pretty` ([#107](https://github.com/frankieramirez/ripen/issues/107))
+     shipped, and this is the swap that was anticipated.
+   - **`candidates`, not `status`.** `ripen status --pretty` is 31 lines for a
+     single service, most of it effective policy and version metadata, and its
+     candidate block repeats what `explain` shows immediately below.
+     `candidates` answers exactly the question the headline asks, in 8 lines,
+     and carries the amber `mature: true`. Trimming `status` to fit was the
+     other option and was rejected: on a page whose argument is evidence, an
+     abbreviated payload is a mocked-up one.
 2. **The warning.** "Ripen recreates containers. Start in monitor mode." Just
    below the fold, with the install block. It does real work: it makes monitor
    mode the obvious first step, which is what the CTA wants anyway.
@@ -186,6 +206,25 @@ warning box stacks vertically at phone width; the two-command hero makes the
 page taller than the inventory implied, so the terminal block gets generous
 vertical room. The comparison table and terminal scroll inside their own
 containers on mobile.
+
+Found in the browser while building sections 1–3, and applied:
+
+- **The primary CTA sits above the terminal, not below it.** The real block
+  runs 32 lines, which puts anything after it well past the fold at 1440×900.
+  The zero-risk command is the one element that cannot be down there. The
+  inventory fixes what the hero contains, not the order it is stacked in.
+- **The warning carries no amber.** Amber means ripe and means only that; a
+  warning painted in the page's one accent would teach the reader the wrong
+  thing about every amber token they meet afterwards. It takes its weight from
+  a `muted` left rule and the type instead.
+- **The hero terminal reveals in five beats over about a second, switched on
+  by a script**, not by the stylesheet alone. The beats start visible; only a
+  browser that has run that line hides them in order to animate them in.
+  Content that is invisible until an animation fires is content a failed
+  animation deletes.
+- **Copy buttons sit in the caption row, above the block, never floating over
+  it.** A wide snippet scrolls sideways inside its own container, and an
+  overlaid button eats the end of whatever line the reader has scrolled to.
 
 ## Visual direction
 
@@ -242,8 +281,17 @@ than quietly making this document wrong.
 
 **Typography.** IBM Plex Mono for display, terminal, labels, nav, and buttons
 — the largest type on the page is the mono. Source Serif 4 for body. Hero:
-mono, medium, `clamp(2.5rem, 7vw, 4.5rem)`, tight leading. Body: serif,
+mono, medium, `clamp(1.75rem, 8.5vw, 4.5rem)`, tight leading. Body: serif,
 ~17px/1.7. Labels: mono, small, tracked out, `muted`.
+
+The hero clamp was `clamp(2.5rem, 7vw, 4.5rem)` until the headline was set in
+a browser. Every character in a monospace is 0.6em wide, so "A digest ripens."
+at the old 2.5rem floor is 384px — against the 342px a 390px phone leaves
+between the frame's gutters. It did not overflow the heading, it overflowed
+the document, and took the theme toggle and the whole page off the right edge
+with it. A proportional face would have absorbed this; a monospace display
+face cannot, which makes the floor a real constraint rather than a taste
+setting.
 
 Self-hosted from `site/public/fonts/`, four files, **89.0 KB total**:
 
