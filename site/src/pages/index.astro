@@ -424,9 +424,10 @@ services:
    * reader who pastes `$ ripen run` into a shell gets an error, and blames
    * the page.
    *
-   * The clipboard API is not available on an insecure origin and can be
-   * refused outright, so the failure path says what happened instead of
-   * silently doing nothing.
+   * The clipboard API is absent on an insecure origin and can be refused
+   * outright even where it exists. Both paths tell the reader to copy it
+   * themselves rather than leaving a button that does nothing and says
+   * nothing.
    */
   document.addEventListener("click", (event) => {
     const target = event.target as HTMLElement | null;
@@ -444,9 +445,17 @@ services:
       }, 1600);
     };
 
-    navigator.clipboard?.writeText(text).then(
+    // `navigator.clipboard` is absent on an insecure origin, and optional
+    // chaining would short-circuit the whole call including the .then --
+    // leaving a button that does nothing and says nothing. Check for it.
+    if (!navigator.clipboard) {
+      say("Select and copy");
+      return;
+    }
+
+    navigator.clipboard.writeText(text).then(
       () => say("Copied"),
-      () => say("Press ⌘C"),
+      () => say("Select and copy"),
     );
   });
 </script>
