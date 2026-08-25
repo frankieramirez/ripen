@@ -1,0 +1,72 @@
+---
+// Three states, cycled in one control: follow the system, dark, light.
+//
+// The control reports what the page is doing now rather than what clicking
+// it will do -- "Theme: system" is checkable against the page in front of
+// you, where "Switch to dark" is a promise the reader has to test.
+---
+
+<button id="theme-toggle" type="button" class="theme-toggle">
+  <span class="label" id="theme-toggle-text">Theme: system</span>
+</button>
+
+<style>
+  .theme-toggle {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .theme-toggle:hover {
+    border-color: var(--muted);
+    color: var(--ink);
+  }
+
+  .theme-toggle .label {
+    color: inherit;
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    var KEY = "ripen-theme";
+    var order = ["system", "dark", "light"];
+    var button = document.getElementById("theme-toggle");
+    var text = document.getElementById("theme-toggle-text");
+    if (!button || !text) return;
+
+    function read() {
+      try {
+        var stored = localStorage.getItem(KEY);
+        return stored === "dark" || stored === "light" ? stored : "system";
+      } catch (e) {
+        return "system";
+      }
+    }
+
+    function apply(mode) {
+      if (mode === "system") {
+        delete document.documentElement.dataset.theme;
+        try {
+          localStorage.removeItem(KEY);
+        } catch (e) {}
+      } else {
+        document.documentElement.dataset.theme = mode;
+        try {
+          localStorage.setItem(KEY, mode);
+        } catch (e) {}
+      }
+      text.textContent = "Theme: " + mode;
+      button.setAttribute("aria-label", "Theme: " + mode + ". Change theme.");
+    }
+
+    apply(read());
+
+    button.addEventListener("click", function () {
+      apply(order[(order.indexOf(read()) + 1) % order.length]);
+    });
+  })();
+</script>

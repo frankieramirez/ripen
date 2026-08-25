@@ -1,18 +1,72 @@
 ---
-// Placeholder. The landing page is built in #115 and #116 against the design
-// system from #113; this page exists so the toolchain has something to build
-// and the deploy path (#112) has something to serve.
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+
+// Still the placeholder. The landing page is built in #115 and #116; this
+// page is now on the design system rather than unstyled, so what the deploy
+// serves is honest about where the work has got to.
+//
+// The specimen at /design is where the system itself is shown.
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ripen</title>
-  </head>
-  <body>
-    <h1>ripen</h1>
-    <p>A digest ripens. You apply.</p>
-    <p><a href="https://github.com/frankieramirez/ripen">github.com/frankieramirez/ripen</a></p>
-  </body>
-</html>
+<BaseLayout
+  title="Ripen"
+  description="Ripen updates container images and refuses to guess."
+>
+  <main class="frame">
+    <header class="head">
+      <p class="label">ripen.dev</p>
+      <ThemeToggle />
+    </header>
+
+    <h1>A digest ripens. You apply.</h1>
+
+    <p class="lede">
+      Tags move. Ripen watches what <code>:latest</code> actually points at,
+      waits for a new image to prove itself, and updates one service — only
+      where you said it may.
+    </p>
+
+    <p class="note">
+      This page is a placeholder. The site is being built in the open at {" "}
+      <a href="https://github.com/frankieramirez/ripen"
+        >github.com/frankieramirez/ripen</a
+      >.
+    </p>
+  </main>
+</BaseLayout>
+
+<style>
+  .frame {
+    max-width: var(--frame);
+    margin: 0 auto;
+    padding: var(--space-16) var(--space-6) var(--space-24);
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-16);
+  }
+
+  .head .label {
+    margin: 0;
+  }
+
+  .lede {
+    margin-top: var(--space-8);
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: var(--step-small);
+    margin-top: var(--space-12);
+  }
+
+  code {
+    font-size: 0.9em;
+  }
+</style>

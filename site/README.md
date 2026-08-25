@@ -51,7 +51,15 @@ Decided on
   major is the thing Cloudflare moves, and a full pin only rots. Scaffolded
   on Astro 7 and Starlight 0.41 in
   [Scaffold Astro in `site/` and path-filter CI](https://github.com/frankieramirez/ripen/issues/111);
-  `npm run build`, `dev`, `preview` and `check` are the scripts.
+  `npm run build`, `dev`, `preview` and `check` are the scripts. `check` was
+  declared there but its dependency was not installed, so it errored on first
+  use; `@astrojs/check` and `typescript` are devDependencies now.
+
+  Two routes today: `/`, still the placeholder the landing tickets fill in,
+  and `/design`, the specimen page that renders the design system and computes
+  its own contrast table. `/design` is linked from nowhere and is where the
+  review checkpoint can look at the system without the landing page competing
+  for attention.
 - **Cloudflare Workers Static Assets**, deployed from GitHub Actions by
   `wrangler deploy`, authenticated by a Cloudflare API token stored as a repo
   secret and scoped to Workers on this account. Not the Cloudflare GitHub App
@@ -200,14 +208,66 @@ AA contrast or better for body text in both.
 | `ground` | `#171310` | `#FAFAF8` |
 | `surface` | `#201B16` | `#FFFFFF` |
 | `ink` | `#E8E3DC` | `#1C1814` |
-| `muted` | `#8A8178` | `#6E675F` |
+| `muted` | `#948B82` | `#6E675F` |
 | `border` | `#332C25` | `#E2DED8` |
-| `ripe` | `#E09520` | `#B36F0A` |
+| `ripe` | `#E09520` | `#9F630A` |
+
+Two of these moved when
+[Design system: tokens, themes, and type](https://github.com/frankieramirez/ripen/issues/113)
+measured them. Dark `muted` was `#8A8178`, which is 4.47 against `surface` —
+under AA for the small tracked-out labels it exists to set. Light `ripe` was
+`#B36F0A`, which is 3.87 against `ground`, and `ripe`'s one job is the amber
+token in the terminal block, which is small text. Both were failing exactly
+where the token is actually used, so both were darkened or lightened to the
+nearest value that clears 4.5 with margin. The visible cost is that light
+`ripe` reads closer to ochre than to amber; the dark theme, which is the
+native one, is unchanged.
+
+**Measured contrast**, computed from the values above and rendered on
+`/design` at build time. AA is 4.5 for normal text, AAA is 7. Nothing on the
+site claims the 3.0 large-text allowance.
+
+| Pair | Dark | Light |
+| --- | --- | --- |
+| `ink` on `ground` | 14.47 (AAA) | 16.88 (AAA) |
+| `ink` on `surface` | 13.38 (AAA) | 17.65 (AAA) |
+| `muted` on `ground` | 5.52 (AA) | 5.33 (AA) |
+| `muted` on `surface` | 5.10 (AA) | 5.57 (AA) |
+| `ripe` on `ground` | 7.47 (AAA) | 4.71 (AA) |
+| `ripe` on `surface` | 6.90 (AA) | 4.93 (AA) |
+
+The `/design` page computes this table from the token values rather than
+repeating them, so a palette edit that breaks a ratio shows up there rather
+than quietly making this document wrong.
 
 **Typography.** IBM Plex Mono for display, terminal, labels, nav, and buttons
 — the largest type on the page is the mono. Source Serif 4 for body. Hero:
 mono, medium, `clamp(2.5rem, 7vw, 4.5rem)`, tight leading. Body: serif,
 ~17px/1.7. Labels: mono, small, tracked out, `muted`.
+
+Self-hosted from `site/public/fonts/`, four files, **89.0 KB total**:
+
+| File | Size | |
+| --- | --- | --- |
+| `ibm-plex-mono-400-latin.woff2` | 9.8 KB | static |
+| `ibm-plex-mono-500-latin.woff2` | 9.8 KB | static |
+| `source-serif-4-latin.woff2` | 49.7 KB | variable, `wght` 200–900 |
+| `source-serif-4-italic-latin.woff2` | 19.7 KB | static 400 |
+
+Both families are OFL 1.1; the licences are committed beside them.
+
+Three decisions inside that number. **Subsetted by unicode range (latin), not
+by observed glyphs** — the docs pipeline globs arbitrary markdown, so a subset
+fitted to today's copy would start dropping characters the first time someone
+writes a word it had not seen. **The upright serif is the variable file**,
+which covers body and bold out of one download; asking Google for 400 and 600
+separately returns the same file twice. **The italic is the static 400 cut**,
+not the variable italic, which costs 51 KB against 20 KB — the extra 31 KB
+buys correct weights for bold italic, which prose barely uses and which
+`site/` ships to every `go install`. Bold italic is synthesised.
+
+The tracked tree went from 1.08 MB to 1.23 MB, of which 89 KB is the fonts.
+That is comfortable, so build-time fetching stays off the table.
 
 **The terminal treatment.** No chrome — a bare block, 1px `border`, on
 `surface`; no fake title bar or traffic lights. Neutrals-only syntax: keys
