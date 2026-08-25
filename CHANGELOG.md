@@ -8,7 +8,7 @@ are the public surface, and breaking any of them needs a major bump.
 
 Each release's section here is what GitHub shows as the release notes.
 
-## [Unreleased]
+## [1.0.0] - 2026-08-26
 
 ### Added
 
@@ -59,4 +59,5 @@ Each release's section here is what GitHub shows as the release notes.
   user-owned private repositories, so a release is now refused before it
   publishes anything rather than after.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/main...HEAD
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/frankieramirez/ripen/releases/tag/v1.0.0
