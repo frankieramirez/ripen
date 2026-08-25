@@ -26,7 +26,7 @@
       # constant is what `ripen version` reports and it has to move with the
       # annotated tag. The release workflow refuses a tag that disagrees with
       # it, the same way it refuses a tag with no changelog section.
-      version = "0.0.0-unreleased";
+      version = "1.0.0";
 
       # Both fallbacks are the values internal/version already ships, so a
       # source with no git metadata reports exactly what a plain `go build`
