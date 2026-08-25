@@ -59,9 +59,30 @@ Decided on
   `release.yaml` fires on tag push), not Workers Builds, not Pages (Cloudflare
   steers new projects off it). The workflow's GitHub token needs no write
   permissions.
-- **Deploy on `main` only.** No preview deploys in v1. If a shareable preview
-  is ever wanted, a PR-triggered `wrangler versions upload` job adds per-deploy
-  preview URLs — add it when the lack is felt.
+
+  The Worker is `ripen-site`, assets-only: `site/wrangler.jsonc` declares no
+  `main`, so nothing runs in the request path and the build directory is what
+  the edge serves. It also declares `workers_dev` rather than leaving it to
+  default, because Cloudflare re-asserts routing state on every deploy — a
+  route toggled in the dashboard and left out of the config comes back on the
+  next merge. `wrangler` is a devDependency, so the version that deploys is
+  the one in `package-lock.json` and not whatever `npx` resolves that morning.
+
+  Two secrets, not one. `CLOUDFLARE_ACCOUNT_ID` is needed because the token
+  carries a single permission row and cannot enumerate accounts, so `wrangler`
+  has no way to discover which account to deploy to.
+- **Deploy on `main` only.** The `deploy` job in `ci.yaml` runs on push to
+  `main`, gated on the `site` build passing, so a broken build never reaches
+  the edge and the two failures stay distinguishable. It stamps the commit
+  sha into `dist/_deploy.txt` after the build, then reads that path back off
+  the served URL until it matches — retried, because `wrangler` returns when
+  the upload is accepted, not when the edge has caught up. A 200 alone would
+  not be a proof: this Worker has served *something* since it was
+  provisioned. Serialised by a `concurrency`
+  group, queueing rather than cancelling, so two quick merges cannot leave the
+  live site older than `main`. No preview deploys in v1. If a shareable
+  preview is ever wanted, a PR-triggered `wrangler versions upload` job adds
+  per-deploy preview URLs — add it when the lack is felt.
 - **DNS.** `ripen.dev` sits on a live Cloudflare zone (nameservers moved from
   Namecheap 2026-08-25, while the domain served nothing). `.dev` is
   HSTS-preloaded: HTTPS is mandatory, and a certificate gap is an outage, not
