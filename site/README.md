@@ -410,7 +410,12 @@ That is comfortable, so build-time fetching stays off the table.
 
 **The terminal treatment.** No chrome — a bare block, 1px `border`, on
 `surface`; no fake title bar or traffic lights. Neutrals-only syntax: keys
-`muted`, values `ink`, amber on exactly one token, `"mature":true`. One
+`muted`, values `ink`, amber on exactly one token, `mature: true` — **one
+token, not one occurrence**. The hero runs two commands and both report
+maturity, so the amber lands twice on the landing; the rule governs what amber
+is allowed to *mean*, not how many times it may appear, and trimming the
+second one would make a block of real output into a lie. Settled at
+[the review checkpoint](https://github.com/frankieramirez/ripen/issues/120). One
 orchestrated load (~1s, plays once, never loops; `prefers-reduced-motion`
 gets the static version). No copy button on the hero — it is evidence, not a
 snippet.
@@ -655,6 +660,15 @@ built in [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues
   an `!important`. Nothing is duplicated per theme: every value is a
   `var(--token)`, so the three-state cascade in `tokens.css` decides both
   themes at once.
+
+  **Amber is Starlight's accent, and that is an exemption granted on purpose.**
+  `--sl-color-accent`, `-high`, `-text-accent` and `-bg-accent` all resolve to
+  `--ripe`, which paints the current sidebar entry, the current entry in the
+  right-hand table of contents, and the GitHub icon. On the docs side amber
+  therefore means "you are here" rather than "ripe" — the one place the
+  landing's rule is not enforced. The alternative is a docs surface with no
+  accent at all, since the palette has six tokens and the other five are
+  ground, surface, ink, muted and border. Weighed and accepted at [the review checkpoint](https://github.com/frankieramirez/ripen/issues/120).
 
   Three components are overridden, and only one of them is cosmetic.
   `SiteTitle` is the wordmark. `ThemeProvider` and `ThemeSelect` are the
