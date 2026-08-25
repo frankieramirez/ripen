@@ -2,38 +2,197 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import Wordmark from "../components/Wordmark.astro";
+import Snippet from "../components/Snippet.astro";
 
-// Still the placeholder. The landing page is built in #115 and #116; this
-// page is now on the design system rather than unstyled, so what the deploy
-// serves is honest about where the work has got to.
+// Sections 1-3 of the seven in site/README.md: hero, warning, install.
+// Sections 4-7 -- the Transaction walkthrough, the non-goals, the comparison
+// and the footer -- are #116.
 //
-// The specimen at /design is where the system itself is shown.
+// Everything in the terminal block below is real output. It was produced by
+// building this repo's binary, seeding a state database with a baseline and
+// two sightings of a second digest, and running the two commands against it.
+// Nothing is trimmed, re-indented or invented. On a page whose whole argument
+// is evidence, a mocked-up payload would be the one lie that mattered.
+
+const COMPOSE = `services:
+  ripen:
+    image: ghcr.io/frankieramirez/ripen:latest
+    command: ["daemon", "--config", "/config/policy.yaml"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./policy.yaml:/config/policy.yaml:ro
+      - ./data:/data
+      - /srv/media/compose.yaml:/srv/media/compose.yaml   # only for compose backends`;
+
+// The same twelve lines with the keys muted and the comment dimmed. The copy
+// button hands over COMPOSE itself, so what lands in the clipboard is a file
+// that parses rather than one carrying markup or a shell prompt.
+const COMPOSE_MARKUP = `services:
+  ripen:
+    <span class="k">image</span>: ghcr.io/frankieramirez/ripen:latest
+    <span class="k">command</span>: ["daemon", "--config", "/config/policy.yaml"]
+    <span class="k">read_only</span>: true
+    <span class="k">cap_drop</span>: [ALL]
+    <span class="k">security_opt</span>: [no-new-privileges:true]
+    <span class="k">volumes</span>:
+      - ./policy.yaml:/config/policy.yaml:ro
+      - ./data:/data
+      - /srv/media/compose.yaml:/srv/media/compose.yaml   <span class="c"># only for compose backends</span>`;
+
+const prompt = (command: string) =>
+  `<span class="prompt">$</span> ${command}`;
+
+const MONITOR = "ripen run --mode monitor --config policy.yaml";
+const GO_INSTALL = "go install github.com/frankieramirez/ripen/cmd/ripen@latest";
+const NIX_RUN = "nix run github:frankieramirez/ripen -- version";
 ---
 
 <BaseLayout
-  title="Ripen"
-  description="Ripen updates container images and refuses to guess."
+  title="Ripen — fail-closed image updates for Portainer and Compose"
+  description="Ripen watches what :latest actually points at, waits for a new image to prove itself, and updates one service — only where you said it may."
 >
-  <main class="frame">
-    <header class="head">
-      <Wordmark />
-      <ThemeToggle />
-    </header>
+  <header class="frame head">
+    <Wordmark />
+    <ThemeToggle />
+  </header>
 
-    <h1>A digest ripens. You apply.</h1>
+  <main>
+    <section class="frame hero">
+      <h1>A digest ripens.<br />You apply.</h1>
 
-    <p class="lede">
-      Tags move. Ripen watches what <code>:latest</code> actually points at,
-      waits for a new image to prove itself, and updates one service — only
-      where you said it may.
-    </p>
+      <p class="lede">
+        Tags move. Ripen watches what <code>:latest</code> actually points at,
+        waits for a new image to prove itself, and updates one service — only
+        where you said it may.
+      </p>
 
-    <p class="note">
-      This page is a placeholder. The site is being built in the open at {" "}
-      <a href="https://github.com/frankieramirez/ripen"
-        >github.com/frankieramirez/ripen</a
-      >.
-    </p>
+      <div class="cta">
+        <a class="run" href="#install">
+          <span class="prompt">$</span> ripen run --mode monitor
+        </a>
+        <a class="secondary" href="https://github.com/frankieramirez/ripen">
+          Source on GitHub
+        </a>
+      </div>
+
+      <!--
+        One session, two commands, in the order the argument needs them: the
+        digest is ripe, and Ripen still will not touch it. The reveal runs
+        once on load and never again; there is no loop, and no second chance
+        to see it, which is the point of a page that is not a demo.
+      -->
+      <!--
+        The reveal is switched on by this script, not by the stylesheet, and
+        the script runs before the block below is parsed. The beats start at
+        full opacity; only a browser that has run this line hides them to
+        animate them in. Content that is invisible until an animation fires is
+        content that a failed animation deletes.
+      -->
+      <script is:inline>
+        document.documentElement.classList.add("motion");
+      </script>
+
+      <div class="evidence">
+        <pre class="terminal"><code><span class="beat" style="--beat: 0"><span class="prompt">$</span> ripen candidates --pretty</span>
+<span class="beat" style="--beat: 1">candidates:
+  docker-compose/media: sha256:b91a7c2f5d8e4a1b6c3d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b
+    <span class="k">first seen</span>: 2026-08-23T04:11:07Z
+    <span class="k">last seen</span>: 2026-08-25T04:10:58Z
+    <span class="k">observations</span>: 2
+    <span class="k">mature</span>: <span class="ripe">true</span>
+    <span class="k">mature at</span>: 2026-08-24T04:11:07Z</span>
+
+<span class="beat" style="--beat: 2"><span class="prompt">$</span> ripen explain media --pretty</span>
+<span class="beat" style="--beat: 3"><span class="k">stack</span>: media
+<span class="k">backend</span>: docker-compose
+<span class="k">enabled</span>: true
+<span class="k">excluded</span>: false
+<span class="k">mode</span>: monitor
+<span class="k">circuit breaker</span>: closed
+<span class="k">git path</span>: none
+<span class="k">expected services</span>: jellyfin
+services:
+  docker-compose/media:
+    <span class="k">enabled</span>: true
+    <span class="k">auto apply</span>: false
+    <span class="k">health</span>: http
+      <span class="k">target</span>: http://127.0.0.1:8096/health
+      <span class="k">accepted status</span>: 200
+    <span class="k">baseline</span>: sha256:6f2c1d4e8a7b3c5d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f
+    <span class="k">candidate</span>: sha256:b91a7c2f5d8e4a1b6c3d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b
+      <span class="k">first seen</span>: 2026-08-23T04:11:07Z
+      <span class="k">last seen</span>: 2026-08-25T04:10:58Z
+      <span class="k">observations</span>: 2
+      <span class="k">mature</span>: <span class="ripe">true</span>
+      <span class="k">mature at</span>: 2026-08-24T04:11:07Z
+    <span class="k">pending proposal</span>: none</span>
+<span class="beat" style="--beat: 4">    blockers:
+      - the configured mode is monitor
+      - auto_apply is off for this service</span></code></pre>
+      </div>
+    </section>
+
+    <!--
+      The warning is neutral on purpose. Amber means ripe, and it means only
+      that; a warning painted in the one colour the page reserves for "ready"
+      would teach the reader the wrong thing about every other amber token
+      they meet. It gets weight from the rule and the type instead.
+    -->
+    <section class="frame warn">
+      <div class="warn-box">
+        <p class="label">Before you start</p>
+        <div class="warn-body">
+          <h2>Ripen recreates containers.<br />Start in monitor mode.</h2>
+          <p>
+            Monitor mode observes and records; it changes nothing. Read what it
+            writes down for a few days, and only then decide whether any stack
+            should carry <code>auto_apply: true</code>. Nothing moves until you
+            say so twice — once in the policy file, once per stack.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="frame install" id="install">
+      <h2>Install</h2>
+      <p class="measure">
+        Ripen needs a policy file and somewhere to keep its state. Nothing
+        else. It never mounts the Docker socket, so most people run it as a
+        container beside the stacks it watches.
+      </p>
+
+      <Snippet label="compose.yaml" markup={COMPOSE_MARKUP} copy={COMPOSE} />
+
+      <p class="measure note">
+        Three of those lines are the security argument rather than
+        boilerplate: a read-only root, no capabilities, no privilege
+        escalation. The volumes below them are the entire surface — a policy
+        file, a directory for state, and the one compose file you told it
+        about. There is no socket mount, and no flag that adds one.
+      </p>
+
+      <Snippet
+        label="Then watch, and only watch"
+        markup={prompt(MONITOR)}
+        copy={MONITOR}
+      />
+
+      <details class="other">
+        <summary><span class="label">Other ways to install</span></summary>
+        <div class="other-body">
+          <Snippet label="Go" markup={prompt(GO_INSTALL)} copy={GO_INSTALL} />
+          <Snippet label="Nix" markup={prompt(NIX_RUN)} copy={NIX_RUN} />
+          <p class="measure note">
+            Or take a signed archive from the <a
+              href="https://github.com/frankieramirez/ripen/releases">releases
+              page</a>. Every release is built by the tag it is named after and
+            ships with its checksums.
+          </p>
+        </div>
+      </details>
+    </section>
   </main>
 </BaseLayout>
 
@@ -41,7 +200,8 @@ import Wordmark from "../components/Wordmark.astro";
   .frame {
     max-width: var(--frame);
     margin: 0 auto;
-    padding: var(--space-16) var(--space-6) var(--space-24);
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
   }
 
   .head {
@@ -50,20 +210,243 @@ import Wordmark from "../components/Wordmark.astro";
     justify-content: space-between;
     gap: var(--space-6);
     flex-wrap: wrap;
-    margin-bottom: var(--space-16);
+    padding-top: var(--space-8);
+  }
+
+  /* --- 1. Hero ------------------------------------------------------ */
+
+  .hero {
+    padding-top: var(--space-24);
+    padding-bottom: var(--space-16);
   }
 
   .lede {
+    margin-top: var(--space-6);
+    font-size: 1.25rem;
+    max-width: var(--measure);
+  }
+
+  /*
+   * The primary action sits above the evidence, not below it. The block
+   * beneath runs thirty-two lines because that is what the two commands
+   * really print, which puts anything after it well past the fold; the
+   * zero-risk command is the one thing that cannot afford to be down there.
+   */
+  .cta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    flex-wrap: wrap;
     margin-top: var(--space-8);
+  }
+
+  .run {
+    font-family: var(--font-mono);
+    font-size: var(--step-body);
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: var(--space-3) var(--space-4);
+    text-decoration: none;
+  }
+
+  .run:hover {
+    border-color: var(--muted);
+  }
+
+  .run .prompt {
+    color: var(--muted);
+    user-select: none;
+  }
+
+  .secondary {
+    font-family: var(--font-mono);
+    font-size: var(--step-small);
+    color: var(--muted);
+  }
+
+  .secondary:hover {
+    color: var(--ink);
+  }
+
+  .evidence {
+    margin-top: var(--space-12);
+  }
+
+  /* --- 2. The warning ----------------------------------------------- */
+
+  .warn {
+    padding-top: var(--space-16);
+    padding-bottom: var(--space-16);
+  }
+
+  .warn-box {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    background: var(--surface);
+    padding: var(--space-6);
+  }
+
+  .warn-box h2 {
+    font-size: var(--step-heading);
+    line-height: 1.4;
+    letter-spacing: 0;
+    margin-bottom: var(--space-3);
+  }
+
+  .warn-body p {
+    margin: 0;
+  }
+
+  /* --- 3. Install --------------------------------------------------- */
+
+  .install {
+    padding-bottom: var(--space-24);
+  }
+
+  .install h2 {
+    margin-bottom: var(--space-6);
+  }
+
+  .measure {
+    max-width: var(--measure);
   }
 
   .note {
     color: var(--muted);
     font-size: var(--step-small);
-    margin-top: var(--space-12);
+    margin-top: var(--space-4);
+    margin-bottom: var(--space-12);
   }
 
-  code {
-    font-size: 0.9em;
+  .other {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-6);
+  }
+
+  .other summary {
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .other summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .other summary .label {
+    color: var(--muted);
+  }
+
+  .other summary:hover .label {
+    color: var(--ink);
+  }
+
+  /* A closed disclosure that looks like a heading is a dead end; the arrow
+     is the only thing telling the reader there is more behind it. */
+  .other summary .label::before {
+    content: "+ ";
+  }
+
+  .other[open] summary .label::before {
+    content: "− ";
+  }
+
+  .other-body {
+    padding-top: var(--space-6);
+  }
+
+  .terminal .c {
+    color: var(--muted);
+  }
+
+  /*
+   * The orchestrated load: five beats over about a second, once. Each beat is
+   * a group of lines that belong together -- a command, then its output -- so
+   * the block assembles the way a session does rather than typing itself out
+   * character by character, which would be theatre.
+   *
+   * The lines are in the document either way, and visible by default. The
+   * animation only moves them; with JavaScript off, CSS unloaded, or motion
+   * reduced, the reader gets the finished block immediately, which is the
+   * version that matters.
+   */
+  :global(html.motion) .beat {
+    animation: settle 320ms ease-out both;
+    animation-delay: calc(var(--beat) * 200ms);
+  }
+
+  @keyframes settle {
+    from {
+      opacity: 0;
+      transform: translateY(0.35em);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(html.motion) .beat {
+      animation: none;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    .hero {
+      padding-top: var(--space-12);
+    }
+
+    h1 {
+      /* The break is set for the desktop measure; at phone width the line
+         wraps on its own and the manual break leaves a short first line. */
+      display: block;
+    }
+
+    .cta {
+      align-items: stretch;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    .run {
+      text-align: center;
+    }
   }
 </style>
+
+<script>
+  /*
+   * One delegated listener for every copy button on the page.
+   *
+   * The button copies the `data-copy` string rather than the block's own text
+   * because the block carries a `$` prompt that must not travel with it: a
+   * reader who pastes `$ ripen run` into a shell gets an error, and blames
+   * the page.
+   *
+   * The clipboard API is not available on an insecure origin and can be
+   * refused outright, so the failure path says what happened instead of
+   * silently doing nothing.
+   */
+  document.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement | null;
+    const button = target?.closest<HTMLElement>("[data-copy]");
+    if (!button) return;
+
+    const text = button.dataset.copy;
+    const feedback = button.querySelector<HTMLElement>("[data-copy-text]");
+    if (!text || !feedback) return;
+
+    const say = (message: string) => {
+      feedback.textContent = message;
+      window.setTimeout(() => {
+        feedback.textContent = "Copy";
+      }, 1600);
+    };
+
+    navigator.clipboard?.writeText(text).then(
+      () => say("Copied"),
+      () => say("Press ⌘C"),
+    );
+  });
+</script>
