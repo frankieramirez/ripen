@@ -54,12 +54,12 @@ Full runbook in [Plan the rework migration](https://github.com/frankieramirez/ri
 
 ## Phase 6 — the flip
 
-- [ ] Enable the OpenSSF Scorecard GitHub Action (the badge is dead without it) ([#14](https://github.com/frankieramirez/ripen/issues/14)).
+- [x] Enable the OpenSSF Scorecard GitHub Action (the badge is dead without it) ([#14](https://github.com/frankieramirez/ripen/issues/14)).
 - [x] Set repo description to the hero line, 13 topics per [#14](https://github.com/frankieramirez/ripen/issues/14). The social preview card was optional and is skipped.
-- [ ] Repo settings: Discussions **off**, blank issues off (via `config.yml`), private vulnerability reporting on.
-- [ ] Flip repo visibility to public. (Not gated on a real Apply Transaction — the clean soak is the gate.)
-- [ ] Tag annotated `v1.0.0` on `main`; verify the release workflow publishes binaries, both registries, signatures/SBOM/provenance.
-- [ ] Verify `go install github.com/frankieramirez/ripen/cmd/ripen@v1.0.0`, `nix run github:frankieramirez/ripen`, and both registry pulls.
+- [x] Repo settings: Discussions **off**, blank issues off (via `config.yml`), private vulnerability reporting on.
+- [x] Flip repo visibility to public. (Not gated on a real Apply Transaction — the clean soak is the gate.)
+- [x] Tag annotated `v1.0.0` on `main`; verify the release workflow publishes binaries, both registries, signatures/SBOM/provenance. Green on the first attempt.
+- [x] Verify `go install github.com/frankieramirez/ripen/cmd/ripen@v1.0.0`, `nix run github:frankieramirez/ripen`, and both registry pulls. All four work; `go install` builds and runs but reports `dev`/`none`, because nothing stamps the ldflags on that path — see the follow-up issue.
 
 ## Phase 7 — post-flip follow-ups
 
