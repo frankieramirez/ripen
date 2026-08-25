@@ -1,0 +1,200 @@
+/*
+ * Faces, reset, and the base element styling every page inherits.
+ *
+ * The fonts are self-hosted, subsetted to latin, and committed. A Google
+ * Fonts request on every visit would contradict the same argument that chose
+ * no-cookie analytics -- there is no point refusing a cookie and then telling
+ * a third party about every reader anyway.
+ *
+ * Subsetted by unicode range, not by the glyphs this site happens to use
+ * today. The docs pipeline globs arbitrary markdown out of the root docs/
+ * directory, so a subset fitted to the landing page would start dropping
+ * glyphs the first time someone writes a word it had not seen.
+ *
+ * `swap` rather than `block`: the fallback stacks are metrically close
+ * enough that a flash of fallback text reads better than a flash of nothing,
+ * and the mono fallback is whatever the reader's own terminal font is, which
+ * is on-voice by accident.
+ */
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-400-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-500-latin.woff2") format("woff2");
+}
+
+/* Variable, 200-900 on the weight axis, so body and bold come out of one
+   file. Asking Google for 400 and 600 separately returns this same file
+   twice. */
+@font-face {
+  font-family: "Source Serif 4";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("/fonts/source-serif-4-latin.woff2") format("woff2");
+}
+
+/* Static 400, deliberately. The variable italic is 51 KB against this one's
+   20 KB, and the 31 KB buys correct weights for bold italic -- which prose
+   almost never uses and which site/ ships to every `go install`. Bold italic
+   is synthesised. */
+@font-face {
+  font-family: "Source Serif 4";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/source-serif-4-italic-latin.woff2") format("woff2");
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: var(--step-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Display, terminal, labels, nav, buttons: all mono. */
+h1,
+h2,
+h3,
+h4,
+code,
+pre,
+kbd,
+samp,
+button,
+nav {
+  font-family: var(--font-mono);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 500;
+  margin: 0;
+}
+
+h1 {
+  font-size: var(--step-hero);
+  line-height: var(--leading-hero);
+  letter-spacing: var(--tracking-hero);
+}
+
+h2 {
+  font-size: var(--step-title);
+  line-height: var(--leading-title);
+  letter-spacing: var(--tracking-hero);
+}
+
+h3 {
+  font-size: var(--step-heading);
+  line-height: 1.3;
+}
+
+p {
+  margin: 0 0 var(--space-4);
+  max-width: var(--measure);
+}
+
+a {
+  color: var(--ink);
+  text-decoration-color: var(--border);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration-color: var(--ink);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--space-12) 0;
+}
+
+/* Every interactive thing gets the same visible ring. Never removed without
+   a replacement -- keyboard reading of this page has to stay possible. */
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--ripe);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/*
+ * A label labels. Mono, small, tracked out, muted -- the same treatment
+ * everywhere it appears, so the reader learns it once.
+ */
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--step-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/*
+ * The terminal treatment: a bare block, one hairline, on surface. No title
+ * bar and no traffic lights -- it is evidence, not a screenshot of an app.
+ * Syntax is neutral except for one token, and the amber is applied by hand
+ * where it is true rather than by a highlighter that would colour every
+ * boolean on the page.
+ */
+.terminal {
+  font-family: var(--font-mono);
+  font-size: var(--step-small);
+  line-height: 1.65;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: var(--space-6);
+  overflow-x: auto;
+  margin: 0;
+  color: var(--ink);
+}
+
+.terminal .k {
+  color: var(--muted);
+}
+
+.terminal .prompt {
+  color: var(--muted);
+  user-select: none;
+}
+
+.terminal .ripe {
+  color: var(--ripe);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

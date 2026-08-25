@@ -1,0 +1,299 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+
+// The specimen page. It exists so the design system can be looked at rather
+// than argued about, and so the review checkpoint has somewhere to stand that
+// is not the landing page.
+//
+// The ratios below are computed from the token values at build time, not
+// typed in. A contrast claim maintained by hand is one palette tweak away
+// from being false, and this is the page that makes the claim.
+
+const THEMES = {
+  dark: {
+    ground: "#171310",
+    surface: "#201B16",
+    ink: "#E8E3DC",
+    muted: "#948B82",
+    border: "#332C25",
+    ripe: "#E09520",
+  },
+  light: {
+    ground: "#FAFAF8",
+    surface: "#FFFFFF",
+    ink: "#1C1814",
+    muted: "#6E675F",
+    border: "#E2DED8",
+    ripe: "#9F630A",
+  },
+};
+
+function channels(hex: string): number[] {
+  const h = hex.replace("#", "");
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+}
+
+function luminance(hex: string): number {
+  const [r, g, b] = channels(hex).map((c) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4),
+  );
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function ratio(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// AA is 4.5 for normal text, AAA is 7. Everything on this page that carries
+// words is normal-size text, so 4.5 is the bar that matters -- the 3.0
+// large-text allowance is not claimed anywhere.
+function grade(r: number): string {
+  if (r >= 7) return "AAA";
+  if (r >= 4.5) return "AA";
+  return "below AA";
+}
+
+const pairs = (["dark", "light"] as const).flatMap((theme) =>
+  (["ground", "surface"] as const).flatMap((bg) =>
+    (["ink", "muted", "ripe"] as const).map((fg) => {
+      const r = ratio(THEMES[theme][fg], THEMES[theme][bg]);
+      return { theme, pair: `${fg} on ${bg}`, ratio: r.toFixed(2), grade: grade(r) };
+    }),
+  ),
+);
+
+const tokenNames = ["ground", "surface", "ink", "muted", "border", "ripe"] as const;
+---
+
+<BaseLayout
+  title="Design system — Ripen"
+  description="The tokens, themes and type behind ripen.dev."
+>
+  <main class="frame">
+    <header class="head">
+      <div>
+        <p class="label">Specimen</p>
+        <h2>Design system</h2>
+      </div>
+      <ThemeToggle />
+    </header>
+
+    <p class="lede">
+      Six tokens, two themes, two faces. Colour appears exactly once, when
+      something is ripe. Everything else is warm neutral, because an unripe
+      state is the normal case and does not deserve a colour.
+    </p>
+
+    <hr />
+
+    <section>
+      <p class="label">Tokens</p>
+      <ul class="swatches">
+        {
+          tokenNames.map((name) => (
+            <li class="swatch">
+              <span class="chip" style={`background: var(--${name})`} />
+              <span class="swatch-name">{name}</span>
+              <span class="swatch-hex">
+                {THEMES.dark[name]} / {THEMES.light[name]}
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="note">
+        Dark value, then light. Dark is native and light is derived; both are
+        written out in full rather than one patched onto the other.
+      </p>
+    </section>
+
+    <hr />
+
+    <section>
+      <p class="label">Contrast</p>
+      <div class="scroller">
+      <table class="ratios">
+        <thead>
+          <tr><th>Theme</th><th>Pair</th><th>Ratio</th><th>Grade</th></tr>
+        </thead>
+        <tbody>
+          {
+            pairs.map((p) => (
+              <tr>
+                <td>{p.theme}</td>
+                <td>{p.pair}</td>
+                <td class="num">{p.ratio}</td>
+                <td class={p.grade === "below AA" ? "bad" : ""}>{p.grade}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+      </div>
+      <p class="note">
+        Computed from the token values when this page was built, against a 4.5
+        bar for normal text. Nothing here claims the 3.0 large-text allowance.
+      </p>
+    </section>
+
+    <hr />
+
+    <section>
+      <p class="label">Display — IBM Plex Mono</p>
+      <h1>A digest ripens. You apply.</h1>
+      <p class="note">
+        Mono, medium, clamp(2.5rem, 7vw, 4.5rem), tight leading. The largest
+        type on the page is the monospace: it is the product's own voice, not
+        a decoration applied to it.
+      </p>
+    </section>
+
+    <hr />
+
+    <section>
+      <p class="label">Body — Source Serif 4</p>
+      <p>
+        Tags move. Ripen watches what <code>:latest</code> actually points at,
+        waits for a new image to prove itself, and updates one service — only
+        where you said it may. Prose is set in the serif at 17px over 1.7,
+        held to a <em>measure</em> that keeps a line readable rather than
+        letting it run the width of the frame.
+      </p>
+      <p>
+        Everything structural is monospace and everything argued in sentences
+        is serif. The split is the rule: if it is evidence, it is set in the
+        product's own face; if it is explanation, it is set to be read.
+      </p>
+    </section>
+
+    <hr />
+
+    <section>
+      <p class="label">Terminal treatment</p>
+      <pre class="terminal"><code><span class="prompt">$</span> ripen status
+{`{`}
+  <span class="k">"stack"</span>: "media",
+  <span class="k">"service"</span>: "jellyfin",
+  <span class="k">"baseline"</span>: "sha256:6f2c…",
+  <span class="k">"candidate"</span>: "sha256:b91a…",
+  <span class="k">"mature"</span>: <span class="ripe">true</span>
+{`}`}</code></pre>
+      <p class="note">
+        A bare block on <code>surface</code>, one hairline, no title bar and no
+        traffic lights. Keys muted, values ink, and the amber on exactly one
+        token. It is ripe — and it still will not act until you say so.
+      </p>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .frame {
+    max-width: var(--frame);
+    margin: 0 auto;
+    padding: var(--space-16) var(--space-6) var(--space-24);
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-6);
+    flex-wrap: wrap;
+  }
+
+  .lede {
+    margin-top: var(--space-6);
+  }
+
+  section > .label {
+    margin-bottom: var(--space-4);
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: var(--step-small);
+    margin-top: var(--space-4);
+  }
+
+  .swatches {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: var(--space-4);
+  }
+
+  .swatch {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: var(--space-3);
+    align-items: center;
+  }
+
+  .chip {
+    grid-row: 1 / 3;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 1px solid var(--border);
+  }
+
+  .swatch-name {
+    font-family: var(--font-mono);
+    font-size: var(--step-small);
+  }
+
+  .swatch-hex {
+    font-family: var(--font-mono);
+    font-size: var(--step-label);
+    color: var(--muted);
+  }
+
+  /* A table of numbers has a floor width below which it cannot usefully
+     shrink, so it scrolls inside its own box rather than pushing the page
+     sideways. */
+  .scroller {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .ratios {
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: var(--step-small);
+    width: 100%;
+    min-width: 26rem;
+    max-width: 34rem;
+  }
+
+  .ratios th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--muted);
+    font-size: var(--step-label);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .ratios th,
+  .ratios td {
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  }
+
+  .ratios .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ratios .bad {
+    color: var(--ripe);
+  }
+
+  code {
+    font-size: 0.9em;
+  }
+</style>

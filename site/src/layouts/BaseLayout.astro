@@ -1,0 +1,73 @@
+---
+import "../styles/tokens.css";
+import "../styles/base.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+
+    <!--
+      The no-flash path, and the reason it is inline and first.
+
+      A theme that repaints after first paint is very visible on a
+      warm-near-black page: the reader gets a white flash and then the site.
+      So the stored choice is written onto <html> before any stylesheet is
+      parsed, which means it cannot be a module, cannot be deferred, and
+      cannot live in a component further down the document.
+
+      Absent a stored choice, nothing is written and the CSS falls through to
+      prefers-color-scheme. Three states -- explicit dark, explicit light, and
+      "follow the system" -- and the absent attribute is the third one rather
+      than a fourth value to keep in sync.
+
+      Wrapped in try/catch because localStorage throws outright in some
+      privacy modes, and a theme preference is not worth a blank page.
+    -->
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem("ripen-theme");
+          if (stored === "dark" || stored === "light") {
+            document.documentElement.dataset.theme = stored;
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    <!--
+      Preloaded because the two faces are the page. The mono is the display
+      voice and the serif is every word of prose, so both are needed for the
+      first paint that matters; the italic and the 500 weight are not, and are
+      left to be fetched normally.
+    -->
+    <link
+      rel="preload"
+      href="/fonts/ibm-plex-mono-400-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/source-serif-4-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
