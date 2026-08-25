@@ -55,7 +55,7 @@ Full runbook in [Plan the rework migration](https://github.com/frankieramirez/ri
 ## Phase 6 — the flip
 
 - [ ] Enable the OpenSSF Scorecard GitHub Action (the badge is dead without it) ([#14](https://github.com/frankieramirez/ripen/issues/14)).
-- [ ] Set repo description to the hero line, ~13 topics per [#14](https://github.com/frankieramirez/ripen/issues/14), optional social preview card.
+- [x] Set repo description to the hero line, 13 topics per [#14](https://github.com/frankieramirez/ripen/issues/14). The social preview card was optional and is skipped.
 - [ ] Repo settings: Discussions **off**, blank issues off (via `config.yml`), private vulnerability reporting on.
 - [ ] Flip repo visibility to public. (Not gated on a real Apply Transaction — the clean soak is the gate.)
 - [ ] Tag annotated `v1.0.0` on `main`; verify the release workflow publishes binaries, both registries, signatures/SBOM/provenance.
