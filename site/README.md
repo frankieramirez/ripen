@@ -190,6 +190,22 @@ so no consent banner; a one-line privacy note in the footer instead. Known
 limits, accepted: the beacon is blocked by ad blockers (Ripen's audience is
 close to the worst case), and there is no unique-visitors metric.
 
+Switched on in [Go live: apex Custom Domain and Web Analytics](https://github.com/frankieramirez/ripen/issues/121) and
+confirmed on the served page rather than in the dashboard. **Automatic
+injection does work on a response served by Workers Static Assets**, which
+was the open risk — Cloudflare's own documentation covers proxied sites and
+Pages projects and says nothing about Workers. The injected tag carries a
+real `integrity="sha512-..."`, so the reason for preferring injection over
+the manual embed is now measured rather than argued.
+
+**Checking it needs a browser's `Accept` header.** Cloudflare's HTML
+rewriter only transforms a response when the request asks for HTML, so
+`curl` with its default `Accept: */*` returns the page with no beacon in it
+and looks exactly like injection being broken. Use
+`curl -H 'Accept: text/html'`. The documented way to genuinely lose
+injection is a `Cache-Control: public, no-transform` header, which this site
+does not send.
+
 ## Landing page
 
 Content inventory and order decided on
