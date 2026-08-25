@@ -1,0 +1,415 @@
+---
+/*
+ * The comparison table, built verbatim from the rows approved on
+ * https://github.com/frankieramirez/ripen/issues/117. The wording of every
+ * cell, the band order, the footnote text and the dateline are that ticket's
+ * output; nothing here is re-derived, and an edit to any of it is a change to
+ * a decision rather than to a component.
+ *
+ * One table, four labelled bands, no marks of any kind. The palette has a
+ * single accent and amber means ripe, so there is no green and no red to
+ * render a tick in -- and words-only cannot accidentally score a design
+ * decision as a failure, which is the trap the research named for Diun.
+ */
+
+interface Band {
+  name: string;
+  rows: { label: string; cells: string[] }[];
+}
+
+// Cells carry markup for the footnote markers and for `code`, so they are
+// written as strings and set as HTML. The markers are anchors both ways, so
+// a reader who follows one can get back to the row they left.
+const fn = (n: number) =>
+  `<sup class="fn"><a id="cmp-ref-${n}" href="#cmp-note-${n}" aria-label="Footnote ${n}">${n}</a></sup>`;
+
+const BANDS: Band[] = [
+  {
+    name: "What it can reach",
+    rows: [
+      {
+        label: "Privileged Docker socket",
+        cells: [
+          `Never.${fn(1)}`,
+          `Required, read-write.${fn(2)}`,
+          `Required for its Docker provider, though it only reads.${fn(3)}`,
+        ],
+      },
+      {
+        label: "What it touches by default",
+        cells: [
+          "One Service, on one stack that opted in.",
+          "Every container on the daemon with a newer image, in one cycle.",
+          "Nothing. It only watches, and only the containers you label.",
+        ],
+      },
+      {
+        label: "Platforms watched",
+        cells: [
+          "Portainer and Compose.",
+          "Docker, and only what one daemon can see.",
+          `Docker, Swarm, Kubernetes, Nomad, containerd, and more.${fn(4)}`,
+        ],
+      },
+      {
+        label: "Watching images you don't run",
+        cells: [
+          "No.",
+          "No.",
+          "Yes, from a YAML list or a Dockerfile, with no runtime involved.",
+        ],
+      },
+    ],
+  },
+  {
+    name: "What it does to an image",
+    rows: [
+      {
+        label: "Digest pinning",
+        cells: [
+          "Writes <code>tag@sha256:…</code> into the Compose document.",
+          "Follows the tag, and skips containers that are already digest-pinned.",
+          "Watches a reference. Pins nothing.",
+        ],
+      },
+      {
+        label: "Maturity window",
+        cells: [
+          `Required. A digest must be seen twice and be older than 24 hours.${fn(5)}`,
+          "Available, off by default.",
+          "Not applicable. Diun never applies anything.",
+        ],
+      },
+      {
+        label: "Monitor-only mode",
+        cells: [
+          "The default.",
+          `A flag, globally or per container.${fn(6)}`,
+          "The whole product.",
+        ],
+      },
+    ],
+  },
+  {
+    name: "When something goes wrong",
+    rows: [
+      {
+        label: "Verification and rollback",
+        cells: [
+          "Checks every configured sibling's health after apply, and restores the Baseline digest if it fails.",
+          "Waits for health only under <code>--rolling-restart</code>, and logs a warning if it never comes. No rollback.",
+          "Not applicable. Nothing to verify or undo.",
+        ],
+      },
+      {
+        label: "Circuit breaker",
+        cells: [
+          "A failed Transaction halts apply until a human clears it with a reason.",
+          "None. The next cycle runs on schedule.",
+          "Not applicable.",
+        ],
+      },
+      {
+        label: "What it records",
+        cells: [
+          "The digest proven running, before and after, in SQLite. <code>ripen audit</code> reads it.",
+          "The last 500 scans, in memory. Gone on restart.",
+          `The manifests it has seen. Never the digest you are running.${fn(7)}`,
+        ],
+      },
+    ],
+  },
+  {
+    name: "Living with it",
+    rows: [
+      {
+        label: "Setup",
+        cells: [
+          `A policy file naming every stack, Service and health target.${fn(8)}`,
+          "One <code>docker run</code>, one volume.",
+          "A short YAML file and one label per container.",
+        ],
+      },
+      {
+        label: "Notification targets",
+        cells: [
+          "One webhook.",
+          "27, via Shoutrrr.",
+          "17, including Apprise and an arbitrary script.",
+        ],
+      },
+      {
+        label: "Machine-readable surface",
+        cells: [
+          "A versioned JSON envelope on every command, and an MCP server whose read-only mode registers no write tools.",
+          "An HTTP API, off by default, including <code>POST /v1/update</code>.",
+          "None.",
+        ],
+      },
+    ],
+  },
+];
+
+// Ripen carries a slug like the others so the head row is symmetric, and so
+// the page is honest that Ripen is one repository by one person exactly like
+// the two it is being measured against.
+const COLUMNS = [
+  { name: "Ripen", slug: "frankieramirez/ripen" },
+  { name: "Watchtower", slug: "nicholas-fedor/watchtower" },
+  { name: "Diun", slug: "crazy-max/diun" },
+];
+
+const NOTES = [
+  "The Compose backend may use a rootless user socket. A path resolving to <code>/var/run/docker.sock</code> refuses at config load, symlinks followed.",
+  "It creates, starts, stops, removes and, with lifecycle hooks, execs into containers. A socket proxy adds a hop, not a narrower authority.",
+  "Every example in Diun's documentation mounts it read-write, but Diun only lists and inspects. Its File and Dockerfile providers need no socket at all.",
+  "Ripen cannot update a Kubernetes or Swarm workload. Diun can at least watch one.",
+  "Ripen clocks its own first sighting of a digest. Watchtower's <code>--cooldown-delay</code> reads the build time the registry reports, which its own documentation notes can be older than the push.",
+  "Images may still be pulled in order to compare digests.",
+  "On a fresh install Diun baselines whatever the registry holds then, so it will not tell you that you are already behind.",
+  "Ripen refuses to start on a policy it cannot read. That refusal is the design, and it is still a cost you pay on day one.",
+];
+---
+
+<!--
+  Below about 55rem the table cannot show three columns and starts scrolling
+  sideways. Without this line it does not look like a scroll: it looks like a
+  Ripen-only table whose rows have inexplicable gaps under them, because the
+  row heights are set by cells the reader cannot see yet.
+-->
+<p class="hint label" aria-hidden="true">Scroll the table sideways →</p>
+
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <td class="corner"></td>
+        {
+          COLUMNS.map((column) => (
+            <th scope="col">
+              {column.name}
+              <span class="slug">{column.slug}</span>
+            </th>
+          ))
+        }
+      </tr>
+    </thead>
+    {
+      BANDS.map((band) => (
+        <tbody>
+          <tr class="band">
+            <th colspan="4" scope="colgroup">
+              <span class="label">{band.name}</span>
+            </th>
+          </tr>
+          {band.rows.map((row) => (
+            <tr>
+              <th scope="row">{row.label}</th>
+              {row.cells.map((cell) => (
+                <td set:html={cell} />
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      ))
+    }
+  </table>
+</div>
+
+<!--
+  The dateline sits under the table rather than over it: a date above is the
+  first thing read and it is not the point. The archive fact rides here rather
+  than in a footnote because getting it wrong in either direction is the
+  highest-cost error on the page, and a footnote is skippable.
+-->
+<p class="dateline">
+  Checked 2026-08-25 against watchtower v1.21.0 and Diun v4.33.0. Watchtower's
+  original repository, <code>containrrr/watchtower</code>, was archived in
+  December 2025; its last release was v1.7.1 in 2023.
+</p>
+
+<p class="aside">
+  Renovate and Dependabot are a different category. They watch the files in
+  your repository and open a pull request; they never look at what is actually
+  running. If your stack lives in Git, you probably want one of those and
+  Ripen.
+</p>
+
+<!--
+  The load-bearing qualifiers live down here so nothing accurate is lost and
+  nothing competes for the same eye. Footnote 3 is the one that matters: it is
+  the difference between an accurate claim about Diun and a smear.
+-->
+<ol class="notes">
+  {
+    NOTES.map((note, index) => (
+      <li id={`cmp-note-${index + 1}`}>
+        <span set:html={note} />{" "}
+        <a class="back" href={`#cmp-ref-${index + 1}`} aria-label="Back to the table">
+          ↩
+        </a>
+      </li>
+    ))
+  }
+</ol>
+
+<style>
+  /*
+   * Three columns of prose do not fit a phone, and they do not fit a narrow
+   * laptop either. The table scrolls sideways inside its own container so the
+   * page around it never does.
+   */
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  table {
+    border-collapse: collapse;
+    min-width: 52rem;
+    width: 100%;
+    font-family: var(--font-serif);
+    font-size: var(--step-small);
+    line-height: 1.55;
+  }
+
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border);
+  }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: var(--step-body);
+    white-space: nowrap;
+  }
+
+  .slug {
+    display: block;
+    font-size: var(--step-label);
+    color: var(--muted);
+    letter-spacing: 0;
+    margin-top: var(--space-1);
+  }
+
+  .corner {
+    border-bottom: 1px solid var(--border);
+  }
+
+  /*
+   * The bands are how the reader navigates thirteen rows without reading
+   * thirteen labels. The four rows Ripen loses are interleaved into their
+   * bands rather than collected under a heading of their own -- a labelled
+   * loss block reads as performed humility and lets a skimmer skip it, which
+   * defeats putting the losses on the page at all.
+   */
+  .band th {
+    background: var(--ground);
+    padding-top: var(--space-6);
+    padding-bottom: var(--space-2);
+  }
+
+  tbody th[scope="row"] {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: var(--step-small);
+    width: 12rem;
+  }
+
+  tbody tr:last-child th,
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  tbody + tbody tr:first-child th {
+    border-top: 1px solid var(--border);
+  }
+
+  .fn {
+    font-family: var(--font-mono);
+    font-size: var(--step-label);
+    line-height: 0;
+  }
+
+  .fn a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .fn a:hover {
+    color: var(--ink);
+  }
+
+  .dateline,
+  .aside {
+    max-width: var(--measure);
+    color: var(--muted);
+    font-size: var(--step-small);
+  }
+
+  .dateline {
+    margin-top: var(--space-4);
+  }
+
+  .aside {
+    margin-top: var(--space-6);
+    color: var(--ink);
+  }
+
+  .notes {
+    margin: var(--space-12) 0 0;
+    padding-left: var(--space-6);
+    max-width: var(--measure);
+    color: var(--muted);
+    font-size: var(--step-label);
+    line-height: 1.7;
+  }
+
+  .notes li {
+    margin-bottom: var(--space-2);
+  }
+
+  .notes li:target {
+    color: var(--ink);
+  }
+
+  .back {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .back:hover {
+    color: var(--ink);
+  }
+
+  code {
+    font-size: 0.95em;
+  }
+
+  .hint {
+    display: none;
+    margin: 0 0 var(--space-3);
+  }
+
+  @media (max-width: 55rem) {
+    .hint {
+      display: block;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    tbody th[scope="row"] {
+      width: 8rem;
+    }
+
+    th,
+    td {
+      padding: var(--space-3);
+    }
+  }
+</style>
