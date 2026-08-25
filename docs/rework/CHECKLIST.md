@@ -63,6 +63,9 @@ Full runbook in [Plan the rework migration](https://github.com/frankieramirez/ri
 
 ## Phase 7 — post-flip follow-ups
 
-- [ ] Repoint the NAS compose file at the published GHCR image (small `nas-infrastructure` follow-up).
-- [ ] Open the Docker MCP Catalog listing PR into docker/mcp-registry — read-only container form only, description "Ripen, a fail-closed image updater" ([#12](https://github.com/frankieramirez/ripen/issues/12), [#17](https://github.com/frankieramirez/ripen/issues/17)).
-- [ ] Post-launch (no deadline): nixpkgs submission. A macOS package channel is reconsidered only if someone asks, per [ADR 0003](../adr/0003-distribution-channels-at-v1.md).
+Worked as the [Post-flip follow-ups map](https://github.com/frankieramirez/ripen/issues/93). Filing is the destination; Catalog merge is not gated. nixpkgs is parked as a later effort, not a bullet that keeps this phase open.
+
+- [x] Repoint the NAS compose file at the published GHCR image ([Digest-pin the live NAS to the published GHCR image](https://github.com/frankieramirez/ripen/issues/94)). Live `ripen` is `ghcr.io/frankieramirez/ripen:v1.0.0@sha256:1cc4401a315d27674b6e89132e61138857d879eaba0a855a9e4e4f700e5c12b7`, healthy. [nas-infrastructure#44](https://github.com/frankieramirez/nas-infrastructure/pull/44) is on `main`.
+- [x] Docker Hub is public, with the GitHub README as the overview ([Flip Docker Hub public and paste the README as the overview](https://github.com/frankieramirez/ripen/issues/95)). Short description stays `Ripen, a fail-closed image updater`.
+- [x] Docker MCP Catalog listing PR filed as [docker/mcp-registry#4778](https://github.com/docker/mcp-registry/pull/4778) ([File the Docker MCP Catalog listing PR](https://github.com/frankieramirez/ripen/issues/96)). Read-only container form, image `ghcr.io/frankieramirez/ripen:v1.0.0`. Merge is not gated.
+- nixpkgs submission is a later effort. `nix run github:frankieramirez/ripen` is the Nix channel. A macOS package channel is reconsidered only if someone asks, per [ADR 0003](../adr/0003-distribution-channels-at-v1.md).
