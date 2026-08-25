@@ -4,13 +4,24 @@
 // The control reports what the page is doing now rather than what clicking
 // it will do -- "Theme: system" is checkable against the page in front of
 // you, where "Switch to dark" is a promise the reader has to test.
+//
+// A custom element rather than an id, because Starlight renders its theme
+// control twice -- once in the header and once in the mobile menu -- and
+// hides one with CSS. Both are in the document, so every instance has to
+// work and all of them have to agree.
 ---
 
-<button id="theme-toggle" type="button" class="theme-toggle">
-  <span class="label" id="theme-toggle-text">Theme: system</span>
-</button>
+<ripen-theme-toggle>
+  <button type="button" class="theme-toggle">
+    <span class="label">Theme: system</span>
+  </button>
+</ripen-theme-toggle>
 
 <style>
+  ripen-theme-toggle {
+    display: inline-flex;
+  }
+
   .theme-toggle {
     background: transparent;
     border: 1px solid var(--border);
@@ -18,6 +29,7 @@
     padding: var(--space-2) var(--space-3);
     cursor: pointer;
     font: inherit;
+    white-space: nowrap;
   }
 
   .theme-toggle:hover {
@@ -32,11 +44,12 @@
 
 <script is:inline>
   (function () {
+    // The component can appear more than once on a page, and each copy ships
+    // this script with it.
+    if (window.customElements.get("ripen-theme-toggle")) return;
+
     var KEY = "ripen-theme";
     var order = ["system", "dark", "light"];
-    var button = document.getElementById("theme-toggle");
-    var text = document.getElementById("theme-toggle-text");
-    if (!button || !text) return;
 
     function read() {
       try {
@@ -45,6 +58,16 @@
       } catch (e) {
         return "system";
       }
+    }
+
+    function render(mode) {
+      document.querySelectorAll("ripen-theme-toggle").forEach(function (host) {
+        var button = host.querySelector("button");
+        var text = host.querySelector(".label");
+        if (!button || !text) return;
+        text.textContent = "Theme: " + mode;
+        button.setAttribute("aria-label", "Theme: " + mode + ". Change theme.");
+      });
     }
 
     function apply(mode) {
@@ -59,14 +82,21 @@
           localStorage.setItem(KEY, mode);
         } catch (e) {}
       }
-      text.textContent = "Theme: " + mode;
-      button.setAttribute("aria-label", "Theme: " + mode + ". Change theme.");
+      render(mode);
     }
 
-    apply(read());
-
-    button.addEventListener("click", function () {
-      apply(order[(order.indexOf(read()) + 1) % order.length]);
-    });
+    window.customElements.define(
+      "ripen-theme-toggle",
+      class extends HTMLElement {
+        connectedCallback() {
+          render(read());
+          var button = this.querySelector("button");
+          if (!button) return;
+          button.addEventListener("click", function () {
+            apply(order[(order.indexOf(read()) + 1) % order.length]);
+          });
+        }
+      },
+    );
   })();
 </script>

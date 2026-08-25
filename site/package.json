@@ -10,8 +10,10 @@
     "check": "astro check"
   },
   "dependencies": {
+    "@astrojs/markdown-satteri": "^0.3.8",
     "@astrojs/starlight": "^0.41.8",
-    "astro": "^7.2.6"
+    "astro": "^7.2.6",
+    "satteri": "^0.10.3"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

@@ -1,0 +1,157 @@
+/*
+ * Starlight, wearing Ripen's six tokens and two faces.
+ *
+ * The spec's instruction was to theme it and not fight its layout: the design
+ * budget went to the landing page. So this file redefines Starlight's own
+ * variables in terms of ours and stops. There is no rule here that moves
+ * something, changes a breakpoint, or replaces a component's structure.
+ *
+ * Nothing is duplicated per theme. Starlight ships a dark block on `:root`
+ * and a light block on `[data-theme="light"]`; every value below is a
+ * `var(--token)` instead, so the three-state cascade already in tokens.css --
+ * dark, the system preference, an explicit choice -- decides both themes at
+ * once. A palette edit lands here without being edited twice.
+ *
+ * Unlayered on purpose. Starlight's own properties live in
+ * `@layer starlight.base`, and unlayered declarations beat any layer, so
+ * these win without a single `!important`.
+ */
+
+:root,
+::backdrop {
+  /* --- The grey ramp, collapsed onto four tokens ---
+     Starlight spends seven greys where this palette spends four. The ramp is
+     mapped by the job each step does rather than by lightness: text, then
+     secondary text, then hairlines. */
+  --sl-color-white: var(--ink);
+  --sl-color-gray-1: var(--ink);
+  --sl-color-gray-2: var(--ink);
+  --sl-color-gray-3: var(--muted);
+  --sl-color-gray-4: var(--muted);
+  --sl-color-gray-5: var(--border);
+  --sl-color-gray-6: var(--surface);
+  --sl-color-gray-7: var(--surface);
+  --sl-color-black: var(--ground);
+
+  --sl-color-text: var(--ink);
+  --sl-color-bg: var(--ground);
+  --sl-color-bg-nav: var(--ground);
+  --sl-color-bg-sidebar: var(--ground);
+  --sl-color-bg-inline-code: var(--surface);
+
+  /* Amber is the accent, which on this site means it is also the whole of the
+     colour. Starlight's `-low` is a fill behind accented text and its `-high`
+     is the text itself; the fill is `surface`, because a tinted amber panel
+     would be colour used for decoration rather than for ripeness. */
+  --sl-color-accent-low: var(--surface);
+  --sl-color-accent: var(--ripe);
+  --sl-color-accent-high: var(--ripe);
+  --sl-color-text-accent: var(--ripe);
+  --sl-color-bg-accent: var(--ripe);
+  --sl-color-text-invert: var(--ground);
+
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline-shade: var(--border);
+
+  /* --- Type ---
+     The serif carries prose and the mono carries everything structural.
+     Starlight puts headings on `--sl-font`, so the headings are re-pointed
+     below rather than here. */
+  --sl-font: var(--font-serif);
+  --sl-font-mono: var(--font-mono);
+
+  --sl-text-body: var(--step-body);
+  --sl-line-height: var(--leading-body);
+  --sl-text-code: var(--step-small);
+
+  /* --- Layout ---
+     Two of Starlight's own measurements, moved rather than overridden. The
+     docs are reference material: `configuration.md` is a three-column field
+     table and `agents.md` has six more, and at the stock 45rem the third
+     column wraps to one word a line and scrolls out of sight. The sidebar
+     gives up the room, which it has -- nine flat labels, the longest of them
+     "Troubleshooting". */
+  --sl-sidebar-width: 15rem;
+  --sl-content-width: 52rem;
+
+  /* Starlight's shadows are tuned for its own near-black. On `ground` they
+     read as smudges, and this design has hairlines instead. */
+  --sl-shadow-sm: none;
+  --sl-shadow-md: 0 1px 0 var(--border);
+  --sl-shadow-lg: 0 1px 0 var(--border);
+}
+
+/* Display, headings, labels, nav, buttons: all mono, as everywhere else. */
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6),
+h1#_top,
+.site-title,
+.sidebar-content,
+.right-sidebar,
+site-search,
+starlight-menu-button {
+  font-family: var(--font-mono);
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6),
+h1#_top {
+  font-weight: 500;
+  letter-spacing: var(--tracking-hero);
+}
+
+/* Nav is mono, and mono at Starlight's body size is wide and loud for a list
+   of nine labels. Dropped to the small step, where it reads as furniture. */
+.sidebar-content a,
+.right-sidebar a {
+  font-size: var(--step-small);
+}
+
+/* The header hairline, which Starlight draws with a shadow. */
+.header {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Links are underlined, always, and in `muted` rather than the landing's
+   `border`. The landing can afford a hairline underline because it has six
+   links; a reference page has one every other sentence, several of them
+   wrapping inline code, and an underline at `border` on `ground` is close
+   enough to invisible that the link reads as a code span. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--muted);
+  text-underline-offset: 0.2em;
+}
+
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  color: var(--ink);
+  text-decoration-color: var(--ripe);
+}
+
+/* One ring, the same one the landing uses. */
+:where(a, button, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ripe);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* Tables are how the configuration reference is written, and Starlight leaves
+   them unstyled apart from a border. Give them the terminal's hairline so
+   they read as the same family of object. */
+.sl-markdown-content :is(th, td) {
+  border-color: var(--border);
+}
+
+.sl-markdown-content th {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* The sidebar's current page. Amber here is the one place it appears in the
+   furniture, and it is true to the token: this is where you are. */
+.sidebar-content a[aria-current="page"] {
+  color: var(--ripe);
+  background-color: transparent;
+  font-weight: 500;
+}

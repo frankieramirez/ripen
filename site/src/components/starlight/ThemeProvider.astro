@@ -1,0 +1,28 @@
+---
+// The no-flash path, replacing Starlight's.
+//
+// Byte-for-byte the script BaseLayout runs, and for the same reasons: a theme
+// applied after first paint is a white flash on a warm-near-black page, so
+// the stored choice is written onto <html> before any stylesheet is parsed.
+// It cannot be a module and cannot be deferred.
+//
+// Absent a stored choice, nothing is written and the CSS falls through to
+// prefers-color-scheme. Three states -- explicit dark, explicit light, and
+// "follow the system" -- with the absent attribute as the third rather than a
+// fourth value to keep in sync. Starlight's own provider always writes an
+// explicit value, which is the one behaviour this has to replace.
+//
+// Starlight's version also exposed `window.StarlightThemeProvider` for its
+// picker to call. Nothing references it once ThemeSelect is overridden too.
+---
+
+<script is:inline>
+  (function () {
+    try {
+      var stored = localStorage.getItem("ripen-theme");
+      if (stored === "dark" || stored === "light") {
+        document.documentElement.dataset.theme = stored;
+      }
+    } catch (e) {}
+  })();
+</script>

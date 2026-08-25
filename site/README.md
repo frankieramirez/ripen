@@ -55,11 +55,29 @@ Decided on
   declared there but its dependency was not installed, so it errored on first
   use; `@astrojs/check` and `typescript` are devDependencies now.
 
-  Two routes today: `/`, still the placeholder the landing tickets fill in,
-  and `/design`, the specimen page that renders the design system and computes
-  its own contrast table. `/design` is linked from nowhere and is where the
+  Starlight was registered in
+  [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues/118),
+  which also moved `astro.config.mjs` to `astro.config.ts`: the config imports
+  the sidebar map, because the sidebar and the docs collection have to agree
+  about which pages exist and the way to guarantee that is to build both from
+  one list.
+
+  Routes today: `/`, the landing; `/design`, the specimen page that renders the
+  design system and computes its own contrast table; the nine docs pages under
+  `/docs/`; and `/docs` itself, a redirect to the first sidebar entry so the
+  bare path is not a 404. `/design` is linked from nowhere and is where the
   review checkpoint can look at the system without the landing page competing
   for attention.
+
+  Registering Starlight also brought three things nobody specified, all of them
+  defaults and all of them now live: a themed **404 page** for the whole site,
+  a **sitemap** (`@astrojs/sitemap`, which Starlight registers itself, listing
+  `/`, `/design/` and the nine docs routes), and **Pagefind search**. Pagefind
+  indexes only what Starlight marks as a page body, so the index is the nine
+  docs pages and not the landing or `/design`. Whether each of them stays, and
+  what `robots.txt` should say about `/design` and `_deploy.txt`, is the small
+  print still carried as fog on
+  [the map](https://github.com/frankieramirez/ripen/issues/109).
 - **Cloudflare Workers Static Assets**, deployed from GitHub Actions by
   `wrangler deploy`, authenticated by a Cloudflare API token stored as a repo
   secret and scoped to Workers on this account. Not the Cloudflare GitHub App
@@ -424,7 +442,8 @@ Same composition, square-cropped, for any surface that wants 1:1.
 
 ## Docs pipeline
 
-Decided on [Docs pipeline shape](https://github.com/frankieramirez/ripen/issues/103).
+Decided on [Docs pipeline shape](https://github.com/frankieramirez/ripen/issues/103),
+built in [Wire the docs pipeline](https://github.com/frankieramirez/ripen/issues/118).
 
 - **Page set.** Glob `docs/*.md` — never `docs/**` — with an explicit exclude
   list, today exactly `release-credentials.md`. Discovery is automatic —
@@ -435,21 +454,110 @@ Decided on [Docs pipeline shape](https://github.com/frankieramirez/ripen/issues/
   published. `CONTEXT.md` is
   added explicitly as a **Vocabulary** page. `ROADMAP.md` stays a GitHub
   link.
+
+  The sidebar map is `site/src/docs-map.ts`, one entry per page: the canonical
+  file, the route, the label, the description, and a title override where the
+  H1 is wrong for a site page — which is only Vocabulary, whose H1 is the
+  product name. It is enforced in both directions. A globbed file missing from
+  the map fails the build; so does a map entry whose file has been renamed or
+  deleted, which would otherwise leave a sidebar link to a 404.
+
 - **Frontmatter: none.** Root docs stay byte-identical for GitHub readers.
   Title from each page's H1; description and order in a sidebar map in
   `site/` config. A globbed page missing from that map fails the build.
+
+  The collection is Astro's own glob loader pointed at the repository root,
+  wrapped to supply the frontmatter the files do not carry. The wrap
+  intercepts one call — `parseData`, which the glob loader makes between
+  reading a file's frontmatter and validating it against the schema — and
+  leaves parsing, rendering and watching to the stock loader. The leading H1
+  is stripped on the way to the page, because Starlight sets the title itself
+  from that same heading and the page would otherwise carry it twice.
+
 - **Sidebar.** Flat, Vocabulary first, then the README documentation-table
   order: Configuration, Portainer, Compose, Agents, Proposals, Notifications,
   Architecture, Troubleshooting. No groups.
 - **Links.** Canonical files keep their repo-relative links. At build time,
   mechanically by collection membership: a link targeting a published page
   rewrites to its site route; anything else rewrites to its absolute
-  `github.com/frankieramirez/ripen/blob/main/` URL. No hand-maintained list.
-  A link validator runs in `astro build`, so a broken internal link fails the
-  build.
-- **Code blocks.** Starlight's Expressive Code defaults. Fix missing
-  `yaml`/`json` language tags in the source docs; no per-block customization
-  in v1.
+  `github.com/frankieramirez/ripen/blob/main/` URL — `tree/main/` where the
+  target is a directory, which is what `docs/schema/v1` is. No
+  hand-maintained list.
+
+  **A broken link fails the build, and not through the plugin the spec named.**
+  `starlight-links-validator` keys its data by each page's path under
+  `src/content/docs/`, and these pages are the root `docs/` files read where
+  ADR 0004 keeps them, so every page resolved to a `../../` path it could not
+  match to a route and every internal link came back invalid. In its place
+  `site/src/plugins/build-checks.ts` reads the built directory at
+  `astro:build:done` and checks every internal href — on every page, including
+  the ones written by hand — against the routes and heading ids the build
+  actually shipped.
+
+  The two halves fit together deliberately. The Markdown plugin rewrites only
+  what it can prove and **leaves an unresolvable relative link exactly as
+  written**, because nothing else in this build emits a relative href, so a
+  surviving one is a link to nowhere and the check refuses it. It does not
+  throw: Astro's glob loader catches an error thrown while rendering an entry,
+  logs it, and stores the entry unrendered — a red line in the output and a
+  build that exits 0. The rule has to be enforced somewhere that can stop.
+
+  The same hook checks that each docs page rendered a body, for the same
+  reason: a page can ship with its title, its sidebar and its search entry and
+  nothing in the middle, on a green build. Each page has to render as many
+  `<h2>`s as its source has `##` headings.
+
+- **Code blocks.** Expressive Code, with two global settings changed and no
+  per-block customization. Both changes are the browser arguing with the
+  "defaults" instruction, and the visual direction winning:
+
+  **No frame.** Shell blocks otherwise render inside a fake terminal window
+  with three traffic lights — which the terminal treatment rules out by name,
+  and which would put the same command in two voices on two pages.
+
+  **Neutrals-only syntax**, in `site/src/styles/code-theme.ts`. The defaults
+  are GitHub's, which set commands in blue and flags in purple, and
+  purple/indigo accents are on the list of things this site must not look
+  like. The theme says the one thing worth saying and it is what the landing's
+  terminal block says by hand: keys `muted`, everything else `ink`. Two themes
+  rather than one, since those are different colours in each, named `dark` and
+  `light` so Expressive Code's selectors line up with the attribute the toggle
+  writes, and paired with its dark-mode media query so the third state — no
+  attribute, follow the system — resolves the way the rest of the palette
+  does.
+
+  There were no missing `yaml`/`json` language tags to fix. All thirty-seven
+  fenced blocks across the nine pages already carry one; the single untagged
+  block is the architecture diagram, which is ASCII art and correctly has no
+  language.
+
+- **Theming.** Starlight's own properties are redefined in terms of the six
+  tokens and two faces, unlayered so they beat `@layer starlight.base` without
+  an `!important`. Nothing is duplicated per theme: every value is a
+  `var(--token)`, so the three-state cascade in `tokens.css` decides both
+  themes at once.
+
+  Three components are overridden, and only one of them is cosmetic.
+  `SiteTitle` is the wordmark. `ThemeProvider` and `ThemeSelect` are the
+  toggle: Starlight stores its preference under `starlight-theme` and writes
+  an explicit `dark` or `light` on every load, where this site stores
+  `ripen-theme` and treats the attribute's absence as "follow the system", so
+  leaving both in place would mean the docs and the landing disagreeing about
+  the reader's choice one navigation apart.
+
+  Two of Starlight's layout measurements moved, and this is the line between
+  theming and forking that the ticket asked about — it falls on the theming
+  side, because both are variables Starlight publishes for the purpose.
+  `--sl-content-width` goes 45rem → 52rem and `--sl-sidebar-width` 18.75rem →
+  15rem: `configuration.md` is a three-column field table and `agents.md` has
+  six more, and at the stock width the third column wrapped to one word a line
+  and scrolled out of sight. The sidebar has the room to give — nine flat
+  labels, the longest of them "Troubleshooting".
+
+- **Markdown processor.** Sätteri, Astro 7's default, named in the config only
+  to hang the one plugin off it. `markdown.remarkPlugins` also works and is
+  deprecated, and it quietly swaps the whole processor for unified — a
+  different Markdown implementation, adopted by accident.
 
 ## Deferred, on purpose
 
