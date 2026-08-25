@@ -44,12 +44,12 @@ Charted and worked as the [Release plumbing map](https://github.com/frankieramir
 
 Full runbook in [Plan the rework migration](https://github.com/frankieramirez/ripen/issues/16). Summary order:
 
-- [ ] Build `ripen:v1.0.0-rc` locally on the NAS (GHCR still private).
-- [ ] Create `/volume2/docker/ripen/{config,data,secrets}`; **copy** (not move) the two secret files; hand-write the new `policy.yaml`.
-- [ ] Stop Portainer stack 150 (do not delete yet — it is the rollback).
-- [ ] Create Portainer stack `ripen` from `stacks/ripen/compose.yaml`.
-- [ ] Merge the single atomic `nas-infrastructure` PR (compose, `fleet.json` incl. new stack `live:` path and the three network membership lists, `operations.md`, `secrets.md`, `recovery-order.md`).
-- [ ] **48-hour Monitor soak**: Baseline seeded for every Service, ≥1 Candidate observed, zero error-level Events, healthcheck green throughout.
+- [x] Build `ripen:v1.0.0-rc` locally on the NAS (GHCR still private).
+- [x] Create `/volume2/docker/ripen/{config,data,secrets}`; **copy** (not move) the two secret files; hand-write the new `policy.yaml`.
+- [x] Stop Portainer stack 150 (do not delete yet — it is the rollback).
+- [x] Create Portainer stack `ripen` from `stacks/ripen/compose.yaml`. It is stack **226**.
+- [x] Merge the single atomic `nas-infrastructure` PR (compose, `fleet.json` incl. new stack `live:` path and the three network membership lists, `operations.md`, `secrets.md`, `recovery-order.md`). The stack id is not knowable until the stack exists, so it merged as a placeholder and landed in a follow-up.
+- [ ] **48-hour Monitor soak**, started 2026-08-24: Baseline seeded for every Service, ≥ 1 Candidate observed, zero error-level Events, healthcheck green throughout.
 - [ ] Soak passed → switch to Apply mode → delete stack 150 → tar `/volume2/docker/nas-stack-updater/` (archives the old state DB) to backup and remove it.
 
 ## Phase 6 — the flip
