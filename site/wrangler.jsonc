@@ -9,10 +9,20 @@
     // Relative to this file, so `wrangler deploy` runs from site/.
     "directory": "./dist"
   },
-  // Declared, not defaulted. Cloudflare documents wrangler re-asserting
-  // routing state on every deploy: a route toggled in the dashboard but left
-  // out of this file comes back on the next deploy. So the routing this
-  // Worker has is written down here, where a merge to main cannot quietly
-  // undo it. Attaching the apex is #123 and #121, and it changes this line.
+  // Declared, not defaulted, because `workers_dev` has a default and so an
+  // absent key still asserts something: a route toggled off in the dashboard
+  // and left out of this file comes back on the next deploy.
+  //
+  // `routes` is the opposite and there is deliberately no `routes` key here.
+  // #123 measured it rather than reading the docs harder: with no `routes`
+  // key a deploy touches no routing at all, which is what holds the apex up
+  // today -- `ripen.dev/*` and `*.ripen.dev/*` point at this Worker, both
+  // attached by hand in the dashboard and neither written down here.
+  //
+  // So this file does NOT yet record the routing this Worker has. #121
+  // declares both of them, once the deploy token carries
+  // `Workers Routes: Edit` and `Zone: Read` -- and it has to be both, because
+  // the moment a `routes` key exists wrangler makes this script's routes
+  // exactly the declared list and deletes the undeclared sibling.
   "workers_dev": true
 }
