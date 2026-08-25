@@ -8,7 +8,7 @@ are the public surface, and breaking any of them needs a major bump.
 
 Each release's section here is what GitHub shows as the release notes.
 
-## [1.0.0] - 2026-08-26
+## [1.0.0] - 2026-08-25
 
 ### Added
 
