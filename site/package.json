@@ -1,0 +1,19 @@
+{
+  "name": "@ripen/site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.8",
+    "astro": "^7.2.6"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

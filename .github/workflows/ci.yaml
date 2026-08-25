@@ -4,6 +4,12 @@
 # "CI" the other one had: the README badge URL addresses the file name and a
 # required status check addresses `name:`, and either rename detaches one
 # silently rather than failing.
+#
+# It also builds the site in site/. The two halves are filtered by the
+# `changes` job below rather than by `on.pull_request.paths`, because a
+# workflow filtered out at the trigger never reports its checks at all: a
+# required check would sit pending forever, where a job skipped by an `if:`
+# reports success. Skipped and missing are not the same thing.
 name: Go CI
 
 on:
@@ -15,7 +21,35 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    # Decides which halves of this file run. The bias is toward running: the
+    # Go jobs are skipped only when a pull request touches nothing outside
+    # site/, and a push to main runs everything unconditionally, because main
+    # is what releases are cut from and is not the place to be clever.
+    #
+    # docs/ deliberately does NOT skip the Go jobs. A test asserts that
+    # `ripen schema` and docs/schema/v1/ are identical, so a docs edit can
+    # fail the Go suite.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      site: ${{ steps.filter.outputs.site }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          # Empty on push; the checkout is the merge commit on a pull request,
+          # so diffing it against the base sha is exactly the pull request's
+          # own change set.
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: .github/ci/changed-halves.sh
+
   test:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -34,6 +68,8 @@ jobs:
         run: go test -race ./...
 
   lint:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -47,6 +83,8 @@ jobs:
           version: latest
 
   govulncheck:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -61,6 +99,8 @@ jobs:
         run: govulncheck ./...
 
   build:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     # Cross-compiles the full release matrix (linux/darwin x amd64/arm64)
     # from ubuntu-latest; no macOS runners.
     runs-on: ubuntu-latest
@@ -117,6 +157,8 @@ jobs:
           ./ripen status --config smoke/policy.yaml
 
   nix:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     # The flake is a published install path (ADR 0003), so it builds on every
     # push and pull request. Without this, `vendorHash` rots silently on the
     # next dependency bump and the first person to notice is a stranger
@@ -190,3 +232,29 @@ jobs:
         run: |
           ./.github/ci/check-nix-vulnerabilities.sh \
             ./result/bin/ripen .github/nix-vuln-baseline.txt
+
+  site:
+    # The site build. It runs on site/ edits, and on docs/ and CONTEXT.md
+    # edits too: those files are the docs pipeline's content, so an edit that
+    # breaks the site should fail as a visible check on the pull request that
+    # made it rather than on the next unrelated one.
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      # site/.node-version is the pin. Cloudflare has moved Node majors across
+      # products before and does not read package.json engines, so the major
+      # lives in a file every runtime here agrees on.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: site/.node-version
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install
+        working-directory: site
+        run: npm ci
+      - name: Build
+        working-directory: site
+        run: npm run build
