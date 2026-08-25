@@ -95,8 +95,8 @@ section — the Transaction walkthrough is the feature list.
    `ripen status` with the amber `"mature":true` token, then `ripen explain`
    with the blockers array — it is ripe, and it still will not act until you
    say so. (This supersedes the single-block wording in the inventory and the
-   visual brief.) Designed against today's JSON envelope; if a `--pretty` mode
-   ([#107](https://github.com/frankieramirez/ripen/issues/107)) ships first,
+   visual brief.) Designed against today's JSON envelope; `--pretty`
+   ([#107](https://github.com/frankieramirez/ripen/issues/107)) now exists, so
    swapping the block is a one-line edit here. Primary CTA: the monitor-mode
    run command, the zero-risk action. GitHub is a quiet secondary.
 2. **The warning.** "Ripen recreates containers. Start in monitor mode." Just
@@ -249,6 +249,6 @@ it blocks the build.
 - **The Web UI section and `docs/webui.md`** — the landing section returns
   once the doc and a screenshot exist.
 - **Preview deploys** — see hosting above.
-- **`--pretty` CLI output** — a change to Ripen, tracked as
-  [#107](https://github.com/frankieramirez/ripen/issues/107); the hero swap
-  is a one-line edit here if it ships.
+- **The hero terminal block** — still the JSON envelope; `--pretty` shipped
+  in [#107](https://github.com/frankieramirez/ripen/issues/107), so swapping
+  the block is a one-line edit when the canvas is next touched.

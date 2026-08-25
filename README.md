@@ -85,11 +85,14 @@ Later runs report a **Candidate** when the registry moves. After
 Candidate is mature and apply mode may act on it.
 
 ```bash
-ripen status       # every configured service and where it stands
-ripen candidates   # what is waiting, and whether it has matured
-ripen explain media  # why the next run would, or would not, act
-ripen audit        # what Ripen has actually done
+ripen status --pretty       # every configured service and where it stands
+ripen candidates --pretty   # what is waiting, and whether it has matured
+ripen explain media --pretty  # why the next run would, or would not, act
+ripen audit --pretty        # what Ripen has actually done
 ```
+
+Without `--pretty`, each of those prints the JSON Response envelope. The flag
+is never inferred from a TTY.
 
 Run it on a schedule with `ripen daemon`, which does the same thing every
 `check_interval_seconds` and writes its Event stream to stderr.

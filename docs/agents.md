@@ -12,8 +12,8 @@ not exist — not disabled, not permissioned, absent.
 
 ## Everything answers one envelope
 
-There is no `--json` flag, because there is no other output mode. Every verb
-prints exactly one JSON object on stdout, success or failure:
+There is no `--json` flag. The default, and the only output an agent should
+consume, is one JSON object on stdout, success or failure:
 
 ```json
 {
@@ -39,6 +39,11 @@ A failure is the same envelope with `ok: false` and a typed error:
 
 Failures also print one human-readable line on stderr. Machines can ignore
 stderr entirely; people usually want it.
+
+The four read verbs — `status`, `candidates`, `audit`, `explain` — accept
+`--pretty`, which renders the same payload as text. It is never inferred from a
+TTY: an agent running in a pty still gets the envelope unless it asked.
+`--pretty` is not registered on writes, `daemon`, or `mcp`.
 
 ### Error codes
 
@@ -74,10 +79,10 @@ else uses it, so it is worth alerting on.
 
 | Verb | Answers |
 | --- | --- |
-| `ripen status` | Every configured Service with its Baseline, Candidate, pending Proposal, and last result, plus the breaker, the lease, Notifier health, versions, and the effective policy. |
-| `ripen candidates` | Every Candidate under observation and whether it has matured. |
-| `ripen audit` | The audit trail, newest first. |
-| `ripen explain <stack>` | Why the next run would, or would not, act on this stack. |
+| `ripen status [--pretty]` | Every configured Service with its Baseline, Candidate, pending Proposal, and last result, plus the breaker, the lease, Notifier health, versions, and the effective policy. |
+| `ripen candidates [--pretty]` | Every Candidate under observation and whether it has matured. |
+| `ripen audit [--pretty]` | The audit trail, newest first. |
+| `ripen explain [--pretty] <stack>` | Why the next run would, or would not, act on this stack. |
 
 `status` is driven by the policy, not by what happens to be in the database: a
 Service that has never been observed still appears, with `baseline: null`.

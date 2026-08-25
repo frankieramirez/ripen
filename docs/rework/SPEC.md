@@ -72,7 +72,7 @@ A Go rewrite of the existing Python updater, keeping its fail-closed Transaction
 
 - **The spine**: MCP is a strict subset of the CLI — every MCP tool maps to a CLI verb with the same name, guard, parameters, and payload. `clear_breaker` and Apply mode are absent from MCP *by construction*.
 - **Verbs**: `status`, `candidates`, `audit`, `explain <stack>` (reads); `run --mode monitor`, `propose <stack>` (new), `clear-proposal` (writes); `run --mode apply`, `clear-breaker`, `daemon`, `notify test`, `mcp`, `schema` (CLI-only).
-- **Response envelope**: JSON always (no `--json` flag), `schema_version`/`command`/`occurred_at`/`ok`/`data`, failures in the same envelope with a typed `error` (closed code set, each with `retryable`).
+- **Response envelope**: JSON by default (no `--json` flag); `--pretty` is an explicit rendering of the same payload on the four read verbs, never TTY-detected. `schema_version`/`command`/`occurred_at`/`ok`/`data`, failures in the same envelope with a typed `error` (closed code set, each with `retryable`).
 - **Exit codes**: 0 success, 1 operational, 2 config/usage, **3 human attention required** (breaker open or `rollback_failed`; read narrowly). Ungated.
 - **Identity**: every read emits `backend`/`stack`/`service` (`service` nullable); `state_key` never appears in JSON. `backend` enum has three values from v1.
 - **`status`** is policy-driven (configured-but-never-observed Services appear with `baseline: null`), and carries `versions` + `effective_policy` blocks.

@@ -101,6 +101,9 @@ func mediaKey() state.Key {
 	return state.Key{Backend: domain.BackendDockerCompose, Stack: "media"}
 }
 
+// TestEveryAnswerIsOneResponseEnvelopeOnStdout is the default: JSON,
+// always, with no TTY detection. --pretty is an explicit opt-in on
+// reads only.
 func TestEveryAnswerIsOneResponseEnvelopeOnStdout(t *testing.T) {
 	configPath, _ := policyFile(t)
 
@@ -735,5 +738,225 @@ func TestTheMCPServerRegistersWriteToolsOnlyWhenAsked(t *testing.T) {
 	}
 	if strings.Contains(writable, "clear_breaker") {
 		t.Error("clear_breaker must not exist on any MCP surface")
+	}
+}
+
+// invokePretty runs a read command with --pretty. Stdout is prose, so
+// this does not try to parse an envelope.
+func invokePretty(t *testing.T, configPath string, args ...string) invocation {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	full := append([]string{args[0], "--config", configPath, "--pretty"}, args[1:]...)
+	code := Run(full, &stdout, &stderr)
+	return invocation{code: code, stdout: stdout.String(), stderr: stderr.String()}
+}
+
+func TestPrettyRendersTheSameStatusPayloadAsText(t *testing.T) {
+	configPath, statePath := policyFile(t)
+	digest := "sha256:" + strings.Repeat("1", 64)
+	store := openStore(t, statePath)
+	if err := store.SetAcceptedDigest(mediaKey(), digest, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.OpenBreaker("media: rollback failed", time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	envelope := invoke(t, configPath, "status")
+	pretty := invokePretty(t, configPath, "status")
+
+	if pretty.code != ExitOK {
+		t.Fatalf("exit = %d (%s)", pretty.code, pretty.stderr)
+	}
+	if json.Valid(bytes.TrimSpace([]byte(pretty.stdout))) {
+		t.Fatalf("stdout is still an envelope: %s", pretty.stdout)
+	}
+	if pretty.stderr != "" {
+		t.Errorf("stderr = %q, want nothing on success", pretty.stderr)
+	}
+	for _, fact := range []string{
+		digest,
+		"media: rollback failed",
+		"media",
+		"docker-compose",
+		envelope.data["effective_policy"].(map[string]any)["mode"].(string),
+	} {
+		if !strings.Contains(pretty.stdout, fact) {
+			t.Errorf("pretty omitted %q:\n%s", fact, pretty.stdout)
+		}
+	}
+}
+
+func TestPrettyExplainRendersTheBlockersFromThePayload(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	envelope := invoke(t, configPath, "explain", "media")
+	pretty := invokePretty(t, configPath, "explain", "media")
+
+	if pretty.code != ExitOK {
+		t.Fatalf("exit = %d (%s)", pretty.code, pretty.stderr)
+	}
+	if json.Valid(bytes.TrimSpace([]byte(pretty.stdout))) {
+		t.Fatalf("stdout is still an envelope: %s", pretty.stdout)
+	}
+	services := envelope.data["services"].([]any)
+	blockers := services[0].(map[string]any)["blockers"].([]any)
+	for _, blocker := range blockers {
+		if !strings.Contains(pretty.stdout, blocker.(string)) {
+			t.Errorf("pretty omitted blocker %q:\n%s", blocker, pretty.stdout)
+		}
+	}
+}
+
+func TestPrettyCandidatesRenderTheSameObservations(t *testing.T) {
+	configPath, statePath := policyFile(t)
+	digest := "sha256:" + strings.Repeat("2", 64)
+	store := openStore(t, statePath)
+	old := time.Now().UTC().Add(-72 * time.Hour)
+	if _, err := store.ObserveCandidate(mediaKey(), digest, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ObserveCandidate(mediaKey(), digest, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	pretty := invokePretty(t, configPath, "candidates")
+
+	if pretty.code != ExitOK {
+		t.Fatalf("exit = %d (%s)", pretty.code, pretty.stderr)
+	}
+	if json.Valid(bytes.TrimSpace([]byte(pretty.stdout))) {
+		t.Fatalf("stdout is still an envelope: %s", pretty.stdout)
+	}
+	for _, fact := range []string{digest, "mature: true", "observations: 2"} {
+		if !strings.Contains(pretty.stdout, fact) {
+			t.Errorf("pretty omitted %q:\n%s", fact, pretty.stdout)
+		}
+	}
+}
+
+func TestPrettyAuditRendersTheSameAttempts(t *testing.T) {
+	configPath, statePath := policyFile(t)
+	store := openStore(t, statePath)
+	if err := store.RecordAttempt(state.Attempt{
+		Key: mediaKey(), RunID: "run-pretty", Actor: domain.ActorCLI,
+		Result: domain.ResultUpdated, Detail: "pinned web",
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	pretty := invokePretty(t, configPath, "audit")
+
+	if pretty.code != ExitOK {
+		t.Fatalf("exit = %d (%s)", pretty.code, pretty.stderr)
+	}
+	if json.Valid(bytes.TrimSpace([]byte(pretty.stdout))) {
+		t.Fatalf("stdout is still an envelope: %s", pretty.stdout)
+	}
+	for _, fact := range []string{"run-pretty", "updated", "pinned web", "cli"} {
+		if !strings.Contains(pretty.stdout, fact) {
+			t.Errorf("pretty omitted %q:\n%s", fact, pretty.stdout)
+		}
+	}
+}
+
+func TestPrettyIsRefusedOnAWriteCommand(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	result := invoke(t, configPath, "run", "--pretty")
+
+	if result.code != ExitUsage {
+		t.Errorf("exit = %d, want %d", result.code, ExitUsage)
+	}
+	if result.envelope.Error == nil || result.envelope.Error.Code != response.CodeUsage {
+		t.Errorf("error = %+v, want a usage error", result.envelope.Error)
+	}
+	if !strings.Contains(result.envelope.Error.Message, "pretty") {
+		t.Errorf("message = %q, want it to name the unknown flag", result.envelope.Error.Message)
+	}
+}
+
+// TestPrettyDoesNotExistOnTheDaemon is invariant 3: --pretty is not
+// registered on the daemon, so it cannot write prose (or anything else)
+// to stdout.
+func TestPrettyDoesNotExistOnTheDaemon(t *testing.T) {
+	configPath, _ := policyFile(t)
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"daemon", "--pretty", "--once", "--config", configPath}, &stdout, &stderr)
+
+	if code != ExitUsage {
+		t.Errorf("exit = %d, want %d", code, ExitUsage)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing at all", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "pretty") {
+		t.Errorf("stderr = %q, want the unknown flag", stderr.String())
+	}
+}
+
+// TestPrettyDoesNotExistOnMCP is invariant 2: --pretty is not registered
+// on mcp, so a mistyped flag cannot put prose on stdout.
+func TestPrettyDoesNotExistOnMCP(t *testing.T) {
+	configPath, _ := policyFile(t)
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"mcp", "--pretty", "--config", configPath}, &stdout, &stderr)
+
+	if code != ExitUsage {
+		t.Errorf("exit = %d, want %d", code, ExitUsage)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing but protocol, and no session started", stdout.String())
+	}
+}
+
+func TestPrettyMayFollowTheStackName(t *testing.T) {
+	configPath, _ := policyFile(t)
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"explain", "--config", configPath, "media", "--pretty"}, &stdout, &stderr)
+
+	if code != ExitOK {
+		t.Fatalf("exit = %d (%s)", code, stderr.String())
+	}
+	if json.Valid(bytes.TrimSpace(stdout.Bytes())) {
+		t.Fatalf("stdout is still an envelope: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "the configured mode is monitor") {
+		t.Errorf("pretty omitted the blocker:\n%s", stdout.String())
+	}
+}
+
+func TestPrettyFailureRendersTheEnvelopeError(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent.yaml")
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"status", "--config", missing, "--pretty"}, &stdout, &stderr)
+
+	if code != ExitUsage {
+		t.Errorf("exit = %d, want %d", code, ExitUsage)
+	}
+	if json.Valid(bytes.TrimSpace(stdout.Bytes())) {
+		t.Fatalf("stdout is still an envelope: %s", stdout.String())
+	}
+	text := stdout.String()
+	for _, fact := range []string{"config_invalid", "ok: false", "retryable: false"} {
+		if !strings.Contains(text, fact) {
+			t.Errorf("pretty omitted %q:\n%s", fact, text)
+		}
+	}
+	if !strings.Contains(stderr.String(), "config_invalid") {
+		t.Errorf("stderr = %q, want the human-readable failure line", stderr.String())
 	}
 }

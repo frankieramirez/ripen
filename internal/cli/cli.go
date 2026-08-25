@@ -1,7 +1,9 @@
 // Package cli is Ripen's command surface. Every verb answers with one
-// Response envelope on stdout — success and failure alike, JSON always,
-// no flag to ask for it. Humans get a second line on stderr when
-// something failed; machines can ignore stderr entirely.
+// Response envelope on stdout — success and failure alike — unless a
+// read command is given --pretty, which renders the same payload as
+// text. Pretty is never inferred from a TTY: an agent in a pty still
+// gets the envelope. Humans get a second line on stderr when something
+// failed; machines can ignore stderr entirely.
 //
 // Exit codes are the other half of the contract: 0 success, 1
 // operational failure, 2 configuration or usage, and 3 read narrowly as
@@ -61,7 +63,7 @@ func RunWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	if len(args) == 0 {
 		usage(stderr)
 		return write(stdout, stderr, response.Fail("", now(), response.CodeUsage,
-			"a command is required"), ExitUsage)
+			"a command is required"), ExitUsage, false)
 	}
 	command, rest := args[0], args[1:]
 	switch command {
@@ -80,12 +82,18 @@ func RunWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return mcpVerb(rest, stdin, stdout, stderr)
 	}
 
-	envelope, code := dispatch(command, rest, stderr)
-	return write(stdout, stderr, envelope, code)
+	envelope, code, pretty := dispatch(command, rest, stderr)
+	return write(stdout, stderr, envelope, code, pretty)
 }
 
-func write(stdout, stderr io.Writer, envelope response.Envelope, code int) int {
-	if err := response.Write(stdout, envelope); err != nil {
+func write(stdout, stderr io.Writer, envelope response.Envelope, code int, pretty bool) int {
+	var err error
+	if pretty {
+		err = writePretty(stdout, envelope)
+	} else {
+		err = response.Write(stdout, envelope)
+	}
+	if err != nil {
 		fmt.Fprintf(stderr, "ripen: could not write the response: %v\n", err)
 		return ExitOperation
 	}
@@ -97,31 +105,31 @@ func write(stdout, stderr io.Writer, envelope response.Envelope, code int) int {
 	return code
 }
 
-func dispatch(command string, args []string, stream io.Writer) (response.Envelope, int) {
+func dispatch(command string, args []string, stream io.Writer) (response.Envelope, int, bool) {
 	switch command {
 	case "version":
-		return response.Succeed("version", now(), response.Version{Versions: app.Versions()}), ExitOK
+		return response.Succeed("version", now(), response.Version{Versions: app.Versions()}), ExitOK, false
 	case "schema":
 		return response.Succeed("schema", now(), response.SchemaSet{
 			SchemaVersion: response.SchemaVersion,
 			Schemas:       response.Schemas(),
-		}), ExitOK
+		}), ExitOK, false
 	case "notify":
 		if len(args) == 0 || args[0] != "test" {
 			return response.Fail("notify", now(), response.CodeUsage,
-				"the only notify subcommand is `notify test`"), ExitUsage
+				"the only notify subcommand is `notify test`"), ExitUsage, false
 		}
 		return withApp("notify-test", args[1:], stream)
 	case "status", "candidates", "audit", "explain", "run", "propose", "clear-proposal", "clear-breaker":
 		return withApp(command, args, stream)
 	default:
 		return response.Fail(command, now(), response.CodeUsage,
-			fmt.Sprintf("unknown command %q", command)), ExitUsage
+			fmt.Sprintf("unknown command %q", command)), ExitUsage, false
 	}
 }
 
 // withApp runs the verbs that need a policy and a state store.
-func withApp(command string, args []string, stream io.Writer) (response.Envelope, int) {
+func withApp(command string, args []string, stream io.Writer) (response.Envelope, int, bool) {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", defaultConfigPath(), "path to the policy file")
@@ -134,7 +142,7 @@ func withApp(command string, args []string, stream io.Writer) (response.Envelope
 	remaining := args
 	for {
 		if err := flags.Parse(remaining); err != nil {
-			return response.Fail(command, now(), response.CodeUsage, err.Error()), ExitUsage
+			return response.Fail(command, now(), response.CodeUsage, err.Error()), ExitUsage, options.pretty
 		}
 		rest := flags.Args()
 		if len(rest) == 0 {
@@ -146,11 +154,12 @@ func withApp(command string, args []string, stream io.Writer) (response.Envelope
 
 	loaded, err := app.Open(*configPath)
 	if err != nil {
-		return response.Fail(command, now(), response.CodeConfigInvalid, err.Error()), ExitUsage
+		return response.Fail(command, now(), response.CodeConfigInvalid, err.Error()), ExitUsage, options.pretty
 	}
 	defer func() { _ = loaded.Close() }()
 
-	return execute(loaded, command, options, stream)
+	envelope, code := execute(loaded, command, options, stream)
+	return envelope, code, options.pretty
 }
 
 // verbOptions is every flag any verb takes. One struct keeps the
@@ -158,6 +167,7 @@ func withApp(command string, args []string, stream io.Writer) (response.Envelope
 // unknown flag is still a usage error.
 type verbOptions struct {
 	arguments []string
+	pretty    bool
 	mode      string
 	reason    string
 	limit     int
@@ -171,6 +181,10 @@ type verbOptions struct {
 
 func registerFlags(command string, flags *flag.FlagSet) *verbOptions {
 	options := &verbOptions{}
+	switch command {
+	case "status", "candidates", "audit", "explain":
+		flags.BoolVar(&options.pretty, "pretty", false, "render the same payload as text")
+	}
 	switch command {
 	case "run":
 		flags.StringVar(&options.mode, "mode", "", "monitor or apply; defaults to the configured mode")
@@ -598,10 +612,10 @@ func usage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: ripen <command> [flags]")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "reads:")
-	fmt.Fprintln(writer, "  status                      every configured service and its baseline")
-	fmt.Fprintln(writer, "  candidates                  digests under observation")
-	fmt.Fprintln(writer, "  audit [--run id] [--limit]  what Ripen has done")
-	fmt.Fprintln(writer, "  explain <stack>             why the next run would or would not act")
+	fmt.Fprintln(writer, "  status [--pretty]              every configured service and its baseline")
+	fmt.Fprintln(writer, "  candidates [--pretty]          digests under observation")
+	fmt.Fprintln(writer, "  audit [--pretty] [--run id] [--limit]  what Ripen has done")
+	fmt.Fprintln(writer, "  explain [--pretty] <stack>     why the next run would or would not act")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "writes:")
 	fmt.Fprintln(writer, "  run [--mode monitor|apply]  one transaction over every enabled stack")
@@ -618,5 +632,7 @@ func usage(writer io.Writer) {
 	fmt.Fprintln(writer, "  version                     build metadata")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "every command answers one JSON Response envelope on stdout.")
+	fmt.Fprintln(writer, "status, candidates, audit, and explain accept --pretty to render the same payload as text.")
+	fmt.Fprintln(writer, "--pretty is never inferred from a TTY.")
 	fmt.Fprintln(writer, "--config <path> selects the policy file (default $RIPEN_CONFIG or "+DefaultConfigPath+").")
 }

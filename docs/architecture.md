@@ -112,7 +112,7 @@ digests must match the full expected shape.
 All four are built from the same `app`, so they cannot answer the same question
 differently.
 
-- **CLI** — every verb, one Response envelope, four exit codes.
+- **CLI** — every verb, one Response envelope (or `--pretty` on reads), four exit codes.
 - **Daemon** — the CLI's `run` on an interval. Writes nothing to stdout.
 - **MCP** — a strict subset of the CLI. Apply mode and clearing the breaker have
   no tools at all.
