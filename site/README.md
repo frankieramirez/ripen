@@ -88,11 +88,26 @@ Decided on
 
   The Worker is `ripen-site`, assets-only: `site/wrangler.jsonc` declares no
   `main`, so nothing runs in the request path and the build directory is what
-  the edge serves. It also declares `workers_dev` rather than leaving it to
-  default, because Cloudflare re-asserts routing state on every deploy — a
-  route toggled in the dashboard and left out of the config comes back on the
-  next merge. `wrangler` is a devDependency, so the version that deploys is
-  the one in `package-lock.json` and not whatever `npx` resolves that morning.
+  the edge serves. `wrangler` is a devDependency, so the version that deploys
+  is the one in `package-lock.json` and not whatever `npx` resolves that
+  morning.
+
+  **What a deploy actually asserts about routing**, measured in
+  [How the apex attaches, and what it costs the token](https://github.com/frankieramirez/ripen/issues/123)
+  on a throwaway Worker and a throwaway subdomain rather than argued from the
+  documentation:
+
+  | The deploying config | A dashboard route on that script | A dashboard Custom Domain | Another script's routes |
+  | --- | --- | --- | --- |
+  | no `routes` key | survives | survives | survives |
+  | `routes` declared, not listing it | **deleted** | survives | survives |
+
+  So Cloudflare's documented re-assertion does not generalise from the line it
+  is written about. `workers_dev` comes back because it has a default and an
+  absent key still means something; `routes` has no default, and an absent key
+  means *do not touch*. The real hazard is the second row: adding a `routes`
+  key deletes that script's undeclared routes, which is why both of the apex
+  routes are written down rather than one.
 
   Two secrets, not one. `CLOUDFLARE_ACCOUNT_ID` is needed because the token
   carries a single permission row and cannot enumerate accounts, so `wrangler`
@@ -110,11 +125,36 @@ Decided on
   live site older than `main`. No preview deploys in v1. If a shareable
   preview is ever wanted, a PR-triggered `wrangler versions upload` job adds
   per-deploy preview URLs — add it when the lack is felt.
-- **DNS.** `ripen.dev` sits on a live Cloudflare zone (nameservers moved from
-  Namecheap 2026-08-25, while the domain served nothing). `.dev` is
-  HSTS-preloaded: HTTPS is mandatory, and a certificate gap is an outage, not
-  a downgrade. Use a Workers Custom Domain on the apex so Cloudflare manages
-  DNS records and certificates.
+- **DNS and the apex.** `ripen.dev` sits on a live Cloudflare zone
+  (nameservers moved from Namecheap 2026-08-25). `.dev` is HSTS-preloaded:
+  HTTPS is mandatory, and a certificate gap is an outage, not a downgrade.
+
+  The apex is attached by **two Workers Routes**, `ripen.dev/*` and
+  `*.ripen.dev/*`, both pointing at `ripen-site` — not by the Workers Custom
+  Domain this spec first called for. That is what is live, and
+  [How the apex attaches, and what it costs the token](https://github.com/frankieramirez/ripen/issues/123)
+  kept it rather than re-plumbing a serving apex: Universal SSL already covers
+  `ripen.dev` and `*.ripen.dev` on one certificate, so a Custom Domain would
+  order a second one and move a DNS record for no gain, on a name where a
+  certificate gap has no http fallback. A wildcard cannot be a Custom Domain
+  in any case — those are exact hostnames — so keeping the wildcard settles
+  the mechanism on its own.
+
+  **Both routes get declared in `site/wrangler.jsonc`, and both have to be** —
+  in [Go live: apex Custom Domain and Web Analytics](https://github.com/frankieramirez/ripen/issues/121),
+  after the deploy token is widened, because a config declaring routes against
+  a token without `Workers Routes: Edit` fails every deploy. Both, not one:
+  see the routing rules below — once the config declares a `routes` key,
+  wrangler makes that script's routes exactly the declared list, so an
+  undeclared sibling is deleted on the next merge.
+
+  Until that lands the apex is held only by the dashboard, which is why the
+  comment in `wrangler.jsonc` says so rather than claiming the routing is
+  written down.
+
+  `www.ripen.dev` has no DNS record, so the wildcard serves nothing today —
+  a route without a record matches nothing. It is kept for the subdomain that
+  gets one first.
 - **CI.** `ci.yaml` filters so site edits do not fire the Go matrix,
   `govulncheck`, the cross-compile, or the Nix build. The site build runs on
   PRs touching `site/**`, `docs/**`, or the published root markdown files
