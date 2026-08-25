@@ -2,8 +2,9 @@
 
 The design document for Ripen's website. Everything here was decided on the
 [ripen.dev map](https://github.com/frankieramirez/ripen/issues/98); each section
-links the ticket that holds its reasoning. Building the site is execution
-against this document, not re-deciding it.
+names the ticket that holds its reasoning, or the premise on the map it
+inherits from where the decision was the charting session's own. Building the
+site is execution against this document, not re-deciding it.
 
 The seeded design is on a
 [Claude Design canvas](https://claude.ai/code/artifact/c93329f8-d89e-4c1d-9ce7-6b82359ed339):
@@ -11,6 +12,10 @@ the landing in dark and light at 1440 and 390, plus a themed docs page in both
 themes.
 
 ## Shape
+
+Settled by the charting session's own premises, recorded in the Notes on
+[the map](https://github.com/frankieramirez/ripen/issues/98) rather than in a
+ticket of their own.
 
 Two surfaces, built in that order:
 
@@ -28,7 +33,10 @@ deferred.
 weighted heaviest. The docs serve the operator looking up a policy field.
 Agents are not an audience: `CONTEXT.md` scopes the Agent surface to the JSON
 CLI and the MCP server, and the site does not blur that line — no `llms.txt`,
-no agent-targeted pages.
+no agent-targeted pages. Publishing `docs/agents.md` is not a counter-example.
+It is a page *about* the machine-facing surface, written for the operator
+wiring one up, and the site presents it exactly as GitHub does; what the site
+declines to do is become that surface itself.
 
 ## Stack and hosting
 
@@ -184,8 +192,11 @@ warm-cream + terracotta editorial, and near-black + acid-green hacker landing.
 
 ## OG image
 
-Composed from the fixed ingredients, done right the first time because there
-is no second launch of a link preview:
+Ingredients fixed by [the visual direction brief](https://github.com/frankieramirez/ripen/issues/102);
+the composition itself was fog on the map until this spec, and graduated in
+[Write the site spec and ADR 0004](https://github.com/frankieramirez/ripen/issues/104).
+Done right the first time, because there is no second launch of a link
+preview:
 
 - 1200×630, static, one image for both themes: dark `ground` (`#171310`) —
   link previews render on arbitrary surfaces, and the dark card carries the
@@ -204,8 +215,12 @@ Same composition, square-cropped, for any surface that wants 1:1.
 Decided on [Docs pipeline shape](https://github.com/frankieramirez/ripen/issues/103).
 
 - **Page set.** Glob `docs/*.md` — never `docs/**` — with an explicit exclude
-  list, today exactly `release-credentials.md`. A new doc appears on the site
-  by default; the exclude list documents the exceptions. `CONTEXT.md` is
+  list, today exactly `release-credentials.md`. Discovery is automatic —
+  a new `docs/*.md` file is in the collection without anyone opting it in —
+  but publishing it takes one line in the sidebar map below, and until that
+  line exists the build fails rather than publishing the page unordered or
+  dropping it silently. The exclude list documents what is deliberately not
+  published. `CONTEXT.md` is
   added explicitly as a **Vocabulary** page. `ROADMAP.md` stays a GitHub
   link.
 - **Frontmatter: none.** Root docs stay byte-identical for GitHub readers.
@@ -225,6 +240,10 @@ Decided on [Docs pipeline shape](https://github.com/frankieramirez/ripen/issues/
   in v1.
 
 ## Deferred, on purpose
+
+Not decisions, so not ticketed: each of these is fog or deferred work carried
+on [the map](https://github.com/frankieramirez/ripen/issues/98), and none of
+it blocks the build.
 
 - **Docs versioning** — irrelevant until there is a v1.1 to version against.
 - **The Web UI section and `docs/webui.md`** — the landing section returns

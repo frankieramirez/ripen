@@ -24,8 +24,9 @@ not documentation for operators: `rework/` is the implementation spec,
 `adr/` is this series, `schema/v1/` is generated and asserted byte-identical
 to `ripen schema` output. An explicit exclude list (today exactly
 `release-credentials.md`, which is maintainer-facing) handles top-level
-exceptions. A new `docs/*.md` file is published by default; the exclude list
-documents why anything is not.
+exceptions. Discovery of a new `docs/*.md` file is automatic, but publishing
+it takes one line in the site's sidebar map, and the build fails until that
+line exists; the exclude list documents what is deliberately never published.
 
 Because the canonical files carry no frontmatter and keep their repo-relative
 links, the site build does the adaptation: titles come from each page's H1,
@@ -61,8 +62,10 @@ none of it leaks into `docs/`.
   `docs/**`, the published root markdown files, or `site/**`, so the failure
   is a visible check on the PR that caused it — while site-only edits do not
   fire the Go matrix, and Go-only edits do not build the site.
-- The site's page set follows `docs/` automatically. Publishing decisions are
-  expressed in one exclude list and one sidebar map, both in `site/`.
+- The site's page set follows `docs/` without a vendoring or sync step, but
+  adding a doc is a two-file change: the file itself, and its line in the
+  sidebar map. Publishing decisions are expressed in one exclude list and one
+  sidebar map, both in `site/`.
 - Heavy site assets stay out of `docs/` and out of git where possible: the
   module zip for `go install github.com/frankieramirez/ripen/...` packs the
   repository, and the site must not bloat it.
