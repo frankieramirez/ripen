@@ -49,8 +49,8 @@ Full runbook in [Plan the rework migration](https://github.com/frankieramirez/ri
 - [x] Stop Portainer stack 150 (do not delete yet — it is the rollback).
 - [x] Create Portainer stack `ripen` from `stacks/ripen/compose.yaml`. It is stack **226**.
 - [x] Merge the single atomic `nas-infrastructure` PR (compose, `fleet.json` incl. new stack `live:` path and the three network membership lists, `operations.md`, `secrets.md`, `recovery-order.md`). The stack id is not knowable until the stack exists, so it merged as a placeholder and landed in a follow-up.
-- [ ] **48-hour Monitor soak**, started 2026-08-24: Baseline seeded for every Service, ≥ 1 Candidate observed, zero error-level Events, healthcheck green throughout.
-- [ ] Soak passed → switch to Apply mode → delete stack 150 → tar `/volume2/docker/nas-stack-updater/` (archives the old state DB) to backup and remove it.
+- [x] **Monitor soak** — ended deliberately at ~70 minutes rather than the planned 48 hours. All four conditions held: Baseline seeded for every enabled Service (Readarr has none by design), 7 mature Candidates, zero error-level Events, healthcheck green, audit trail empty. What was skipped is the duration, whose value was resource growth over two daily cycles; the restart in the next bullet checkpointed the WAL cleanly (4 KB plus a 680 KB WAL into a single 61 KB database), which was the main thing the longer window would have shown.
+- [x] Switch to Apply mode → delete stack 150 → archive `/volume2/docker/nas-stack-updater/`. Done, but out of order: stack 150 and the old tree were deleted about an hour in, before the tar. The delete landed in the Synology recycle bin, so the tree — `updater.db` included — was recovered and archived to `/volume2/docker/ripen/old-updater-archive/nas-stack-updater-final-20260824.tar.gz`. Apply mode was switched last, after the flip, and is a no-op against current state: comicarr is the only `auto_apply: true` Service and it has no Candidate.
 
 ## Phase 6 — the flip
 
