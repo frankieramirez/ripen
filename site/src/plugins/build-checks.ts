@@ -40,6 +40,14 @@ import { DOCS_MAP } from "../docs-map";
  * crawler somewhere else, days later, on a page nobody is watching -- there
  * is no error to see, just a bare grey link, so the build looks instead.
  *
+ * The sixth is that the sitemap is exactly the pages that are not marked
+ * `noindex`, checked in both directions. The two mechanisms have to agree and
+ * nothing else makes them: a `noindex` page still listed in the sitemap is
+ * the site asking a crawler to fetch a page it is then told to forget, and a
+ * page that is neither `noindex` nor listed has been dropped by an
+ * over-broad filter and will be found by nobody. Both are silent -- the
+ * symptom is a search result that does or does not exist, months later.
+ *
  * The other check is that each docs page has a body. Astro's glob loader
  * catches an error thrown while rendering an entry, logs it, and stores the
  * entry unrendered -- which ships a page with its title, its sidebar and its
@@ -69,6 +77,7 @@ export function buildChecks(): AstroIntegration {
         logger.info(`${docsRendered(root)} docs pages rendered with a body.`);
         logger.info(`${svgsParse(root)} SVGs parse as XML.`);
         logger.info(`${cardsShipped(root)} pages carry a link preview that is on disk.`);
+        logger.info(`${indexAgrees(root)} pages in the sitemap, and no others indexable.`);
         const pages = filesIn(root, ".html").map((file) => ({
           route: routeOf(relative(root, file)),
           file,
@@ -248,6 +257,57 @@ function cardsShipped(root: string): number {
     throw new Error(`${faults.length} link preview fault(s):\n  ${faults.join("\n  ")}`);
   }
   return pages.length - redirects;
+}
+
+/*
+ * The sitemap and the `noindex` tags say the same thing.
+ *
+ * Redirect stubs are neither: Astro writes them with `noindex` already and
+ * the sitemap integration drops them, so they fall out of both sides and are
+ * skipped rather than counted.
+ */
+const NOINDEX = /<meta\s[^>]*name="robots"[^>]*content="[^"]*noindex/i;
+const LOC = /<loc>([^<]+)<\/loc>/g;
+
+function indexAgrees(root: string): number {
+  const listed = new Set(
+    filesIn(root, ".xml")
+      .filter((file) => /sitemap-\d+\.xml$/.test(file))
+      .flatMap((file) => [...readFileSync(file, "utf-8").matchAll(LOC)])
+      .map(([, loc]) => new URL(loc!).pathname),
+  );
+
+  const faults: string[] = [];
+
+  for (const file of filesIn(root, ".html")) {
+    const html = readFileSync(file, "utf-8");
+    if (REDIRECT.test(html)) continue;
+
+    // `/404.html` is the route `/404/`, which is how a sitemap would name it.
+    const route = routeOf(relative(root, file));
+    const page = route.endsWith(".html")
+      ? `${route.slice(0, -".html".length)}/`
+      : route;
+
+    if (NOINDEX.test(html)) {
+      if (listed.has(page)) {
+        faults.push(
+          `${page} -- noindex, and in the sitemap. The sitemap invites the ` +
+            `crawl that the tag then tells the crawler to forget.`,
+        );
+      }
+    } else if (!listed.has(page)) {
+      faults.push(
+        `${page} -- indexable, and not in the sitemap. Either it wants ` +
+          `noindex, or a filter is dropping more than it was written to.`,
+      );
+    }
+  }
+
+  if (faults.length > 0) {
+    throw new Error(`${faults.length} indexing disagreement(s):\n  ${faults.join("\n  ")}`);
+  }
+  return listed.size;
 }
 
 /** Every page in the sidebar map is on disk, with the headings its source has. */

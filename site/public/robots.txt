@@ -1,0 +1,17 @@
+# ripen.dev
+#
+# Nothing is disallowed. The one page kept out of search results -- /design,
+# the specimen -- says so itself, with <meta name="robots" content="noindex">.
+# A Disallow here would be worse than nothing: it blocks the fetch that reads
+# that tag, so the page stays indexable by reference and the crawler is never
+# told to drop it.
+#
+# No bot list either. Ripen publishes /docs/agents, a page about operating it
+# from an agent, so blocking the crawlers those agents come from would be an
+# odd thing for this site to say -- and the list rots faster than the file is
+# ever edited.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://ripen.dev/sitemap-index.xml
