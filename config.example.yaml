@@ -7,7 +7,7 @@ lease_ttl_seconds: 1800
 
 check_interval_seconds: 86400
 
-state_file: /data/ripen.db
+state_file: /data/updater.db
 
 compose:
   docker:
