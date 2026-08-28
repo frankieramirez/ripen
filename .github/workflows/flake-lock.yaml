@@ -1,17 +1,7 @@
-# Keeps the Nix channel tracking nixpkgs.
-#
-# The flake pins nixpkgs in flake.lock, so `nix run github:frankieramirez/ripen`
-# builds with the Go *this repository* chose, not the one the person running it
-# has. That makes the lock a shipping decision, and an unbumped lock is a
-# channel frozen at whatever toolchain was current the day someone last touched
-# it. nixpkgs lands Go patches on a two-to-three week rebuild queue; this is
-# what picks them up (#69).
 name: Flake lock
 
 on:
   schedule:
-    # Weekly. The queue this is waiting on moves in weeks, so a daily run would
-    # be noise, and a monthly one would sit out most of a Go patch's lifetime.
     - cron: "0 5 * * 1"
   workflow_dispatch:
 
@@ -23,20 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: write # push the branch the pull request is opened from
-      pull-requests: write # open it
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v22
-      # A composite action that shells out to `node` from the runner's PATH
-      # rather than declaring a `using: node20` runtime, so the deprecation
-      # sweep in #66 does not reach it and it cannot regress to Node 20.
-      #
-      # Opens a pull request rather than pushing to main, and never merges it.
-      # The point of the run is the diff: the `nix` job's scan reports what the
-      # new toolchain carries, so the pull request is where 8 vulnerabilities
-      # becoming 0 is visible to a person -- and that moment is when the
-      # baseline gets tightened and #69 closes.
       - uses: DeterminateSystems/update-flake-lock@v28
         with:
           pr-title: "Bump flake.lock"

@@ -154,9 +154,6 @@ func New(options Options) (*Updater, error) {
 	}, nil
 }
 
-// emit sends one Event. A sink that fails, blocks on nothing, or panics
-// must never change what a Transaction decided or reported, so the
-// failure stops here.
 func (u *Updater) emit(name event.Name, subject event.Subject, data event.Data) {
 	defer func() { _ = recover() }()
 	u.events.Emit(name, subject, data)
@@ -198,8 +195,6 @@ func (u *Updater) ClearProposal(stack, reason string) (state.Status, error) {
 	return u.Status()
 }
 
-// proposalKeys enumerates every state Key a stack's Proposals can live
-// under: the stack-level key and one per configured Service.
 func (u *Updater) proposalKeys(stack string) []state.Key {
 	for _, policy := range u.policy.Stacks {
 		if policy.Name != stack {
@@ -241,8 +236,6 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 		return Report{}, u.failed(report, err)
 	}
 	if mode == domain.ModeApply && status.BreakerOpen {
-		// An open breaker halts every outbound action — Apply and
-		// Proposal alike. Monitor observation and reads continue.
 		report.Finished = u.clock.Now()
 		report.BreakerOpen = true
 		report.Results = []Result{{
@@ -258,8 +251,6 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 		return Report{}, u.failed(report, err)
 	}
 
-	// Policy order is document order: with one update per run, the order
-	// stacks are declared in decides which mature Candidate goes first.
 	for _, stack := range u.policy.Stacks {
 		if !stack.Enabled {
 			continue
@@ -293,18 +284,12 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 	return report, nil
 }
 
-// failed announces a run that could not finish. A daemon's only output
-// is the Event stream, so a run that dies has to say so there.
 func (u *Updater) failed(report Report, err error) error {
 	u.emit(event.RunFailed, event.Subject{RunID: report.RunID},
 		event.Data{Mode: string(report.Mode), Detail: err.Error()})
 	return err
 }
 
-// preflight proves each backend in use is usable before any inventory
-// work. An unusable engine takes its own stacks out of the run; a
-// backend that refuses on identity or credentials fails the whole run,
-// because acting on the wrong account is never a per-stack problem.
 func (u *Updater) preflight() (map[domain.Backend]string, error) {
 	unavailable := map[domain.Backend]string{}
 	checked := map[domain.Backend]bool{}
@@ -339,8 +324,6 @@ func breakerDetail(status state.Status) string {
 	return "the circuit breaker is open"
 }
 
-// newRunID mints the run's UUIDv7. A failed mint is not worth failing a
-// run over: a random v4 is still unique, it only loses time ordering.
 func newRunID() string {
 	if id, err := uuid.NewV7(); err == nil {
 		return id.String()
@@ -426,8 +409,6 @@ func (u *Updater) Propose(stackName string) (Result, string, error) {
 	}, runID, nil
 }
 
-// matured applies the maturity rule to a stored Candidate: two
-// observations of the same digest, and the window elapsed.
 func (u *Updater) matured(key state.Key, digest string, now time.Time) (bool, error) {
 	candidate, err := u.state.Candidate(key)
 	if err != nil || candidate == nil || candidate.Digest != digest {

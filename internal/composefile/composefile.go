@@ -107,9 +107,6 @@ func document(compose string) (*yaml.Node, error) {
 	return parsed.Content[0], nil
 }
 
-// entry looks up one key of a mapping, refusing aliases: an aliased
-// value is shared with somewhere else in the document, so rewriting its
-// bytes would silently change that other place too.
 func entry(node *yaml.Node, key string) (*yaml.Node, error) {
 	if node.Kind == yaml.AliasNode {
 		return nil, fmt.Errorf("aliased compose entries cannot be read or updated safely (%q)", key)
@@ -136,8 +133,6 @@ func entry(node *yaml.Node, key string) (*yaml.Node, error) {
 	return found, nil
 }
 
-// offset converts a 1-based YAML line/column into a byte index. yaml.v3
-// reports positions, not spans, so the end is recovered by scalarEnd.
 func offset(text string, line, column int) (int, error) {
 	index := 0
 	for range line - 1 {
@@ -154,7 +149,6 @@ func offset(text string, line, column int) (int, error) {
 	return index, nil
 }
 
-// scalarEnd finds the byte just past a scalar that starts at start.
 func scalarEnd(text string, start int, node *yaml.Node) (int, error) {
 	switch node.Style {
 	case yaml.DoubleQuotedStyle, yaml.SingleQuotedStyle:
@@ -172,8 +166,6 @@ func scalarEnd(text string, start int, node *yaml.Node) (int, error) {
 					i++
 				}
 			case quote:
-				// A doubled quote inside a single-quoted scalar is an
-				// escaped quote, not the end of the scalar.
 				if quote == '\'' && i+1 < len(text) && text[i+1] == '\'' {
 					i++
 					continue
@@ -190,7 +182,6 @@ func scalarEnd(text string, start int, node *yaml.Node) (int, error) {
 			line = line[:cut]
 		}
 		trimmed := strings.TrimRight(line, " \t")
-		// A plain scalar cannot contain " #": that starts a comment.
 		if cut := strings.Index(trimmed, " #"); cut >= 0 {
 			trimmed = strings.TrimRight(trimmed[:cut], " \t")
 		}

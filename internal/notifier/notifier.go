@@ -33,12 +33,8 @@ import (
 	"github.com/frankieramirez/ripen/internal/state"
 )
 
-// deliveryAttempts is one attempt plus two retries. More than that and
-// the destination is down, which is a thing to report, not to hammer.
 const deliveryAttempts = 3
 
-// defaultQueueSize bounds the outbound queue. When it fills, Events are
-// dropped and counted: the run keeps going.
 const defaultQueueSize = 128
 
 // Options configures a Webhook.
@@ -130,9 +126,6 @@ func New(options Options) (*Webhook, error) {
 		done:       make(chan struct{}),
 	}
 
-	// Suppression records what a *destination* has already been told.
-	// Point Ripen at a new destination and it knows nothing, so the
-	// table is cleared and current state pages once. That is correct.
 	fingerprint := destinationFingerprint(destination)
 	stored, err := options.Store.NotifierDestination()
 	if err != nil {
@@ -169,8 +162,6 @@ func (w *Webhook) Emit(envelope event.Envelope) {
 	}
 }
 
-// wants reports whether this Event is one the operator asked for. The
-// delivery test always passes; the Notifier's own failures never do.
 func (w *Webhook) wants(name event.Name) bool {
 	if name == event.NotifierTest {
 		return true
@@ -240,8 +231,6 @@ func (w *Webhook) handle(envelope event.Envelope) {
 	w.remember(envelope)
 }
 
-// shouldSend applies suppression: page on a change of state, not on the
-// continued existence of one.
 func (w *Webhook) shouldSend(envelope event.Envelope) (bool, error) {
 	name := event.Name(envelope.Event)
 	if name == event.NotifierTest {
@@ -258,9 +247,6 @@ func (w *Webhook) shouldSend(envelope event.Envelope) (bool, error) {
 	return true, nil
 }
 
-// heartbeatDue lets one otherwise-suppressed run.finished through when
-// nothing has been delivered for the configured interval, so silence
-// stays distinguishable from a dead Notifier.
 func (w *Webhook) heartbeatDue(name event.Name) (bool, error) {
 	if w.heartbeat <= 0 || name != event.RunFinished {
 		return false, nil
@@ -275,8 +261,6 @@ func (w *Webhook) heartbeatDue(name event.Name) (bool, error) {
 	return w.clock().Sub(*health.LastSuccessAt) >= w.heartbeat, nil
 }
 
-// remember records what the destination has now been told, and re-arms
-// the paired failure Event when this one is a recovery.
 func (w *Webhook) remember(envelope event.Envelope) {
 	stack, service := subject(envelope)
 	_ = w.store.SetSuppressionState(envelope.Event, stack, service,
@@ -289,7 +273,6 @@ func (w *Webhook) remember(envelope event.Envelope) {
 	}
 }
 
-// deliver posts the Event, retrying only what retrying can fix.
 func (w *Webhook) deliver(envelope event.Envelope) (int, error) {
 	body, err := json.Marshal(envelope)
 	if err != nil {
@@ -302,8 +285,6 @@ func (w *Webhook) deliver(envelope event.Envelope) (int, error) {
 		case err == nil:
 			return attempt, nil
 		case status >= 400 && status < 500:
-			// The destination understood and refused. Retrying that is
-			// just noise on someone else's server.
 			return attempt, err
 		default:
 			failure = err
@@ -338,9 +319,6 @@ func (w *Webhook) post(body []byte) (int, error) {
 	return response.StatusCode, nil
 }
 
-// report announces a delivery failure on the Event stream only. A
-// Notifier that cannot deliver cannot deliver news of that either, and
-// the destination URL never appears in the message.
 func (w *Webhook) report(envelope event.Envelope, err error, attempts, dropped int) {
 	if w.stream == nil {
 		return
@@ -355,8 +333,6 @@ func (w *Webhook) report(envelope event.Envelope, err error, attempts, dropped i
 	})
 }
 
-// suppressionState is what "the same news" means: the parts of a payload
-// that decide whether an operator would want telling again.
 func suppressionState(envelope event.Envelope) string {
 	return strings.Join([]string{
 		envelope.Data.Result,
@@ -377,14 +353,11 @@ func value(pointer *string) string {
 	return *pointer
 }
 
-// destinationFingerprint identifies a destination without storing it.
 func destinationFingerprint(destination string) string {
 	sum := sha256.Sum256([]byte(destination))
 	return hex.EncodeToString(sum[:])
 }
 
-// usableDestination refuses plaintext to anywhere but this host: a
-// webhook carries what Ripen is doing to your infrastructure.
 func usableDestination(destination string) error {
 	parsed, err := url.Parse(destination)
 	if err != nil || parsed.Host == "" {

@@ -17,8 +17,6 @@ import (
 	"github.com/frankieramirez/ripen/internal/state"
 )
 
-// destination is a webhook receiver that records what it was sent and
-// answers however the test tells it to.
 type destination struct {
 	mutex     sync.Mutex
 	received  []event.Envelope
@@ -67,7 +65,6 @@ func (d *destination) attempts() int {
 	return d.requests
 }
 
-// recordingStream collects the stream-only Events the Notifier reports.
 type recordingStream struct {
 	mutex  sync.Mutex
 	events []event.Envelope
@@ -155,7 +152,6 @@ func envelopeFor(name event.Name, stack string, data event.Data) event.Envelope 
 	}
 }
 
-// deliverAndDrain emits envelopes and waits for the queue to empty.
 func (h *harness) deliverAndDrain(t *testing.T, envelopes ...event.Envelope) {
 	t.Helper()
 	for _, envelope := range envelopes {
@@ -222,8 +218,6 @@ func TestChangingTheDestinationResetsSuppression(t *testing.T) {
 	reason := event.Data{Reason: "media/web: rollback failed"}
 	first.deliverAndDrain(t, envelopeFor(event.BreakerOpened, "media", reason))
 
-	// A second Notifier pointing somewhere else knows nothing about what
-	// the first destination was told.
 	second := newHarness(t, store)
 	second.deliverAndDrain(t, envelopeFor(event.BreakerOpened, "media", reason))
 
@@ -320,8 +314,6 @@ func TestAFullQueueDropsEventsRatherThanBlockingARun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The worker is stuck on the first delivery and the queue holds one,
-	// so everything after that has nowhere to go.
 	for range 20 {
 		webhook.Emit(envelopeFor(event.StackError, "media", event.Data{Detail: "down"}))
 	}
@@ -336,7 +328,6 @@ func TestAFullQueueDropsEventsRatherThanBlockingARun(t *testing.T) {
 	}
 }
 
-// blockingTransport holds every request until the channel closes.
 type blockingTransport struct {
 	blocked chan struct{}
 }
@@ -377,8 +368,6 @@ func TestTheHeartbeatDeliversAnOtherwiseSuppressedRun(t *testing.T) {
 		t.Fatalf("delivered = %d, want the repeat suppressed", len(delivered))
 	}
 
-	// Time passes with nothing new to say. The heartbeat still speaks, so
-	// silence stays distinguishable from a dead notifier.
 	later := moment.Add(2 * time.Hour)
 	beating, err := New(Options{Settings: settings, Heartbeat: time.Hour, Store: store,
 		Backoff: time.Millisecond, Clock: func() time.Time { return later }})

@@ -1,25 +1,9 @@
 ---
-/*
- * The comparison table, built verbatim from the rows approved on
- * https://github.com/frankieramirez/ripen/issues/117. The wording of every
- * cell, the band order, the footnote text and the dateline are that ticket's
- * output; nothing here is re-derived, and an edit to any of it is a change to
- * a decision rather than to a component.
- *
- * One table, four labelled bands, no marks of any kind. The palette has a
- * single accent and amber means ripe, so there is no green and no red to
- * render a tick in -- and words-only cannot accidentally score a design
- * decision as a failure, which is the trap the research named for Diun.
- */
-
 interface Band {
   name: string;
   rows: { label: string; cells: string[] }[];
 }
 
-// Cells carry markup for the footnote markers and for `code`, so they are
-// written as strings and set as HTML. The markers are anchors both ways, so
-// a reader who follows one can get back to the row they left.
 const fn = (n: number) =>
   `<sup class="fn"><a id="cmp-ref-${n}" href="#cmp-note-${n}" aria-label="Footnote ${n}">${n}</a></sup>`;
 
@@ -150,9 +134,6 @@ const BANDS: Band[] = [
   },
 ];
 
-// Ripen carries a slug like the others so the head row is symmetric, and so
-// the page is honest that Ripen is one repository by one person exactly like
-// the two it is being measured against.
 const COLUMNS = [
   { name: "Ripen", slug: "frankieramirez/ripen" },
   { name: "Watchtower", slug: "nicholas-fedor/watchtower" },
@@ -254,11 +235,6 @@ const NOTES = [
 </ol>
 
 <style>
-  /*
-   * Three columns of prose do not fit a phone, and they do not fit a narrow
-   * laptop either. The table scrolls sideways inside its own container so the
-   * page around it never does.
-   */
   .table-scroll {
     overflow-x: auto;
     border: 1px solid var(--border);
@@ -301,13 +277,6 @@ const NOTES = [
     border-bottom: 1px solid var(--border);
   }
 
-  /*
-   * The bands are how the reader navigates thirteen rows without reading
-   * thirteen labels. The four rows Ripen loses are interleaved into their
-   * bands rather than collected under a heading of their own -- a labelled
-   * loss block reads as performed humility and lets a skimmer skip it, which
-   * defeats putting the losses on the page at all.
-   */
   .band th {
     background: var(--ground);
     padding-top: var(--space-6);

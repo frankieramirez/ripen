@@ -42,11 +42,11 @@ func (e *HTTPError) Error() string {
 
 // Options configures an Adapter.
 type Options struct {
-	Repository string // owner/name
+	Repository string
 	BaseBranch string
 	TokenFile  string
-	Timeout    time.Duration // default 20s
-	BaseURL    string        // default https://api.github.com
+	Timeout    time.Duration
+	BaseURL    string
 	HTTPClient *http.Client
 }
 
@@ -72,8 +72,6 @@ func New(options Options) (*Adapter, error) {
 		return nil, fmt.Errorf("reading the GitHub token file: %w", err)
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		// A token readable by the rest of the host is a token to treat as
-		// already leaked.
 		return nil, errors.New("the GitHub token file must not be readable by group or others")
 	}
 	raw, err := os.ReadFile(options.TokenFile) // #nosec G304 -- the token path is operator-supplied by design
@@ -128,9 +126,6 @@ func (a *Adapter) Propose(change proposal.Change) (proposal.Result, error) {
 		return proposal.Result{}, err
 	}
 	if subtle.ConstantTimeCompare([]byte(baseContent), []byte(change.ExpectedContent)) != 1 {
-		// The repository is the source of truth for a Git-backed stack.
-		// If it does not hold what is deployed, the difference is a human
-		// question, not something to paper over with another commit.
 		return proposal.Result{}, errors.New(
 			"the repository source differs from the live reviewed compose file")
 	}
@@ -306,8 +301,6 @@ func escapePath(value string) string {
 	return strings.Join(segments, "/")
 }
 
-// repositoryFile decodes a contents response: GitHub wraps base64 in
-// newlines, which the standard decoder will not accept.
 func repositoryFile(payload any) (string, string, error) {
 	mapped, ok := payload.(map[string]any)
 	if !ok {
@@ -350,8 +343,6 @@ func pullURL(payload any) (string, bool) {
 	return url, ok && url != ""
 }
 
-// branchName is deterministic: the same Service and digest always name
-// the same branch, which is what makes proposing idempotent.
 func branchName(label, shortDigest string) (string, error) {
 	slug := strings.Trim(slugPattern.ReplaceAllString(strings.ToLower(label), "-"), "-")
 	if slug == "" {

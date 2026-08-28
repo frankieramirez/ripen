@@ -132,9 +132,6 @@ var (
 	hexPattern             = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-// privilegedDockerSockets are the socket paths that grant root-equivalent
-// host access; a configured compose socket resolving to one of them is a
-// config-load refusal (rework spec, invariant 10).
 var privilegedDockerSockets = []string{"/var/run/docker.sock", "/run/docker.sock"}
 
 // Load reads and validates a policy file.
@@ -216,7 +213,6 @@ func Load(path string) (*Policy, error) {
 	return policy, nil
 }
 
-// uiSettings reads the optional Web UI configuration.
 func uiSettings(root map[string]any) (*UISettings, error) {
 	value, ok := root["ui"]
 	if !ok {
@@ -250,9 +246,6 @@ func uiSettings(root map[string]any) (*UISettings, error) {
 	return settings, nil
 }
 
-// notifierSettings reads the outbound Notifier. An unknown Event name is
-// a config-load error: a typo that silently pages about nothing is worse
-// than a refusal to start.
 func notifierSettings(root map[string]any) (*NotifierSettings, error) {
 	value, ok := root["notifier"]
 	if !ok {
@@ -332,8 +325,6 @@ func stackPolicies(root map[string]any, order []string, github *GitHubPolicy) ([
 	if err != nil {
 		return nil, err
 	}
-	// Policy order is document order: with one update per run, the order
-	// stacks are declared in decides which mature Candidate goes first.
 	stacks := make([]StackPolicy, 0, len(raw))
 	for _, name := range order {
 		stack, err := stackPolicy(name, raw[name], github)
@@ -345,8 +336,6 @@ func stackPolicies(root map[string]any, order []string, github *GitHubPolicy) ([
 	return stacks, nil
 }
 
-// stackKeyOrder walks the parsed YAML document and returns the stacks
-// mapping's keys in document order, which plain map decoding loses.
 func stackKeyOrder(document *yaml.Node) []string {
 	if document.Kind != yaml.DocumentNode || len(document.Content) == 0 {
 		return nil
@@ -761,9 +750,6 @@ func excludedStacks(root map[string]any, stacks []StackPolicy) ([]string, error)
 	return excluded, nil
 }
 
-// resolveFile resolves compose-file symlinks at config load so drift is
-// recorded against the real path. A path that cannot be fully resolved
-// (e.g. not yet present) is kept as written.
 func resolveFile(path string) string {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		return resolved
@@ -771,11 +757,6 @@ func resolveFile(path string) string {
 	return filepath.Clean(path)
 }
 
-// resolvesToPrivilegedSocket follows the symlink chain from a configured
-// socket path and reports whether any step lands on a privileged docker
-// socket path. Every step is checked — not just the final target — so
-// configuring /var/run/docker.sock is refused even on hosts where that
-// path is itself a symlink elsewhere (e.g. Docker Desktop) or absent.
 func resolvesToPrivilegedSocket(path string) (bool, string) {
 	resolved := filepath.Clean(path)
 	for range 16 {
@@ -797,8 +778,6 @@ func resolvesToPrivilegedSocket(path string) (bool, string) {
 	}
 	return false, ""
 }
-
-// --- generic mapping helpers ---
 
 func mapping(value any, path string) (map[string]any, error) {
 	raw, ok := value.(map[string]any)

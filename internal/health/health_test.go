@@ -48,7 +48,6 @@ func TestAStatusOutsideThePolicyIsUnhealthy(t *testing.T) {
 }
 
 func TestAnUnreachableTargetIsUnhealthyRatherThanAnError(t *testing.T) {
-	// A port nothing listens on: the connection is refused immediately.
 	policy := config.HealthPolicy{Type: "http", Target: "http://127.0.0.1:1",
 		AcceptedStatus: []int{200}, TimeoutSeconds: 2}
 

@@ -1,27 +1,11 @@
-# The published image, built by GoReleaser from an already-compiled
-# binary. FROM scratch: Ripen is one static binary, and an image with a
-# shell in it is an image with more attack surface than the job needs.
-#
-# The only thing copied in besides the binary is a CA bundle, because
-# talking to a registry over https needs one. TLS fingerprint pinning
-# does not, but the registry client does.
 FROM alpine:3.22 AS certificates
 RUN apk add --no-cache ca-certificates
 
 FROM scratch
-# GoReleaser's `dockers_v2` build context is a temporary directory holding the
-# already-compiled binaries nested one directory per target platform
-# (`linux/amd64/ripen`, `linux/arm64/ripen`), not a flat one as the deprecated
-# v1 `dockers` context was. TARGETPLATFORM is what buildx sets per platform of
-# the manifest, so it names exactly the directory the binary is in. It has to
-# be re-declared here because a predefined build arg is only in scope in the
-# stage that asks for it.
 ARG TARGETPLATFORM
 COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY $TARGETPLATFORM/ripen /ripen
 
-# A non-root uid with no home and no shell. The state directory has to be
-# writable by it, or override `user:` to match what you already have.
 USER 65532:65532
 
 VOLUME ["/data"]

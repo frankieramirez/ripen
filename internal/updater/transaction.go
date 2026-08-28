@@ -15,11 +15,8 @@ import (
 	"github.com/frankieramirez/ripen/internal/state"
 )
 
-// runtimePlatform is the platform digests are resolved for. Ripen
-// manages Linux container hosts; other platforms are roadmap.
 var runtimePlatform = registry.Platform{OS: "linux", Architecture: "amd64"}
 
-// transaction is one stack's part of a run.
 type transaction struct {
 	updater *Updater
 	stack   config.StackPolicy
@@ -27,8 +24,6 @@ type transaction struct {
 	mode    domain.Mode
 }
 
-// observation is one Service as observed this run: what the policy says,
-// what is deployed, and what the registry offers.
 type observation struct {
 	stack         backend.StackState
 	key           state.Key
@@ -67,9 +62,6 @@ func (t *transaction) run(slots int) ([]Result, int) {
 	return results, applied
 }
 
-// failure maps an error to the result code that says what an operator
-// should do about it: nothing (not visible, ineligible), fix the engine
-// (engine unavailable), or look (error).
 func (t *transaction) failure(key state.Key, err error) Result {
 	var notVisible *backend.NotVisibleError
 	var ineligible *backend.IneligibleError
@@ -86,8 +78,6 @@ func (t *transaction) failure(key state.Key, err error) Result {
 	return Result{Key: key, Code: domain.ResultError, Detail: err.Error()}
 }
 
-// observe turns one backend observation into per-Service observations,
-// refusing anything the reviewed policy does not describe exactly.
 func (t *transaction) observe(stackState backend.StackState) ([]observation, error) {
 	expected := slices.Sorted(slices.Values(t.stack.ExpectedServices))
 	if !slices.Equal(stackState.Services, expected) {
@@ -104,8 +94,6 @@ func (t *transaction) observe(stackState backend.StackState) ([]observation, err
 		}
 		observations := make([]observation, 0, len(t.stack.Services))
 		for _, service := range t.stack.Services {
-			// A disabled Service is health-only: it gates its siblings
-			// but is never resolved against a registry or baselined.
 			if !service.Enabled {
 				continue
 			}
@@ -153,8 +141,6 @@ func (t *transaction) observeService(stackState backend.StackState, service stri
 	}
 
 	if stackState.RunningDigests != nil {
-		// The backend can prove what is running, so the comparison is
-		// digest to digest and the registry is asked for this platform.
 		running, ok := stackState.RunningDigests[service]
 		if !ok {
 			return observation{}, backend.Ineligible("service %q is not running", service)
@@ -170,8 +156,6 @@ func (t *transaction) observeService(stackState backend.StackState, service stri
 		return observed, nil
 	}
 
-	// Otherwise the backend's own verdict on the stack stands in, and
-	// the registry answers for the tag as a whole (an index digest).
 	if stackState.ImageStatus != "updated" && stackState.ImageStatus != "outdated" {
 		return observation{}, backend.Ineligible("the backend image status is %q", stackState.ImageStatus)
 	}
@@ -182,8 +166,6 @@ func (t *transaction) observeService(stackState backend.StackState, service stri
 	return observed, nil
 }
 
-// evaluate decides one Service's outcome, and reports whether it
-// consumed the run's single update slot.
 func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result, bool) {
 	now := t.updater.clock.Now()
 	accepted, found, err := t.updater.state.AcceptedDigest(observed.key)
@@ -212,8 +194,6 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 			Digest: observed.runningDigest,
 		}, false
 	}
-	// The Service is on its Baseline. If the last thing recorded about it
-	// was a failure, it has come back, whatever the registry now offers.
 	t.recovered(observed, accepted, now)
 
 	if pending != nil && pending.Digest != observed.remoteDigest {
@@ -266,10 +246,6 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 	return t.apply(observed, accepted)
 }
 
-// baseline records what is provably running as the accepted Baseline.
-// Nothing is ever baselined that cannot be proven: when the backend can
-// only say "outdated", the running digest is unknown and baselining
-// would silently bless an update nobody reviewed.
 func (t *transaction) baseline(observed observation, now time.Time) (Result, bool) {
 	if observed.runningDigest != "" {
 		if err := t.updater.state.SetAcceptedDigest(observed.key, observed.runningDigest, now); err != nil {
@@ -309,9 +285,6 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 	}, false
 }
 
-// acceptGitDeployment closes the loop on a merged Proposal: the digest
-// is accepted only once the live stack shows the pin, runs it, and
-// passes health. Anything less opens the breaker.
 func (t *transaction) acceptGitDeployment(observed observation, accepted, proposalURL string,
 	now time.Time) (Result, bool) {
 	if !t.healthyOnce(observed.stack) {
@@ -346,8 +319,6 @@ func (t *transaction) acceptGitDeployment(observed observation, accepted, propos
 
 func (t *transaction) recordAttempt(observed observation, oldDigest, newDigest string,
 	code domain.ResultCode, detail string, now time.Time) {
-	// A failed audit write must not change what the Transaction decided;
-	// it is reported through the Event stream instead.
 	if err := t.updater.state.RecordAttempt(state.Attempt{
 		Key:       observed.key,
 		RunID:     t.runID,
@@ -361,9 +332,6 @@ func (t *transaction) recordAttempt(observed observation, oldDigest, newDigest s
 	}
 }
 
-// recovered notices a Service coming back after a failed Transaction.
-// The audit row is written before the Event goes out, because an Event
-// must never say something `ripen status` cannot confirm.
 func (t *transaction) recovered(observed observation, accepted string, now time.Time) {
 	last, err := t.updater.state.LastAttempt(observed.key)
 	if err != nil || last == nil {
@@ -377,9 +345,6 @@ func (t *transaction) recovered(observed observation, accepted string, now time.
 	if observed.runningDigest != "" && observed.runningDigest != accepted {
 		return
 	}
-	// Only a Service that is actually serving has recovered. This costs a
-	// health check, but only in the rare state where the last thing that
-	// happened to this Service was a failure.
 	if !t.healthyOnce(observed.stack) {
 		return
 	}
@@ -389,7 +354,6 @@ func (t *transaction) recovered(observed observation, accepted string, now time.
 		event.Data{Digest: accepted, Detail: detail})
 }
 
-// subject names who an Event is about.
 func (t *transaction) subject(key state.Key) event.Subject {
 	return event.Subject{
 		RunID:   t.runID,
@@ -399,7 +363,6 @@ func (t *transaction) subject(key state.Key) event.Subject {
 	}
 }
 
-// label renders a Key the way an operator reads it.
 func label(key state.Key) string {
 	if key.Service == "" {
 		return key.Stack

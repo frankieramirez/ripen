@@ -1,10 +1,3 @@
-# Release configuration for Ripen. `goreleaser build --snapshot` in CI
-# cross-compiles the matrix on every push; the full pipeline below runs
-# only on an annotated v* tag, from .github/workflows/release.yaml.
-#
-# Everything published is verifiable: checksums, an SBOM per archive, a
-# keyless cosign signature over the checksum file and one on every image,
-# and GitHub build provenance attested in the workflow.
 version: 2
 
 project_name: ripen
@@ -30,8 +23,6 @@ builds:
       - -X github.com/frankieramirez/ripen/internal/version.Version={{.Version}}
       - -X github.com/frankieramirez/ripen/internal/version.Commit={{.ShortCommit}}
       - -X github.com/frankieramirez/ripen/internal/version.Date={{.Date}}
-    # Reproducibility: the binary's timestamp is the commit's, not the
-    # moment the release happened to run.
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
@@ -55,16 +46,6 @@ sboms:
   - id: archives
     artifacts: archive
 
-# Keyless signing: the certificate comes from the workflow's OIDC
-# identity, so there is no long-lived key to lose. The signature, that
-# certificate and the transparency-log proof travel together in one
-# Sigstore bundle — the only format cosign v3 writes, and the only one
-# its `verify-blob` still reads.
-#
-# `cmd` is the wrapper rather than cosign itself on purpose. GoReleaser
-# does not check that a signing command wrote anything, so a cosign that
-# exits 0 having written nothing would register a signature artifact
-# that does not exist. The wrapper refuses instead; see the script.
 signs:
   - id: checksums
     cmd: ./.github/release/sign-blob.sh
@@ -83,9 +64,6 @@ dockers_v2:
     images:
       - ghcr.io/frankieramirez/ripen
       - docker.io/frankieramirez/ripen
-    # The exact-version tags always publish. The floating tags do not move
-    # onto a release candidate: an empty tag is dropped, so a prerelease
-    # leaves `latest`, `vX` and `vX.Y` pointing at the last stable release.
     tags:
       - "{{ .Tag }}"
       - "{{ .Version }}"
@@ -114,21 +92,6 @@ docker_signs:
       - sign
       - "${artifact}@${digest}"
       - --yes
-
-# The release notes are the hand-written CHANGELOG section for this tag,
-# passed in by the workflow with --release-notes. A changelog is writing,
-# not a diff, so nothing here is generated from commits.
-#
-# There is deliberately no `changelog: disable: true`. It reads like the
-# way to turn the commit-log generator off, and it is not: `disable`
-# skips the whole changelog pipe, and that pipe is the only thing that
-# ever reads --release-notes. With it set, the flag was accepted,
-# ignored, and the release published with a body that was nothing but
-# the footer below -- the hand-written section silently dropped, and two
-# guards in the workflow spent protecting a file nobody read (#54).
-#
-# --release-notes is what turns generation off: given one, the pipe uses
-# it and returns before it can build anything from the git log.
 
 release:
   draft: false

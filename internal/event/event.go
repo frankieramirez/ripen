@@ -185,8 +185,6 @@ func (s *Stream) Emit(name Name, subject Subject, data Data) {
 	}
 }
 
-// deliver isolates one sink: an Event stream is a report of what already
-// happened, and a broken reporter must not change it.
 func deliver(sink Sink, envelope Envelope) {
 	defer func() { _ = recover() }()
 	sink.Emit(envelope)

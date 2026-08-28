@@ -1,14 +1,4 @@
 ---
-// Three states, cycled in one control: follow the system, dark, light.
-//
-// The control reports what the page is doing now rather than what clicking
-// it will do -- "Theme: system" is checkable against the page in front of
-// you, where "Switch to dark" is a promise the reader has to test.
-//
-// A custom element rather than an id, because Starlight renders its theme
-// control twice -- once in the header and once in the mobile menu -- and
-// hides one with CSS. Both are in the document, so every instance has to
-// work and all of them have to agree.
 ---
 
 <ripen-theme-toggle>
@@ -44,8 +34,6 @@
 
 <script is:inline>
   (function () {
-    // The component can appear more than once on a page, and each copy ships
-    // this script with it.
     if (window.customElements.get("ripen-theme-toggle")) return;
 
     var KEY = "ripen-theme";

@@ -25,15 +25,11 @@ func init() {
 	Version, Commit, Date = fromBuildInfo(Version, Commit, Date, info)
 }
 
-// fromBuildInfo fills any remaining ldflag defaults from the toolchain's
-// build info: Main.Version for `go install pkg@version`, vcs.revision and
-// vcs.time for a VCS checkout. Stamped values always win.
 func fromBuildInfo(version, commit, date string, info *debug.BuildInfo) (string, string, string) {
 	if info == nil {
 		return version, commit, date
 	}
 	if version == "dev" {
-		// A local `go build` records "(devel)", which is not a version.
 		if v := info.Main.Version; v != "" && v != "(devel)" {
 			version = v
 		}

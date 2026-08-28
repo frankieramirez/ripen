@@ -10,7 +10,6 @@ import (
 	"github.com/frankieramirez/ripen/internal/updater"
 )
 
-// fakeEngine counts cycles and answers however the test says.
 type fakeEngine struct {
 	cycles int
 	err    error
@@ -75,7 +74,6 @@ func TestTheLoopKeepsGoingAfterAFailedCycle(t *testing.T) {
 		Interval: time.Hour,
 		Sleep: func(context.Context, time.Duration) bool {
 			cycles++
-			// Stop after the loop has demonstrated it keeps going.
 			return cycles < 3
 		},
 	})

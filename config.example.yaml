@@ -1,112 +1,40 @@
-# Ripen policy. Copy to policy.yaml, edit, and keep it out of Git.
-#
-# Everything Ripen is allowed to touch is in this file. A stack that is
-# not listed here does not exist as far as Ripen is concerned, and an
-# unknown field is a startup error rather than a warning — a typo must
-# never quietly disable a safety rule.
-#
-# Every value below is shown at its default unless marked otherwise.
-
-# monitor observes and records. apply may additionally change one
-# service, or open one proposal, per run.
 mode: monitor
 
-# The whole transaction, in four numbers.
-max_updates_per_run: 1 # v1 requires 1; one service per run, always
-candidate_min_age_seconds: 86400 # how long a new digest must sit before it may be applied
-verification_timeout_seconds: 300 # how long health checks get to come good after a deploy
-lease_ttl_seconds: 1800 # how long one run may hold the exclusive lease
+max_updates_per_run: 1
+candidate_min_age_seconds: 86400
+verification_timeout_seconds: 300
+lease_ttl_seconds: 1800
 
-# How often `ripen daemon` runs a cycle.
 check_interval_seconds: 86400
 
-# The state database. This is the system of record: baselines, candidates,
-# proposals, the audit trail, and the circuit breaker all live here.
 state_file: /data/ripen.db
 
-# --- backends -------------------------------------------------------
-#
-# Configure the ones you use. A stack names its backend; `portainer` is
-# the default when a stack does not say.
-
-# Compose runtimes. Ripen shells out to the engine's own compose
-# implementation and never touches a privileged socket.
 compose:
   docker:
     binary: docker
-    # socket: /run/user/1000/docker.sock   # optional rootless socket
   podman:
     binary: podman
-    # socket: /run/user/1000/podman/podman.sock
 
-# The Portainer API. Required only if a stack uses the portainer backend.
 portainer:
   base_url: https://portainer.example:9443
   api_key_file: /run/secrets/portainer-api-key
-  expected_username: ripen # the run stops if the key belongs to someone else
-  # Exactly one of these two, and there is no insecure mode:
+  expected_username: ripen
   tls_fingerprint_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
-  # tls_ca_file: /run/secrets/portainer-ca.pem
-
-# Git proposals. Needed only for stacks with a git_path.
-# github:
-#   repository: frankieramirez/nas-infrastructure
-#   base_branch: main
-#   token_file: /run/secrets/github-token   # mode 0600, or Ripen refuses it
-
-# --- notifications --------------------------------------------------
-#
-# The event stream on stderr is always on and records everything. This
-# section adds one outbound webhook, which pages on state changes only.
-# Absent means silent-but-logging.
-# notifier:
-#   heartbeat_interval_seconds: 86400   # deliver something even when nothing changed
-#   webhook:
-#     url_file: /run/secrets/webhook-url
-#     token_file: /run/secrets/webhook-token   # optional bearer token
-#     timeout_seconds: 10
-#     events: # defaults to the paging set; an unknown name is a startup error
-#       - run.failed
-#       - transaction.succeeded
-#       - transaction.rolled_back
-#       - transaction.rollback_failed
-#       - breaker.opened
-#       - breaker.cleared
-#       - proposal.created
-#       - stack.error
-#       - stack.recovered
-
-# --- the read-only web interface ------------------------------------
-#
-# Off unless enabled. It reads; it cannot change anything.
-# ui:
-#   enabled: true
-#   address: 127.0.0.1:7476      # a non-loopback address requires a token
-#   token_file: /run/secrets/ui-token   # or the RIPEN_UI_TOKEN environment variable
-
-# --- stacks ---------------------------------------------------------
-#
-# Declaration order matters: with one update per run, the first mature
-# candidate in this file is the one that goes.
 
 stacks:
-  # A compose-runtime stack with one service.
   media:
     enabled: true
-    backend: docker-compose # or podman-compose, or portainer
-    file: /srv/media/compose.yaml # the compose file Ripen reads and pins
-    # project: media                     # defaults to the stack name
-    auto_apply: false # apply mode still needs this per stack
+    backend: docker-compose
+    file: /srv/media/compose.yaml
+    auto_apply: false
     expected_services:
-      - jellyfin # the exact service set; a change here fails closed
+      - jellyfin
     health:
       type: http
       target: http://127.0.0.1:8096/health
       accepted_status: [200]
       timeout_seconds: 5
 
-  # A Portainer stack with several services. Every service is declared,
-  # including ones Ripen must not update.
   arr:
     enabled: true
     backend: portainer
@@ -124,25 +52,9 @@ stacks:
         health:
           target: http://127.0.0.1:8989/ping
       flaresolverr:
-        # A health-only service. Ripen never resolves or updates its
-        # image, but its health still gates its siblings.
         enabled: false
         health:
           target: http://127.0.0.1:8191/health
 
-  # A Git-backed stack. Ripen opens a pull request pinning the digest and
-  # never deploys it; your existing workflow does that.
-  # blog:
-  #   enabled: true
-  #   backend: docker-compose
-  #   file: /srv/blog/compose.yaml
-  #   git_path: stacks/blog/compose.yaml   # the same file, inside the repository
-  #   auto_apply: true
-  #   expected_services: [ghost]
-  #   health:
-  #     target: http://127.0.0.1:2368/
-
-# Stacks Ripen must never act on, by name. A stack cannot be both
-# enabled above and listed here.
 exclude:
   - portainer

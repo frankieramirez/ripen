@@ -19,8 +19,6 @@ var (
 	digest7 = "sha256:" + strings.Repeat("7", 64)
 )
 
-// fakeTransport routes requests to canned handlers by URL substring, in
-// registration order.
 type fakeTransport struct {
 	handlers []func(*http.Request) (*http.Response, bool)
 	requests []*http.Request

@@ -8,9 +8,6 @@ import (
 	"github.com/frankieramirez/ripen/internal/response"
 )
 
-// writePretty renders an envelope as text. It is a view of the same
-// payload, not a second schema: every value comes from the envelope, and
-// a payload this surface does not know how to print falls back to JSON.
 func writePretty(writer io.Writer, envelope response.Envelope) error {
 	var printed printer
 	if !envelope.OK {

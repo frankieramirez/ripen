@@ -3,14 +3,6 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import Wordmark from "../components/Wordmark.astro";
 
-// The specimen page. It exists so the design system can be looked at rather
-// than argued about, and so the review checkpoint has somewhere to stand that
-// is not the landing page.
-//
-// The ratios below are computed from the token values at build time, not
-// typed in. A contrast claim maintained by hand is one palette tweak away
-// from being false, and this is the page that makes the claim.
-
 const THEMES = {
   dark: {
     ground: "#171310",
@@ -47,9 +39,6 @@ function ratio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-// AA is 4.5 for normal text, AAA is 7. Everything on this page that carries
-// words is normal-size text, so 4.5 is the bar that matters -- the 3.0
-// large-text allowance is not claimed anywhere.
 function grade(r: number): string {
   if (r >= 7) return "AAA";
   if (r >= 4.5) return "AA";
@@ -246,8 +235,6 @@ const tokenNames = ["ground", "surface", "ink", "muted", "border", "ripe"] as co
     gap: var(--space-8);
   }
 
-  /* On `surface`, not on the page: a favicon is judged against browser
-     chrome, which is never the same colour as the page behind it. */
   .icons li {
     display: flex;
     flex-direction: column;
@@ -321,9 +308,6 @@ const tokenNames = ["ground", "surface", "ink", "muted", "border", "ripe"] as co
     color: var(--muted);
   }
 
-  /* A table of numbers has a floor width below which it cannot usefully
-     shrink, so it scrolls inside its own box rather than pushing the page
-     sideways. */
   .scroller {
     overflow-x: auto;
     max-width: 100%;

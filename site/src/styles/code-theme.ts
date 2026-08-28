@@ -1,24 +1,3 @@
-/*
- * The syntax theme for docs code blocks: two neutrals, and no third colour.
- *
- * Expressive Code's defaults are GitHub's, which set commands in blue and
- * flags in purple. The visual direction names purple and indigo accents on
- * the list of things this site must not look like, and the palette rule is
- * that colour appears exactly once -- when something is ripe. Fifteen YAML
- * blocks of policy reference are not ripe.
- *
- * So the highlighting says the one thing worth saying, and it is the same
- * thing the landing page's terminal block says by hand: keys are `muted`,
- * everything else is `ink`. A reader scanning `configuration.md` for a field
- * name is helped by that distinction and by no other.
- *
- * Two themes rather than one, because `ink` and `muted` are different colours
- * in each. Named `dark` and `light` so Expressive Code's own selectors line up
- * with the attribute the theme toggle writes, and paired with its
- * dark-mode media query so the third state -- no attribute, follow the system
- * -- resolves the same way the rest of the palette does.
- */
-
 interface Tokens {
   readonly ground: string;
   readonly surface: string;
@@ -55,8 +34,6 @@ const theme = (name: "dark" | "light", t: Tokens) => ({
   },
   tokenColors: [
     {
-      // A key, in every language the docs use one: YAML mappings, JSON
-      // objects, and the `NAME=` of a shell assignment.
       scope: [
         "comment",
         "entity.name.tag",

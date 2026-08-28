@@ -1,40 +1,11 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // An assets-only Worker: no `main`, so there is no script in the request
-  // path -- Workers Static Assets serves the built directory directly. The
-  // Astro build is `output: "static"` for the same reason.
   "name": "ripen-site",
   "compatibility_date": "2026-08-25",
   "assets": {
-    // Relative to this file, so `wrangler deploy` runs from site/.
     "directory": "./dist",
-    // Without this the edge answers an unknown path with a bare 404 and
-    // `content-length: 0`, and the themed `dist/404.html` the build produces
-    // is never served -- which is what it did until #134 looked. The default
-    // is "none". This key lives under `assets` and is nothing like `routes`:
-    // it asserts about this deploy only.
     "not_found_handling": "404-page"
   },
-  // Declared, not defaulted, because `workers_dev` has a default and so an
-  // absent key still asserts something: a route toggled off in the dashboard
-  // and left out of this file comes back on the next deploy.
-  //
-  // `routes` is the opposite: it has no default, and an absent key means *do
-  // not touch*. #123 measured both halves rather than reading the docs
-  // harder -- with no `routes` key a deploy leaves routing alone entirely,
-  // and with one, wrangler makes this script's routes exactly the declared
-  // list and deletes any sibling not named here.
-  //
-  // That second half is why BOTH are written down. The apex has been served
-  // since before this file existed by two routes attached by hand in the
-  // dashboard; declaring only the apex would have deleted the wildcard on the
-  // next deploy. Universal SSL already covers both on one certificate, and a
-  // wildcard cannot be a Custom Domain, which is why these are Workers Routes
-  // and there is no Custom Domain anywhere in this setup.
-  //
-  // Requires the deploy token to carry `Workers Routes: Edit` and
-  // `Zone: Read`, both zone-scoped. Widened before this key landed, because
-  // the other order turns every merge on main red.
   "routes": [
     { "pattern": "ripen.dev/*", "zone_name": "ripen.dev" },
     { "pattern": "*.ripen.dev/*", "zone_name": "ripen.dev" }

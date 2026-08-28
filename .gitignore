@@ -1,11 +1,8 @@
-# Go
 /ripen
 cover.out
 
-# GoReleaser's output
 /dist/
 
-# nix build's output symlinks
 /result
 /result-*
 
@@ -20,13 +17,9 @@ secrets/
 *.pem
 *.crt
 
-# Local deployment records and one-off NAS diagnostics
 compose.portainer.backup-*.yaml
 /scripts/
 
-# The site's toolchain. site/ sits inside the Go module, so anything committed
-# there ships in the module zip to every `go install`; the build output and the
-# dependency tree stay out of git for that reason and not just for tidiness.
 /site/node_modules/
 /site/dist/
 /site/.astro/

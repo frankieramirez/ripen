@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// version.go's init runs first (files are presented in name order); this
-// snapshot is taken afterwards so later tests can mutate the exported vars.
 var (
 	versionAtInit string
 	commitAtInit  string

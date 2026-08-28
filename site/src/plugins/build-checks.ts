@@ -6,57 +6,6 @@ import sax from "sax";
 
 import { DOCS_MAP } from "../docs-map";
 
-/*
- * The things `astro build` refuses to finish on, checked against the built
- * directory.
- *
- * It reads the built HTML rather than the sources, which is what makes it
- * trustworthy: it checks the hrefs the reader will actually click against the
- * files and the heading ids the site actually shipped. Nothing here has to
- * model how a slug is generated, how a route is formatted, or how a heading
- * becomes an anchor -- those are the build's answers, already on disk.
- *
- * The link half replaces `starlight-links-validator`, which was the spec's
- * suggestion.
- * That plugin keys its data by each page's path under `src/content/docs/`,
- * and this site's pages are the root `docs/` files read where ADR 0004 keeps
- * them, so every page resolved to a `../../` path it could not match to a
- * route and every internal link came back invalid.
- *
- * It is the enforcing half of the link rule. The mdast plugin rewrites what
- * it can prove and leaves the rest alone; this refuses an href to a route or
- * an anchor the built site does not have -- on every page, including the ones
- * written by hand.
- *
- * The third check is that every SVG in the build is well-formed XML, which
- * [#114](https://github.com/frankieramirez/ripen/issues/114) handed here. A
- * comment written in this repo's `--` style shipped a broken favicon: SVG is
- * parsed as XML, where `--` inside a comment is a syntax error, and an HTML
- * page parses an inline copy anyway -- so the component looked right while
- * the shipped icon rendered as nothing. The build said nothing either.
- *
- * The fourth is the link preview: every page has to name an `og:image`, and
- * the image it names has to be a file in this build. A card is checked by a
- * crawler somewhere else, days later, on a page nobody is watching -- there
- * is no error to see, just a bare grey link, so the build looks instead.
- *
- * The sixth is that the sitemap is exactly the pages that are not marked
- * `noindex`, checked in both directions. The two mechanisms have to agree and
- * nothing else makes them: a `noindex` page still listed in the sitemap is
- * the site asking a crawler to fetch a page it is then told to forget, and a
- * page that is neither `noindex` nor listed has been dropped by an
- * over-broad filter and will be found by nobody. Both are silent -- the
- * symptom is a search result that does or does not exist, months later.
- *
- * The other check is that each docs page has a body. Astro's glob loader
- * catches an error thrown while rendering an entry, logs it, and stores the
- * entry unrendered -- which ships a page with its title, its sidebar and its
- * search entry, and nothing in the middle, on a build that exits 0. Nothing
- * else on the way out notices, so this does. Each page has to render as many
- * `<h2>`s as its source has `##` headings: a statement about the content,
- * rather than a size threshold somebody has to keep plausible.
- */
-
 /** Internal, and worth resolving: not a scheme, a protocol-relative URL, or empty. */
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
@@ -155,8 +104,6 @@ function svgsParse(root: string): number {
 function xmlFault(xml: string): string | undefined {
   let fault: string | undefined;
   const parser = sax.parser(true);
-  // Strict sax reports through the handler and keeps going once resumed, so
-  // the first fault is kept and the rest of the document is not walked twice.
   parser.onerror = (error) => {
     fault ??= error.message.split("\n")[0];
     parser.resume();
@@ -175,8 +122,6 @@ function routeOf(relativePath: string): string {
   return url.endsWith("/index.html") ? url.slice(0, -"index.html".length) : url;
 }
 
-// Attribute matching, not HTML parsing. The input is this build's own output,
-// where every href and id is a double-quoted attribute written by Astro.
 const HREF = /\shref="([^"]*)"/g;
 const ANCHOR = /\s(?:id|name)="([^"]+)"/g;
 
@@ -191,31 +136,16 @@ function resolve(href: string, from: string): Target | null {
   const [path, ...rest] = href.split("#");
   const anchor = rest.join("#");
 
-  // A link into the same page.
   if (!path) return anchor ? { path: from, anchor } : null;
 
-  // Nothing in this build emits a relative href. Astro writes its own
-  // root-relative, and the remark plugin rewrites every relative link a root
-  // doc carries -- except the ones it could not resolve, which it leaves
-  // alone precisely so they arrive here.
   const route = path.split("?")[0]!;
   if (!route.startsWith("/")) return { path: route, anchor, relative: true };
 
-  // Assets -- the fonts, the icons, the OG image later -- are not pages, and
-  // the build does not put them in a directory with an index.
   if (/\.[a-z0-9]+$/i.test(route)) return null;
 
   return { path: route.endsWith("/") ? route : `${route}/`, anchor };
 }
 
-/*
- * Every page names a card, and every card it names is in the build.
- *
- * The image is absolute -- a crawler resolves it against nothing -- so this
- * has to strip the site origin back off before it can look for the file. An
- * absolute URL on some other host is somebody else's asset and not ours to
- * check.
- */
 const CARD = /<meta\s[^>]*?(?:property|name)="(?:og|twitter):image"[^>]*?content="([^"]+)"/g;
 const SITE = "https://ripen.dev";
 const REDIRECT = /<meta\s[^>]*http-equiv="refresh"/i;
@@ -229,15 +159,11 @@ function cardsShipped(root: string): number {
     const route = routeOf(relative(root, file));
     const html = readFileSync(file, "utf-8");
 
-    // `/docs` is a redirect stub -- a meta refresh and nothing else. It is
-    // never the page a link resolves to, so it has no preview to carry.
     if (REDIRECT.test(html)) {
       redirects += 1;
       continue;
     }
 
-    // De-duplicated: `og:image` and `twitter:image` name the same file, and
-    // one missing card should read as one fault rather than two.
     const cards = new Set([...html.matchAll(CARD)].map(([, url]) => url!));
 
     if (cards.size === 0) {
@@ -259,13 +185,6 @@ function cardsShipped(root: string): number {
   return pages.length - redirects;
 }
 
-/*
- * The sitemap and the `noindex` tags say the same thing.
- *
- * Redirect stubs are neither: Astro writes them with `noindex` already and
- * the sitemap integration drops them, so they fall out of both sides and are
- * skipped rather than counted.
- */
 const NOINDEX = /<meta\s[^>]*name="robots"[^>]*content="[^"]*noindex/i;
 const LOC = /<loc>([^<]+)<\/loc>/g;
 
@@ -283,7 +202,6 @@ function indexAgrees(root: string): number {
     const html = readFileSync(file, "utf-8");
     if (REDIRECT.test(html)) continue;
 
-    // `/404.html` is the route `/404/`, which is how a sitemap would name it.
     const route = routeOf(relative(root, file));
     const page = route.endsWith(".html")
       ? `${route.slice(0, -".html".length)}/`

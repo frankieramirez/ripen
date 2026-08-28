@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-#
-# Scans the binary the flake just built and compares what it carries against
-# the recorded baseline.
-#
-# The Nix channel does not choose its own toolchain -- nixpkgs does -- so this
-# binary can carry standard-library vulnerabilities the four GoReleaser
-# channels do not, for as long as nixpkgs takes to land a Go patch (#69). That
-# is accepted, and .github/nix-vuln-baseline.txt is the record of exactly what
-# was accepted.
-#
-# What this refuses: anything the baseline does not already name. What it does
-# not refuse: a vulnerability leaving the list. That direction is the fix
-# arriving, and a red build is a poor reward for it -- so removals print
-# loudly and pass, as the prompt to tighten the file.
 set -euo pipefail
 
 binary=${1:?usage: check-nix-vulnerabilities.sh <binary> <baseline>}
@@ -21,10 +7,6 @@ baseline=${2:?usage: check-nix-vulnerabilities.sh <binary> <baseline>}
 report=$(mktemp)
 trap 'rm -f "$report"' EXIT
 
-# govulncheck exits 3 when it finds something, which is the expected case
-# here, not an error. Any other non-zero is a real failure and must not be
-# swallowed -- a scanner that cannot run has found nothing, which looks
-# identical to a clean scan.
 status=0
 govulncheck -mode=binary -format=json "$binary" > "$report" || status=$?
 if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then

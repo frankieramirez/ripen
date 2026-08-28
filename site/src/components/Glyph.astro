@@ -1,18 +1,4 @@
 ---
-/*
- * The glyph: two circles side by side. Left hollow, `muted`. Right filled,
- * `ripe`. Observed, then mature -- the whole product in two shapes.
- *
- * Inline SVG rather than an <img>, so the circles take their colour from the
- * page's own tokens and follow the theme toggle without a second asset.
- *
- * One geometry, two boxes. The circles are r=6 with a 2-unit stroke on a
- * 32-unit grid, centres 17 apart, which leaves a 3-unit gap -- wide enough
- * that the pair still reads as two things when it is 14px tall in a nav. The
- * inline box is cropped to the circles; `public/favicon.svg` draws the same
- * circles centred in a square. If one moves, both move.
- */
-
 interface Props {
   /** Height in CSS pixels. Width follows the box: 32:14. */
   size?: number;
@@ -36,12 +22,6 @@ const { size = 14, class: className } = Astro.props;
 </svg>
 
 <style>
-  /*
-   * The filled circle is drawn at r=7 against the hollow one's r=6, because
-   * the hollow circle's 2-unit stroke straddles its path: it ends up 14 units
-   * across where a bare r=6 disc would be 12. Matching the stroked outer
-   * diameter is what makes the pair look like one size.
-   */
   .glyph {
     display: block;
     flex: none;

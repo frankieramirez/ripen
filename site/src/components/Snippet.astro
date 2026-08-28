@@ -1,15 +1,4 @@
 ---
-/*
- * A copyable snippet: a bare code block with a copy button in its corner.
- *
- * Only install paths get one. The hero terminal deliberately does not: it is
- * evidence of what Ripen prints, not a thing to paste into a shell, and a
- * copy button on it would invite the reader to run someone else's output.
- *
- * The button is written by the component but wired by one delegated listener
- * on the page, so a page with six snippets still has one handler.
- */
-
 interface Props {
   /** Shown above the block, mono and tracked out. */
   label: string;
@@ -47,12 +36,6 @@ const { label, markup, copy, class: className }: Props = Astro.props;
     margin: 0 0 var(--space-6);
   }
 
-  /*
-   * The button sits in the caption row, not over the block. A wide compose
-   * file scrolls sideways inside its own container, and anything floating on
-   * top of that container has the text sliding under it -- the reader loses
-   * the end of the line they are reading to a button.
-   */
   .head {
     display: flex;
     align-items: center;

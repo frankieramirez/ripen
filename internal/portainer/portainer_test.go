@@ -27,8 +27,6 @@ type call struct {
 	timeout time.Duration
 }
 
-// fakeRequester answers requests from a routing function and records
-// every call.
 type fakeRequester struct {
 	calls  []call
 	answer func(method, path string) (int, any)
@@ -267,8 +265,6 @@ func TestRunningServiceDigestPrefersTheContainersExactDigestPin(t *testing.T) {
 		t.Errorf("digests = %v, want the container's exact pin %s", digests, digest2)
 	}
 }
-
-// --- TLS pinning against a real TLS server ---
 
 func tlsTestServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()

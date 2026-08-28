@@ -1,16 +1,9 @@
-# OpenSSF Scorecard. The README carries its badge, and a badge with no
-# workflow behind it reports nothing — this is what makes it live.
-#
-# Merged at the visibility flip, not before: Scorecard cannot analyze a
-# private repository, so landing this earlier buys a permanently failing
-# job on main. That ordering is docs/rework/CHECKLIST.md, Phase 6.
 name: Scorecard
 
 on:
-  # Scorecard re-reads branch protection when it changes.
   branch_protection_rule:
   schedule:
-    - cron: "26 7 * * 1" # weekly; the exact time only spreads load
+    - cron: "26 7 * * 1"
   push:
     branches: [main]
 
@@ -21,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      id-token: write # publish_results signs its provenance
-      security-events: write # upload the SARIF to code scanning
+      id-token: write
+      security-events: write
 
     steps:
       - uses: actions/checkout@v7
@@ -33,8 +26,6 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          # Publishing is what feeds the badge and the public API; the
-          # SARIF upload below is the same data in the Security tab.
           publish_results: true
 
       - uses: github/codeql-action/upload-sarif@v4

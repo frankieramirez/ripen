@@ -108,9 +108,6 @@ func TestALoopbackBindNeedsNoToken(t *testing.T) {
 	}
 }
 
-// TestHealthzIsUnauthenticatedAndInformationFree keeps the one open
-// route open and empty: a container healthcheck needs it, and nothing
-// else should learn anything from it.
 func TestHealthzIsUnauthenticatedAndInformationFree(t *testing.T) {
 	loaded := loadedApp(t)
 	if err := loaded.Store.OpenBreaker("media: rollback failed", time.Now().UTC()); err != nil {
@@ -179,9 +176,6 @@ func TestTheOverviewListsEveryConfiguredService(t *testing.T) {
 	}
 }
 
-// TestTheBreakerBannerOffersTheCommandNotAButton is the design decision
-// made visible: an open breaker is cleared deliberately, at a terminal,
-// with a reason — never by clicking something on a dashboard.
 func TestTheBreakerBannerOffersTheCommandNotAButton(t *testing.T) {
 	loaded := loadedApp(t)
 	if err := loaded.Store.OpenBreaker("media/web: rollback failed", time.Now().UTC()); err != nil {
@@ -219,8 +213,6 @@ func TestTheInternalAPIAnswersTheResponseEnvelope(t *testing.T) {
 	}
 }
 
-// TestNothingCanBeWritten is the read-only guarantee: no route accepts a
-// method that could change anything.
 func TestNothingCanBeWritten(t *testing.T) {
 	server := serve(t, loadedApp(t), "")
 	client := &http.Client{

@@ -6,34 +6,6 @@ import { defineMdastPlugin } from "satteri";
 
 import { PAGE_BY_SOURCE, routeFor } from "../docs-map";
 
-/*
- * The two edits the root docs need on their way to becoming site pages.
- *
- * Both exist because the files are canonical. They are written for a GitHub
- * reader and stay byte-identical for one, so anything the site needs
- * differently has to happen here, at build time, and never in the file.
- *
- * 1. The leading H1 comes out. Starlight sets the page title itself, from the
- *    frontmatter the loader injects -- which is that same H1. Left in, every
- *    page would carry its title twice.
- *
- * 2. Relative links are resolved by collection membership. A link to a
- *    published page becomes its site route; a link to anything else in the
- *    repository becomes its absolute GitHub URL. There is no hand-maintained
- *    list of either, so a doc that starts linking somewhere new is handled
- *    without anyone remembering to come here.
- *
- * A relative link that resolves to nothing in the working tree is a broken
- * link, and it is left exactly as written -- which is what fails the build,
- * one hook later. Nothing else in this site emits a relative href, so the
- * build checks treat a surviving one as a link to nowhere and refuse it.
- *
- * That indirection is deliberate. Throwing here does not fail the build:
- * Astro's glob loader catches an error thrown while rendering an entry, logs
- * it, and carries on with the entry unrendered. The rule has to be enforced
- * somewhere that can stop.
- */
-
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const GITHUB = "https://github.com/frankieramirez/ripen";
 
@@ -51,8 +23,6 @@ export const repoDocsMarkdown = () =>
 
     heading(node, ctx) {
       if (!sourceDir(ctx.fileURL)) return;
-      // The leading one only: a later `#` heading would be the author's, and
-      // removing it would be an edit rather than a de-duplication.
       if (node.depth === 1 && ctx.indexOf(node) === 0) ctx.removeNode(node);
     },
 
@@ -94,16 +64,11 @@ function rewrite(url: string, from: string): string {
   const absolute = resolve(from, target);
   const repoRelative = relative(REPO_ROOT, absolute);
 
-  // Outside the repository, or naming nothing in it. Either way there is no
-  // rewrite that could be right, so the link keeps the form the build checks
-  // will refuse.
   if (repoRelative.startsWith("..") || !existsSync(absolute)) return url;
 
   const page = PAGE_BY_SOURCE.get(repoRelative);
   if (page) return `${routeFor(page)}${anchor}`;
 
-  // `blob` redirects to `tree` for a directory rather than 404-ing, but the
-  // path is known here, so the link can just be right.
   const kind = statSync(absolute).isDirectory() ? "tree" : "blob";
   return `${GITHUB}/${kind}/main/${repoRelative}${anchor}`;
 }

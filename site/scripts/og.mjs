@@ -1,22 +1,3 @@
-/*
- * Draws the OG card and writes it to public/. Run it with `npm run og`.
- *
- * Committed output, committed generator. The card is a static asset because
- * a link preview is fetched by a crawler that will not run a build, and it is
- * generated rather than hand-drawn because every value in it belongs to the
- * design system: change a token and this is how the card follows.
- *
- * Not a build step. `astro build` runs in CI on a runner with no browser, and
- * a card that regenerates on every deploy is a binary that changes when
- * nothing about it did. It is rendered here, looked at, and committed.
- *
- * The renderer is headless Chrome over the DevTools protocol, driven by
- * Node's own global WebSocket -- no dependency, and the same engine that
- * renders the site, which is the point: the card is set in the real
- * subsetted woff2 with the browser's own hinting, not by a second text
- * shaper that would set the same string slightly differently.
- */
-
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,52 +6,21 @@ import { fileURLToPath } from "node:url";
 
 const SITE = fileURLToPath(new URL("..", import.meta.url));
 
-// Named rather than searched for. This is run by hand on a machine that has a
-// browser, and a script that guesses at four install paths would be four ways
-// to render the card in something other than what serves the site.
 const CHROME =
   process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
-/*
- * The composition, from site/README.md. Sizes are card pixels, and the card
- * is 1200 wide, so they are not the page's rem scale -- a preview is read at
- * about 500 CSS px in a timeline and nothing on it can be page-sized.
- */
 const CARD = {
   pad: 80,
-  glyph: 36, // tall; the box is 32:14, so ~82 wide
+  glyph: 36,
   headline: 104,
-  /*
-   * 38, not the 30 it was drawn at. A card is read at about 360 CSS px in a
-   * Slack unfurl, where 30 card-pixels is 9 -- past quiet and into
-   * unreadable. This is the smallest size that survives that scale.
-   */
   domain: 38,
 };
 
-/*
- * "A digest ripens." / "You apply." -- the landing's own break, because the
- * card and the hero are the same sentence and a preview that re-breaks it
- * reads as a different one. Sixteen characters at 104px in a font that is
- * 0.6em wide is 998px, against 1040px of room between the gutters.
- */
 const HEADLINE = ["A digest ripens.", "You apply."];
 const DOMAIN = "ripen.dev";
 
 const SIZES = [
-  // Glyph pinned to the top edge, the sentence sitting on the bottom one. A
-  // 1200x630 card is short enough that the two still read as one thing.
   { file: "og.png", width: 1200, height: 630, layout: "split" },
-  /*
-   * The 1:1 surfaces -- Mastodon, some chat clients. Laid out square rather
-   * than centre-cropped out of the wide card, which would cut a 998px
-   * headline down to 630px of room and take the verb off the end of it.
-   *
-   * The one thing that changes is that the glyph is not pinned to the top:
-   * held there against a square, it leaves 700px of nothing in the middle and
-   * the card reads as a mistake. Same gutter, same sizes, same order, same
-   * alignment -- one centred stack instead of two edges.
-   */
   { file: "og-square.png", width: 1200, height: 1200, layout: "stack" },
 ];
 
@@ -95,12 +45,6 @@ async function main() {
 
 const read = (path) => readFileSync(join(SITE, path), "utf-8");
 
-/*
- * The six dark values, read out of the design system rather than repeated.
- * Dark is the native theme and the only one the card has -- a preview renders
- * on somebody else's surface, so it carries the brand rather than answering a
- * media query it will never be asked.
- */
 function darkTokens() {
   const root = read("src/styles/tokens.css").match(/:root\s*\{([\s\S]*?)\n\}/);
   if (!root) throw new Error("tokens.css: no :root block");
@@ -112,11 +56,6 @@ function darkTokens() {
   );
 }
 
-/*
- * The glyph's geometry, lifted out of the component that draws it on the
- * page. One geometry: the card cannot end up with a mark that is a near-miss
- * of the site's, because it is not drawing a second one.
- */
 function glyphFrom(component) {
   const viewBox = component.match(/viewBox="([^"]+)"/)?.[1];
   const circles = [...component.matchAll(/<circle\s([^>]*?)\s*\/?>/g)].map(([, attrs]) => attrs);
@@ -124,12 +63,6 @@ function glyphFrom(component) {
   return { viewBox, circles: circles.map((attrs) => `<circle ${attrs} />`) };
 }
 
-/*
- * The face goes in as a data URI. Chrome is loading the page from a data URL
- * with no origin, so a `/fonts/...` href resolves to nothing and the headline
- * would silently come out in the fallback -- which is a monospace too, so
- * nothing would look obviously wrong.
- */
 function fontData(path) {
   return `data:font/woff2;base64,${readFileSync(join(SITE, path)).toString("base64")}`;
 }
@@ -188,8 +121,6 @@ async function launch() {
     throw new Error(`no browser at ${CHROME} -- set CHROME to one.`);
   }
 
-  // A throwaway profile, so this never touches the browser the human is
-  // using and never inherits an extension that would paint on the card.
   const profile = mkdtempSync(join(tmpdir(), "ripen-og-"));
   const chrome = spawn(CHROME, [
     "--headless=new",
@@ -201,8 +132,6 @@ async function launch() {
   ]);
   chrome.on("exit", () => rmSync(profile, { recursive: true, force: true }));
 
-  // The port is written to stderr on startup, and it is the only way to learn
-  // it when the port was asked for as 0.
   const endpoint = await new Promise((resolve, reject) => {
     let buffer = "";
     chrome.stderr.on("data", (chunk) => {
@@ -240,12 +169,6 @@ async function shoot(chrome, html, { width, height }) {
   const { sessionId } = await send(chrome, "Target.attachToTarget", { targetId, flatten: true });
   const call = (method, params) => send(chrome, method, params, sessionId);
 
-  /*
-   * The window is set explicitly rather than trusted: headless Chrome floors
-   * its window at 500 CSS px on macOS, which is well under the card, and the
-   * square one is taller than most screens. The override is the only size the
-   * page ever sees.
-   */
   await call("Emulation.setDeviceMetricsOverride", {
     width,
     height,
@@ -255,9 +178,6 @@ async function shoot(chrome, html, { width, height }) {
   await call("Page.enable");
   await call("Page.navigate", { url: `data:text/html;base64,${Buffer.from(html).toString("base64")}` });
 
-  // The face is a data URI, so there is no network to wait on -- but the
-  // layout still has to happen with it, and a screenshot taken before the
-  // font is applied comes back set in the fallback.
   await call("Runtime.enable");
   await call("Runtime.evaluate", { expression: "document.fonts.ready", awaitPromise: true });
 
