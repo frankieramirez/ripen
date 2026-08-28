@@ -9,11 +9,6 @@ import (
 	"github.com/frankieramirez/ripen/internal/state"
 )
 
-// checkDurability is invariant 1 of the rework spec, checked at the
-// moment of emission: every paging Event corresponds to a durable state
-// change *already written*. A Notifier can then never say something
-// `ripen status` cannot confirm — including when the process dies
-// between the two.
 func checkDurability(t *testing.T, harness *harness, recorded recordedEvent) {
 	t.Helper()
 	key := state.Key{
@@ -121,9 +116,6 @@ func TestAServiceComingBackAnnouncesItselfAndIsAudited(t *testing.T) {
 	harness.events.events = nil
 	harness.events.onEmit = func(recorded recordedEvent) { checkDurability(t, harness, recorded) }
 
-	// The rollback restored the baseline, so the next monitor run finds
-	// the service back where it belongs — even though the registry still
-	// offers the digest that broke it.
 	harness.expect(harness.run(domain.ModeMonitor), "web", domain.ResultCandidate)
 
 	if !harness.events.saw(event.StackRecovered) {
@@ -137,7 +129,6 @@ func TestAServiceComingBackAnnouncesItselfAndIsAudited(t *testing.T) {
 		t.Errorf("audit = %+v, want the recovery recorded before it was announced", attempts)
 	}
 
-	// Recovery is a state change, so it is announced once, not every run.
 	harness.events.events = nil
 	harness.run(domain.ModeMonitor)
 	if harness.events.saw(event.StackRecovered) {

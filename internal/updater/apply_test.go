@@ -14,9 +14,6 @@ import (
 
 const sidecarHealthTarget = "http://media:9090/health"
 
-// ripen walks a Service from cold to a mature Candidate: baselined, one
-// Candidate observation recorded, and the maturity window elapsed. The
-// next apply run is then free to act.
 func ripen(harness *harness, engine *fakeBackend, digest string) {
 	harness.t.Helper()
 	harness.run(domain.ModeMonitor)
@@ -223,7 +220,6 @@ func TestFailedPostUpdateHealthRollsBackAndOpensTheBreaker(t *testing.T) {
 	engine.running = map[string]string{"web": baseDigest, "sidecar": sidecarDigest}
 	harness := singleHarness(t, multiStack(), engine)
 	ripen(harness, engine, newDigest)
-	// Healthy before the update and after the rollback, never in between.
 	harness.health.answer = func(_ config.HealthPolicy, _ int) (bool, error) {
 		return len(engine.deployments) != 1, nil
 	}

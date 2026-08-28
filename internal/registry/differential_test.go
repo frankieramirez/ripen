@@ -1,9 +1,5 @@
 package registry
 
-// Differential test backing the spec's registry-client decision: the
-// deliberately minimal client must agree with google/go-containerregistry
-// when both resolve the same multi-arch index from the same registry.
-
 import (
 	"crypto/sha256"
 	"encoding/json"

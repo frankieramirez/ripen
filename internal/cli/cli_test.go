@@ -40,14 +40,11 @@ type invocation struct {
 	data     map[string]any
 }
 
-// invoke runs one command against a temporary policy and state store.
 func invoke(t *testing.T, configPath string, args ...string) invocation {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	full := append([]string{args[0], "--config", configPath}, args[1:]...)
 	if args[0] == "notify" {
-		// `notify test` is the only two-word verb; the config flag goes
-		// after the subcommand.
 		full = append([]string{"notify"}, args[1:]...)
 		full = append(full, "--config", configPath)
 	}
@@ -68,8 +65,6 @@ func invoke(t *testing.T, configPath string, args ...string) invocation {
 	return result
 }
 
-// policyFile writes a compose-backend policy and returns its path plus
-// the state database path it names.
 func policyFile(t *testing.T) (string, string) {
 	t.Helper()
 	directory := t.TempDir()
@@ -101,9 +96,6 @@ func mediaKey() state.Key {
 	return state.Key{Backend: domain.BackendDockerCompose, Stack: "media"}
 }
 
-// TestEveryAnswerIsOneResponseEnvelopeOnStdout is the default: JSON,
-// always, with no TTY detection. --pretty is an explicit opt-in on
-// reads only.
 func TestEveryAnswerIsOneResponseEnvelopeOnStdout(t *testing.T) {
 	configPath, _ := policyFile(t)
 
@@ -513,9 +505,6 @@ func TestTheSchemaVerbPublishesOneSchemaPerCommand(t *testing.T) {
 	}
 }
 
-// portainerPolicy points at a port nothing listens on, so the run fails
-// at the identity preflight — a transient operational error, which is
-// exactly what a daemon has to survive reporting.
 func unreachablePortainerPolicy(t *testing.T) string {
 	t.Helper()
 	directory := t.TempDir()
@@ -547,9 +536,6 @@ stacks:
 	return configPath
 }
 
-// TestTheDaemonWritesNothingToStdout is invariant 3: the Event stream on
-// stderr is the daemon's entire output, so a container's stdout can be
-// trusted to be empty.
 func TestTheDaemonWritesNothingToStdout(t *testing.T) {
 	configPath, _ := policyFile(t)
 	var stdout, stderr bytes.Buffer
@@ -572,8 +558,6 @@ func TestTheDaemonWritesNothingToStdout(t *testing.T) {
 	}
 }
 
-// TestDaemonOnceReportsATransientErrorAsAnEventAndExitsOne is the
-// behavior-inventory row carried across from the Python CLI.
 func TestDaemonOnceReportsATransientErrorAsAnEventAndExitsOne(t *testing.T) {
 	configPath := unreachablePortainerPolicy(t)
 	var stdout, stderr bytes.Buffer
@@ -633,7 +617,6 @@ func TestNotifyTestWithoutANotifierIsRefused(t *testing.T) {
 	}
 }
 
-// syncBuffer collects output written from the server's goroutines.
 type syncBuffer struct {
 	mutex   sync.Mutex
 	written bytes.Buffer
@@ -655,9 +638,6 @@ func (s *syncBuffer) lines() int {
 	return len(strings.Fields(strings.ReplaceAll(strings.TrimSpace(s.String()), " ", "")))
 }
 
-// mcpSession drives a real stdio session: initialize, initialized, and
-// one tools/list. Stdin stays open until the answers arrive, the way a
-// host holds the pipe open.
 func mcpSession(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	requests := strings.Join([]string{
@@ -692,9 +672,6 @@ func mcpSession(t *testing.T, args ...string) (int, string, string) {
 	}
 }
 
-// TestTheMCPServerWritesNothingButProtocolToStdout is invariant 2. The
-// transport owns stdout, so anything else written there — a log line, a
-// warning, an envelope — would corrupt the session.
 func TestTheMCPServerWritesNothingButProtocolToStdout(t *testing.T) {
 	configPath, _ := policyFile(t)
 
@@ -741,8 +718,6 @@ func TestTheMCPServerRegistersWriteToolsOnlyWhenAsked(t *testing.T) {
 	}
 }
 
-// invokePretty runs a read command with --pretty. Stdout is prose, so
-// this does not try to parse an envelope.
 func invokePretty(t *testing.T, configPath string, args ...string) invocation {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
@@ -885,9 +860,6 @@ func TestPrettyIsRefusedOnAWriteCommand(t *testing.T) {
 	}
 }
 
-// TestPrettyDoesNotExistOnTheDaemon is invariant 3: --pretty is not
-// registered on the daemon, so it cannot write prose (or anything else)
-// to stdout.
 func TestPrettyDoesNotExistOnTheDaemon(t *testing.T) {
 	configPath, _ := policyFile(t)
 	var stdout, stderr bytes.Buffer
@@ -905,8 +877,6 @@ func TestPrettyDoesNotExistOnTheDaemon(t *testing.T) {
 	}
 }
 
-// TestPrettyDoesNotExistOnMCP is invariant 2: --pretty is not registered
-// on mcp, so a mistyped flag cannot put prose on stdout.
 func TestPrettyDoesNotExistOnMCP(t *testing.T) {
 	configPath, _ := policyFile(t)
 	var stdout, stderr bytes.Buffer

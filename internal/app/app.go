@@ -63,8 +63,6 @@ func (a *App) Close() error {
 func (a *App) Events(actor domain.Actor, stream io.Writer) (*event.Stream, *notifier.Webhook, error) {
 	events := event.NewStream(actor, event.NewWriterSink(stream))
 	if a.Policy.Notifier == nil || a.Policy.Notifier.Webhook == nil {
-		// Absent notifier configuration is silent-but-logging, not
-		// silent: the stream still records everything.
 		return events, nil, nil
 	}
 	webhook, err := notifier.New(notifier.Options{
@@ -140,8 +138,6 @@ func (a *App) Updater(actor domain.Actor, events updater.EventSink) (*updater.Up
 		Clock:    a.Clock,
 		Actor:    actor,
 	}
-	// A nil *github.Adapter in an interface is not a nil interface, and
-	// the engine tests "are proposals configured" on the interface.
 	if proposals != nil {
 		options.Proposals = proposals
 	}
@@ -172,8 +168,6 @@ func (a *App) backendFor(name domain.Backend) (backend.Port, error) {
 		return nil, fmt.Errorf("unknown backend %q", name)
 	}
 }
-
-// --- the policy's Services ---
 
 // ServiceRef is one Service the policy declares: the state Key it is
 // recorded under, plus the rules that apply to it. Reads are driven by
@@ -219,8 +213,6 @@ func (a *App) Services() []ServiceRef {
 	}
 	return refs
 }
-
-// --- payloads shared by every surface ---
 
 // RunPayload renders a run report on the wire. Every surface renders it
 // the same way, because they all call this.
@@ -276,8 +268,6 @@ func ProposedPayload(result updater.Result, runID string) response.Proposed {
 	}
 	return payload
 }
-
-// --- reads ---
 
 // Status answers `ripen status`: policy-driven, with every configured
 // Service present whether or not it has ever been observed.
@@ -361,7 +351,6 @@ func (a *App) Audit(filter state.AuditFilter) (response.Audit, error) {
 	if filter.Limit <= 0 {
 		filter.Limit = 50
 	}
-	// Read one past the page to learn whether another page exists.
 	filter.Limit++
 	attempts, err := a.Store.AuditPage(filter)
 	if err != nil {
@@ -449,8 +438,6 @@ func (a *App) Explain(stack string) (response.Explain, error) {
 	return explain, nil
 }
 
-// blockers lists what stands between a Service and an apply, in the
-// order a run would hit them.
 func (a *App) blockers(explain response.Explain, service response.ExplainService) []string {
 	blockers := []string{}
 	if !explain.Enabled {
@@ -528,8 +515,6 @@ func (a *App) observation(key state.Key, now time.Time) (*response.Observation, 
 	return &observed, nil
 }
 
-// observed applies the maturity rule: two observations, and the window
-// elapsed since the digest was first seen.
 func (a *App) observed(record state.CandidateRecord, now time.Time) response.Observation {
 	window := time.Duration(a.Policy.CandidateMinAgeSeconds) * time.Second
 	matureAt := record.FirstSeen.Add(window)

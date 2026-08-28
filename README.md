@@ -28,7 +28,9 @@ $ ripen status
 
 ## Quick start
 
-Ripen needs a policy file and somewhere to keep its state. Nothing else.
+Ripen needs a policy file and somewhere to keep its state. Nothing else. Every
+field of the policy is documented in
+[docs/configuration.md](docs/configuration.md).
 
 ```bash
 # 1. Get the binary

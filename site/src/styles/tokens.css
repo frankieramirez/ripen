@@ -1,19 +1,4 @@
-/*
- * The design system: six color tokens, two themes, one type scale.
- *
- * Intent, from the visual direction brief: **well-set evidence**. A quiet,
- * warm-dark page in the product's own monospace voice, where color appears
- * exactly once -- when something is ripe. There is no green counterpart and
- * no traffic lights: an unripe state is neutral, because Ripen not acting is
- * the normal case and does not deserve a color.
- *
- * Dark is native and light is derived. Both are defined here rather than one
- * being patched onto the other, because a theme assembled out of overrides is
- * the one that ends up with an unreadable pair nobody looked at.
- */
-
 :root {
-  /* --- Color, dark (native) --- */
   --ground: #171310;
   --surface: #201b16;
   --ink: #e8e3dc;
@@ -21,33 +6,16 @@
   --border: #332c25;
   --ripe: #e09520;
 
-  /* Tells the browser which way its own furniture goes -- scrollbars, form
-     controls, the canvas behind an over-scroll. Without it the built-in
-     chrome stays light and betrays the theme at the edges of the page. */
   color-scheme: dark;
 
-  /* --- Type --- */
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
     monospace;
   --font-serif: "Source Serif 4", Iowan Old Style, Charter, Georgia, serif;
 
-  /*
-   * Mono carries display, terminal, labels, nav and buttons; the largest type
-   * on the page is the monospace, which is the whole voice of the thing. The
-   * serif carries body prose only.
-   */
-  /*
-   * The floor is 1.75rem, not the 2.5rem this scale was first drawn with.
-   * The hero line is "A digest ripens." set in a monospace, where every
-   * character is 0.6em wide: sixteen of them at 2.5rem is 384px, and a 390px
-   * phone has 342px between the frame's gutters. The old floor did not
-   * overflow the heading, it overflowed the document, and took the theme
-   * toggle and the whole page off the right edge with it.
-   */
   --step-hero: clamp(1.75rem, 8.5vw, 4.5rem);
   --step-title: clamp(1.75rem, 3.5vw, 2.5rem);
   --step-heading: 1.25rem;
-  --step-body: 1.0625rem; /* 17px */
+  --step-body: 1.0625rem;
   --step-small: 0.875rem;
   --step-label: 0.75rem;
 
@@ -58,7 +26,6 @@
   --tracking-hero: -0.02em;
   --tracking-label: 0.14em;
 
-  /* --- Space --- */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -69,16 +36,10 @@
   --space-16: 4rem;
   --space-24: 6rem;
 
-  --measure: 34rem; /* body prose line length */
-  --frame: 68rem; /* page content width */
+  --measure: 34rem;
+  --frame: 68rem;
 }
 
-/*
- * Light, in both the ways it can be asked for. The system preference applies
- * only when the reader has not chosen dark explicitly, so a stored choice
- * always outranks the OS -- and the toggle wins in both directions rather
- * than only away from the default.
- */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --ground: #fafaf8;

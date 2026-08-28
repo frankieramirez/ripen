@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-// TestPublishedSchemasMatchTheGeneratedOnes is invariant 8 of the rework
-// spec: what `ripen schema` emits and what docs/schema/v1/ holds are the
-// same document. The schemas are generated from the payload types, so a
-// field added without regenerating fails here rather than silently
-// shipping a lie to every agent reading the published schema.
 func TestPublishedSchemasMatchTheGeneratedOnes(t *testing.T) {
 	directory := filepath.Join("..", "..", "docs", "schema", "v1")
 	entries, err := os.ReadDir(directory)
@@ -60,7 +55,6 @@ func TestPublishedSchemasMatchTheGeneratedOnes(t *testing.T) {
 	}
 }
 
-// published lists the schema files currently on disk.
 func published(entries []os.DirEntry) map[string]bool {
 	names := map[string]bool{}
 	for _, entry := range entries {
@@ -69,8 +63,6 @@ func published(entries []os.DirEntry) map[string]bool {
 	return names
 }
 
-// update regenerates the published schemas instead of checking them.
-// The generator lives here, next to the check, so the two cannot drift.
 var update = os.Getenv("RIPEN_UPDATE_SCHEMAS") != ""
 
 const howToRegenerate = "regenerate with RIPEN_UPDATE_SCHEMAS=1 go test ./internal/response/"

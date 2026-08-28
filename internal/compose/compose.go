@@ -193,9 +193,6 @@ func (a *Adapter) Deploy(state backend.StackState, compose string, repull bool) 
 		return errors.New("compose deploy needs a compose stack observation")
 	}
 	if repull {
-		// Compose applies pin an exact digest, so there is nothing for a
-		// repull to resolve: asking for one means the caller planned a
-		// Portainer-shaped update against a compose stack.
 		return errors.New("the compose backend pins digests and has no repull path")
 	}
 	if err := a.probe(); err != nil {
@@ -234,8 +231,6 @@ func (a *Adapter) ServicesRunning(state backend.StackState) (bool, string, error
 	return true, "", nil
 }
 
-// --- engine calls ---
-
 type resolvedConfig struct {
 	Services map[string]struct {
 		Image string `json:"image"`
@@ -249,8 +244,6 @@ type container struct {
 	Health  string `json:"Health"`
 }
 
-// probe verifies once that the engine binary exists and speaks the JSON
-// flags the adapter depends on. Anything else is an unusable engine.
 func (a *Adapter) probe() error {
 	if a.probed {
 		return nil
@@ -327,8 +320,6 @@ func (a *Adapter) projectContainers(handle Handle) (map[string]container, error)
 	return containers, nil
 }
 
-// decodeContainers reads `compose ps --format json` in both shapes the
-// compose CLIs emit: a JSON array, and one object per line.
 func decodeContainers(output []byte) ([]container, error) {
 	trimmed := bytes.TrimSpace(output)
 	if len(trimmed) == 0 {
@@ -356,9 +347,6 @@ func decodeContainers(output []byte) ([]container, error) {
 	return entries, nil
 }
 
-// imageDigest resolves what a running container's image reference means
-// as a digest. An explicitly pinned reference answers itself; anything
-// else is asked of the engine's image store.
 func (a *Adapter) imageDigest(image, service string) (string, error) {
 	if match := pinnedImagePattern.FindStringSubmatch(image); match != nil {
 		return match[1], nil
@@ -411,7 +399,6 @@ func (a *Adapter) environment() []string {
 	return []string{a.socketVar + "=" + value}
 }
 
-// execRunner runs the engine as a subprocess.
 type execRunner struct{}
 
 func (execRunner) Run(ctx context.Context, binary string, args, env []string) ([]byte, error) {
@@ -430,11 +417,6 @@ func (execRunner) Run(ctx context.Context, binary string, args, env []string) ([
 	return stdout.Bytes(), nil
 }
 
-// --- files ---
-
-// preflightWritable proves at observe time that an apply could rewrite
-// the file, rather than discovering it mid-Transaction: both the file
-// itself and its directory, since the rewrite is a rename.
 func preflightWritable(path string) error {
 	file, err := os.OpenFile(path, os.O_WRONLY, 0) // #nosec G304 -- the compose path is operator-supplied by design
 	if err != nil {
@@ -455,8 +437,6 @@ func preflightWritable(path string) error {
 	return nil
 }
 
-// writeAtomically replaces a file's contents through a rename, so no
-// reader — engine or operator — ever sees a half-written Compose file.
 func writeAtomically(path, content string) error {
 	mode := os.FileMode(0o644)
 	if info, err := os.Stat(path); err == nil {
@@ -488,10 +468,6 @@ func writeAtomically(path, content string) error {
 	return nil
 }
 
-// envFileContents reads every env file the Compose document declares,
-// plus the implicit .env beside it. A declared file that is missing
-// makes the stack ineligible: its absence changes what the engine would
-// deploy, and Ripen refuses to act on a document it cannot fully read.
 func envFileContents(composePath, compose string) ([]string, [][]byte, error) {
 	declared, err := declaredEnvFiles(composePath, compose)
 	if err != nil {
@@ -562,9 +538,6 @@ func declaredEnvFiles(composePath, compose string) ([]string, error) {
 	return paths, nil
 }
 
-// fingerprint covers everything an apply depends on: the Compose bytes,
-// every env file by path and content, and the resolved service set.
-// Anything else changing is not drift Ripen needs to fail on.
 func fingerprint(compose []byte, envFiles []string, envBytes [][]byte, services []string) string {
 	digest := domain.NewFingerprint()
 	digest.AddBytes("compose", compose)

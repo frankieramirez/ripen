@@ -44,8 +44,6 @@ func Run(ctx context.Context, options Options) error {
 		if options.Once {
 			return err
 		}
-		// A failed cycle is reported on the stream and then forgotten:
-		// the next cycle is the retry.
 		if ctx.Err() != nil {
 			return nil //nolint:nilerr // a cancelled daemon exited cleanly, whatever the last cycle did
 		}

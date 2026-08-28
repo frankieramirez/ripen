@@ -84,9 +84,16 @@ This is why the MCP write tools are never registered rather than refused.
 breaker, Proposal, Event, Notifier, Actor, Agent surface, Web UI. Do not
 introduce a synonym.
 
-**Comments explain why.** The code already says what it does. A comment earns its
-place by recording a constraint, a decision, or a trap — not by narrating the
-next line.
+**No comments.** The code carries its own explanation: name the thing, extract
+the function, make the constraint a type or a test. A comment is where an
+unclear design goes to be excused instead of fixed. If a rule matters, there is
+a test that fails when it is broken, and that test is where you look.
+
+The only comments in this repository are the ones a tool reads: `//go:` and
+`//go:embed` directives, `// #nosec` and `//nolint` suppressions with their
+justification, the blank-import justification revive requires, and doc comments
+on exported Go identifiers and exported TypeScript declarations, which are the
+package's published API documentation. Nothing else.
 
 **Errors are lowercase and specific.** They are read by operators in a terminal
 and by agents in an envelope. Say what was refused and, where useful, what would
@@ -109,8 +116,9 @@ fake backend behaves like a real one — it deploys by replacing the document it
 holds and re-reads running digests out of that document's pins — so the pinning,
 drift, and rollback paths are exercised end to end.
 
-Where a test proves an invariant or claims a behavior-inventory row, say so in a
-comment above it.
+Where a test proves an invariant or claims a behavior-inventory row, say so in
+its name, not in a comment above it. `docs/rework/SPEC.md` names the test that
+holds each row, so the mapping lives there and in the test name.
 
 ## The behavior inventory
 

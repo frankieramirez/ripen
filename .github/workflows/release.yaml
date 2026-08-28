@@ -1,6 +1,3 @@
-# Publishes a release from an annotated v* tag: binaries, archives,
-# checksums, SBOMs, images on both registries, keyless signatures, and
-# build provenance. Nothing here runs on a branch.
 name: Release
 
 on:
@@ -15,27 +12,20 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # Every `run:` below is a guard or a publish step, and the default
-    # `bash -e` lets a failure in the middle of a pipeline pass as the
-    # exit status of the last command. A guard that cannot fail is not a
-    # guard.
     defaults:
       run:
         shell: bash -euo pipefail {0}
     permissions:
-      contents: write # create the release and upload artifacts
-      packages: write # push to ghcr
-      id-token: write # keyless signing and provenance
-      attestations: write # attest what was built
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      # See ci.yaml: `go 1.26` in go.mod is a floor, so without this the
-      # release is built by whatever Go patch the runner cached. The
-      # published binaries are the last place to find that out.
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -45,31 +35,9 @@ jobs:
         run: |
           go test -race ./...
 
-      # Pinned to an exact version, not a moving major: sigstore stopped
-      # publishing the major tag after v3, so `@v4` resolves to nothing
-      # and fails the run. v4.x is reachable only as an exact version.
-      #
-      # It has to be a v4. The v3 installer verifies the cosign it
-      # downloads against a detached `<binary>.sig` plus a release public
-      # key, and no cosign 3.x publishes one — 3.x ships a Sigstore
-      # bundle, `<binary>.sigstore.json`, instead. So v3 cannot install
-      # any v3 cosign at all: it 404s on the signature and stops. It was
-      # the first thing to fail the release rehearsal (#54), and it could
-      # not have failed anywhere else, because `--snapshot` signs nothing
-      # and never installs cosign. v4.1.2 knows about the bundle and
-      # verifies it with a pinned-digest bootstrap cosign.
-      #
-      # The cosign-release pin below is separate, and load-bearing.
-      # cosign 2.x accepts the pre-v3 signing flags, ignores them and
-      # exits 0 — the fail-open that #59 fixed. v3.1.3 is the version
-      # that fix was proven against, so it is pinned rather than
-      # defaulted. Both actions are pure-shell composites, so neither can
-      # be the source of a Node 20 deprecation annotation.
       - uses: sigstore/cosign-installer@v4.1.2
         with:
           cosign-release: "v3.1.3"
-      # v0 is the only major this action has ever had, and it already
-      # runs on Node 24.
       - uses: anchore/sbom-action/download-syft@v0
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
@@ -81,72 +49,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # DOCKERHUB_TOKEN is the only long-lived secret in this workflow.
-      # Where it lives, what it can reach, and how it is rotated:
-      # docs/release-credentials.md. Provisioned by
-      # .github/release/provision-dockerhub.sh, which creates the Docker Hub
-      # repository private before anything is ever pushed to it.
       - name: Log in to Docker Hub
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # The release notes are the hand-written CHANGELOG section for this
-      # version. A tag with no section is a tag nobody wrote notes for,
-      # and the release stops rather than inventing them from commits.
-      #
-      # Written to RUNNER_TEMP, not the checkout. `goreleaser release`
-      # refuses to run against a dirty work tree, and an untracked file
-      # is dirty -- so writing the notes next to the code they describe
-      # stopped the release the first time it was ever attempted (#54).
-      # `--snapshot`, the gate that runs on every push, permits a dirty
-      # tree, which is why nothing local could have caught it. Keeping
-      # the file out of the checkout fixes it without either weakening
-      # goreleaser's check or teaching .gitignore about a CI temp file.
       - name: Take the release notes from the changelog
         run: |
           version="${GITHUB_REF_NAME#v}"
           awk -v version="$version" '
             $0 ~ "^## \\[" version "\\]" { collecting = 1; next }
             collecting && /^## / { exit }
-            # Keep a Changelog keeps its link definitions at the end of the
-            # file, after the last section -- and the section being released
-            # is always that last section. Without this the notes carry them.
             collecting && /^\[[^]]+\]: / { exit }
             collecting { print }
           ' CHANGELOG.md | tr -d '\r' > "$RUNNER_TEMP/release-notes.md"
-          # Non-empty, not merely present: a section header with nothing
-          # under it collects a blank line, which -s would accept.
           if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
             echo "CHANGELOG.md has no section for $version" >&2
             exit 1
           fi
           cat "$RUNNER_TEMP/release-notes.md"
 
-      # actions/attest-build-provenance cannot persist an attestation for
-      # a user-owned private repository: GitHub refuses the API call with
-      # "Feature not available for user-owned private repositories". The
-      # first rehearsal run to get this far published the archives, the
-      # images, the signatures and the Release, and only then failed on
-      # it (#54) -- leaving a release carrying the provenance the README
-      # tells people to check, except that it does not exist.
-      #
-      # So the question is asked before anything is published rather than
-      # after. Nothing about this is permanent: the repository goes public
-      # in Phase 6 of docs/rework/CHECKLIST.md, and provenance starts
-      # working at that moment. Until then a release is refused, which is
-      # the honest outcome -- an unattestable release is one nobody can
-      # verify, and README.md promises every archive can be.
       - name: Refuse a release that cannot be attested
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Asked so that only a positive "public" proceeds. Reading the
-          # answer with `[ "$(...)" = "true" ]` would have let a rate
-          # limit, an outage or a token scope answer the question with an
-          # empty string and publish -- a fail-open in the step whose
-          # whole purpose is closing one.
           if ! private="$(gh api "repos/$GITHUB_REPOSITORY" -q .private)"; then
             echo "could not read whether $GITHUB_REPOSITORY is private, so whether" >&2
             echo "this release can carry build provenance is unknown; refusing" >&2
@@ -161,11 +88,6 @@ jobs:
             exit 1
           fi
 
-      # A flake cannot read the tag it was fetched by, so flake.nix carries
-      # the version as a constant and `nix run github:...` reports whatever
-      # that constant says. A tag that disagrees with it would publish a Nix
-      # channel whose binary lies about its own version, so the release stops
-      # here rather than shipping one.
       - name: Refuse a tag the flake disagrees with
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -182,18 +104,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # GoReleaser's changelog pipe is the only thing that reads
-      # --release-notes, and it publishes a release whether or not that
-      # file ever reached the body. It already had not: `changelog.disable`
-      # skipped the pipe, the notes were dropped, and the release went out
-      # with a body that was only the footer (#54). Nothing failed.
-      #
-      # So the check is here, and it is the same argument as
-      # sign-blob.sh: the step that could silently produce nothing is the
-      # step that has to prove it produced something. The notes are the
-      # body's exact prefix -- GoReleaser renders release notes, then the
-      # footer -- so this compares bytes rather than looking for a
-      # substring and hoping.
       - name: Refuse a release whose body is not the changelog section
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -211,15 +121,6 @@ jobs:
             exit 1
           fi
 
-      # Provenance covers what the Release actually carries: the four
-      # archives and the checksums file. The raw binaries live in
-      # per-target directories under dist/ and are build intermediates
-      # nobody downloads, so these globs stay one level deep rather than
-      # descending. Attesting the checksums file reaches the SBOMs too —
-      # it lists every archive and every SBOM by digest.
-      #
-      # The images are out of scope here: docker_signs puts a cosign
-      # signature on each manifest, which is a different claim.
       - name: Attest what was built
         uses: actions/attest-build-provenance@v4
         with:

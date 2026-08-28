@@ -28,9 +28,6 @@ const acceptHeader = "application/vnd.oci.image.index.v1+json, " +
 	"application/vnd.docker.distribution.manifest.list.v2+json, " +
 	"application/vnd.docker.distribution.manifest.v2+json"
 
-// digestPattern is stricter than the Python adapter's startswith
-// ("sha256:") checks — a full-shape match, rejecting malformed digests
-// the Python client would have accepted. Deliberate fail-closed change.
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // Platform selects one manifest out of a multi-arch index. Variant is
@@ -186,12 +183,6 @@ func (c *Client) verifyConfigPlatform(image domain.ImageReference, configDigest,
 	return nil
 }
 
-// manifestRequest performs a manifest request, following one bearer-token
-// challenge. The returned response has status 200 and an open body; the
-// returned authorization header value ("" when anonymous) is captured
-// here rather than read back off the response, because http.Client
-// strips Authorization on cross-host redirects and response.Request is
-// the post-redirect request.
 func (c *Client) manifestRequest(method string, image domain.ImageReference) (*http.Response, string, error) {
 	request, err := newManifestRequest(method, image, "")
 	if err != nil {
@@ -245,9 +236,6 @@ func newManifestRequest(method string, image domain.ImageReference, authorizatio
 	return request, nil
 }
 
-// bearerToken fetches an anonymous bearer token for a registry challenge.
-// The token endpoint (realm) must be https — fail closed, no plaintext
-// token traffic.
 func (c *Client) bearerToken(challenge string) (string, error) {
 	if !strings.HasPrefix(strings.ToLower(challenge), "bearer ") {
 		return "", fmt.Errorf("unsupported registry authentication challenge")
@@ -293,9 +281,6 @@ func (c *Client) bearerToken(challenge string) (string, error) {
 	return token, nil
 }
 
-// parseChallengeParams parses the comma-separated auth params of a
-// WWW-Authenticate challenge, honoring quoted values (a quoted scope may
-// itself contain commas) and lowercasing keys.
 func parseChallengeParams(challenge string) map[string]string {
 	values := map[string]string{}
 	rest := challenge

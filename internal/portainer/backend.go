@@ -66,8 +66,6 @@ func (b *Backend) Observe(stack config.StackPolicy) (backend.StackState, error) 
 	}
 	images := map[string]string{}
 	for _, name := range services {
-		// Portainer stores the document it deploys, so what is written
-		// is what runs: declared and resolved are the same reference.
 		if image, err := composefile.ServiceImage(compose, name); err == nil {
 			images[name] = image
 		}
@@ -85,9 +83,6 @@ func (b *Backend) Observe(stack config.StackPolicy) (backend.StackState, error) 
 		Handle:         entry,
 	}
 
-	// Running digests are only worth the extra API calls where the
-	// Transaction needs per-service truth: a multi-service policy, or a
-	// Git-backed stack whose deployment Ripen has to confirm.
 	if len(stack.Services) > 0 || entry.GitBacked {
 		if state.RunningDigests, err = b.adapter.ServiceImageDigests(entry); err != nil {
 			return backend.StackState{}, err
@@ -126,9 +121,6 @@ func (b *Backend) ServicesRunning(backend.StackState) (bool, string, error) {
 	return true, "", nil
 }
 
-// fingerprint covers the Compose document and the stack environment.
-// Environment order is Portainer's business, not a change: the parts are
-// sorted before hashing so a reordered list is not drift.
 func fingerprint(compose string, env []EnvVar) string {
 	entries := make([]string, 0, len(env))
 	for _, pair := range env {

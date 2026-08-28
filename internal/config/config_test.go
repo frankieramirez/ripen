@@ -306,8 +306,6 @@ func TestMalformedNumericSettingIsAConfigError(t *testing.T) {
 	assertLoadError(t, value, "lease_ttl_seconds must be an integer")
 }
 
-// --- v1 additions: per-stack backend, compose engine settings ---
-
 func composeStack(t *testing.T, backend string) string {
 	t.Helper()
 	dir := t.TempDir()

@@ -5,15 +5,6 @@ import Wordmark from "../components/Wordmark.astro";
 import Snippet from "../components/Snippet.astro";
 import Comparison from "../components/Comparison.astro";
 
-// All seven sections of site/README.md: hero, the warning, install, the
-// Transaction walkthrough, the non-goals, the comparison, the footer.
-//
-// Everything in the terminal block below is real output. It was produced by
-// building this repo's binary, seeding a state database with a baseline and
-// two sightings of a second digest, and running the two commands against it.
-// Nothing is trimmed, re-indented or invented. On a page whose whole argument
-// is evidence, a mocked-up payload would be the one lie that mattered.
-
 const COMPOSE = `services:
   ripen:
     image: ghcr.io/frankieramirez/ripen:latest
@@ -26,9 +17,6 @@ const COMPOSE = `services:
       - ./data:/data
       - /srv/media/compose.yaml:/srv/media/compose.yaml   # only for compose backends`;
 
-// The same twelve lines with the keys muted and the comment dimmed. The copy
-// button hands over COMPOSE itself, so what lands in the clipboard is a file
-// that parses rather than one carrying markup or a shell prompt.
 const COMPOSE_MARKUP = `services:
   ripen:
     <span class="k">image</span>: ghcr.io/frankieramirez/ripen:latest
@@ -48,11 +36,6 @@ const MONITOR = "ripen run --mode monitor --config policy.yaml";
 const GO_INSTALL = "go install github.com/frankieramirez/ripen/cmd/ripen@latest";
 const NIX_RUN = "nix run github:frankieramirez/ripen -- version";
 
-// Section 4. The five steps are the README's, at the length the page can
-// afford and the README cannot. This is the feature list -- the spec has no
-// separate features section on purpose, because a Transaction explained in
-// full is the answer to "how is this different from Watchtower" without
-// naming Watchtower on the way.
 const STEPS = [
   {
     name: "Observe",
@@ -93,10 +76,6 @@ const STEPS = [
   },
 ];
 
-// Section 5. ROADMAP.md's headings, the README's framing, and the maintainer
-// line the spec asks to be carried among them rather than tucked into a
-// footer -- the smallness is the pitch, so it is stated in the same voice as
-// everything else here.
 const NON_GOALS = [
   {
     name: "The privileged Docker socket",
@@ -401,8 +380,6 @@ services:
     padding-top: var(--space-8);
   }
 
-  /* --- 1. Hero ------------------------------------------------------ */
-
   .hero {
     padding-top: var(--space-24);
     padding-bottom: var(--space-16);
@@ -414,12 +391,6 @@ services:
     max-width: var(--measure);
   }
 
-  /*
-   * The primary action sits above the evidence, not below it. The block
-   * beneath runs thirty-two lines because that is what the two commands
-   * really print, which puts anything after it well past the fold; the
-   * zero-risk command is the one thing that cannot afford to be down there.
-   */
   .cta {
     display: flex;
     align-items: center;
@@ -461,8 +432,6 @@ services:
     margin-top: var(--space-12);
   }
 
-  /* --- 2. The warning ----------------------------------------------- */
-
   .warn {
     padding-top: var(--space-16);
     padding-bottom: var(--space-16);
@@ -485,8 +454,6 @@ services:
   .warn-body p {
     margin: 0;
   }
-
-  /* --- 3. Install --------------------------------------------------- */
 
   .install {
     padding-bottom: var(--space-24);
@@ -529,8 +496,6 @@ services:
     color: var(--ink);
   }
 
-  /* A closed disclosure that looks like a heading is a dead end; the arrow
-     is the only thing telling the reader there is more behind it. */
   .other summary .label::before {
     content: "+ ";
   }
@@ -547,8 +512,6 @@ services:
     color: var(--muted);
   }
 
-  /* --- 4. How a Transaction works ----------------------------------- */
-
   .transaction {
     border-top: 1px solid var(--border);
     padding-top: var(--space-16);
@@ -559,12 +522,6 @@ services:
     margin-bottom: var(--space-6);
   }
 
-  /*
-   * The steps hang off one rule, which is the only thing on the page drawing
-   * a sequence. Numbers rather than icons: the order is the argument, and a
-   * row of glyphs beside it would be the feature grid this page was written
-   * to avoid.
-   */
   .steps {
     list-style: none;
     margin: var(--space-12) 0 0;
@@ -587,9 +544,6 @@ services:
     margin-bottom: var(--space-2);
   }
 
-  /* The number reads with the name, not out in the gutter beside the rule.
-     Hung out there it lost the name it belongs to and picked up the rule
-     instead, which made it look like a stray mark rather than an index. */
   .step-index {
     font-size: var(--step-small);
     flex: none;
@@ -601,8 +555,6 @@ services:
     font-weight: 500;
     color: var(--ink);
   }
-
-  /* --- 5. What it will not do --------------------------------------- */
 
   .limits {
     border-top: 1px solid var(--border);
@@ -638,8 +590,6 @@ services:
     max-width: var(--measure);
   }
 
-  /* --- 6. Comparison ------------------------------------------------ */
-
   .compare {
     border-top: 1px solid var(--border);
     padding-top: var(--space-16);
@@ -653,8 +603,6 @@ services:
   .compare > .measure {
     margin-bottom: var(--space-12);
   }
-
-  /* --- 7. Footer ---------------------------------------------------- */
 
   .foot {
     border-top: 1px solid var(--border);
@@ -674,9 +622,6 @@ services:
     max-width: 28rem;
   }
 
-  /* Row-gap is tighter than column-gap on purpose: below about 26rem the
-     five links wrap, and a wide row-gap leaves the last one looking stranded
-     on a line of its own rather than reading as part of one block. */
   .foot-links {
     display: flex;
     gap: var(--space-3) var(--space-6);
@@ -696,17 +641,6 @@ services:
     text-decoration-color: var(--border);
   }
 
-  /*
-   * The orchestrated load: five beats over about a second, once. Each beat is
-   * a group of lines that belong together -- a command, then its output -- so
-   * the block assembles the way a session does rather than typing itself out
-   * character by character, which would be theatre.
-   *
-   * The lines are in the document either way, and visible by default. The
-   * animation only moves them; with JavaScript off, CSS unloaded, or motion
-   * reduced, the reader gets the finished block immediately, which is the
-   * version that matters.
-   */
   :global(html.motion) .beat {
     animation: settle 320ms ease-out both;
     animation-delay: calc(var(--beat) * 200ms);
@@ -735,8 +669,6 @@ services:
     }
 
     h1 {
-      /* The break is set for the desktop measure; at phone width the line
-         wraps on its own and the manual break leaves a short first line. */
       display: block;
     }
 
@@ -750,8 +682,6 @@ services:
       text-align: center;
     }
 
-    /* One row at desktop, stacked here -- the links would otherwise wrap into
-       a ragged second line under a privacy note they are not part of. */
     .foot {
       flex-direction: column;
       gap: var(--space-8);
@@ -760,19 +690,6 @@ services:
 </style>
 
 <script>
-  /*
-   * One delegated listener for every copy button on the page.
-   *
-   * The button copies the `data-copy` string rather than the block's own text
-   * because the block carries a `$` prompt that must not travel with it: a
-   * reader who pastes `$ ripen run` into a shell gets an error, and blames
-   * the page.
-   *
-   * The clipboard API is absent on an insecure origin and can be refused
-   * outright even where it exists. Both paths tell the reader to copy it
-   * themselves rather than leaving a button that does nothing and says
-   * nothing.
-   */
   document.addEventListener("click", (event) => {
     const target = event.target as HTMLElement | null;
     const button = target?.closest<HTMLElement>("[data-copy]");
@@ -789,9 +706,6 @@ services:
       }, 1600);
     };
 
-    // `navigator.clipboard` is absent on an insecure origin, and optional
-    // chaining would short-circuit the whole call including the .then --
-    // leaving a button that does nothing and says nothing. Check for it.
     if (!navigator.clipboard) {
       say("Select and copy");
       return;

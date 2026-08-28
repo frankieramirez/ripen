@@ -33,8 +33,6 @@ stacks:
       target: http://127.0.0.1:9/health
 `
 
-// portainerPolicy names credential files that do not exist. A read-only
-// server must load anyway; a writes-enabled one must not.
 const portainerPolicy = `
 mode: monitor
 state_file: %s
@@ -73,7 +71,6 @@ func composeApp(t *testing.T) *app.App {
 	return loaded
 }
 
-// session connects a client to a server over an in-memory transport.
 func session(t *testing.T, server *Server) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
@@ -111,10 +108,6 @@ func call(t *testing.T, connected *mcp.ClientSession, name string,
 	return result, envelope
 }
 
-// TestReadOnlyRegistersNoWriteToolsAndBuildsNoClients is invariant 4.
-// The read-only mode is not a permission check that could be bypassed:
-// the tools do not exist and the write path is never constructed, which
-// is why a policy with unreadable credentials still serves reads.
 func TestReadOnlyRegistersNoWriteToolsAndBuildsNoClients(t *testing.T) {
 	directory := t.TempDir()
 	configPath := filepath.Join(directory, "policy.yaml")

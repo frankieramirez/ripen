@@ -11,17 +11,11 @@ import (
 	"github.com/frankieramirez/ripen/internal/domain"
 )
 
-// secretMarkers are the substrings that would mean an Event payload had
-// grown a field capable of carrying a credential.
 var secretMarkers = []string{
 	"secret", "token", "password", "passwd", "credential",
 	"authorization", "auth", "bearer", "cookie", "api_key", "apikey", "private",
 }
 
-// TestNoEventPayloadFieldCanCarryASecret is invariant 9. The Python
-// updater scrubbed values by matching key names at emit time; Ripen has
-// one closed payload type instead, so the check moves to the type: if no
-// field can hold a secret, no Event can leak one.
 func TestNoEventPayloadFieldCanCarryASecret(t *testing.T) {
 	payload := reflect.TypeOf(Data{})
 

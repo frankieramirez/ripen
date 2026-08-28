@@ -48,8 +48,6 @@ const (
 	CodeInternal            Code = "internal"
 )
 
-// retryable marks the codes where trying the same call again later can
-// succeed without anyone changing anything.
 var retryable = map[Code]bool{
 	CodeStateLocked:         true,
 	CodeBackendUnavailable:  true,
@@ -104,8 +102,6 @@ func Optional(value string) *string {
 	}
 	return &value
 }
-
-// --- payloads ---
 
 // Identity names one Service. Service is null for a stack-level policy.
 type Identity struct {

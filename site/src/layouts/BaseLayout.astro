@@ -19,15 +19,6 @@ const { title, description, noindex = false } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
 
-/*
- * The link preview. Absolute, because a crawler resolves it against nothing
- * -- a root-relative href is the standard way to ship a card with no image.
- *
- * `Astro.site` is ripen.dev, so on the workers.dev deploy these point at a
- * host that is still dark. That is the same choice the canonical link above
- * already makes, and it is the right one: the preview a reader shares has to
- * name the site, not the address it happened to be built for.
- */
 const OG_IMAGE = new URL("/og.png", Astro.site);
 const OG_ALT =
   "A digest ripens. You apply. — ripen.dev, set in white monospace on " +

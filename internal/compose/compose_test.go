@@ -26,8 +26,6 @@ const twoServices = `services:
     image: ghcr.io/example/sidecar:0.9.1
 `
 
-// fakeRunner answers engine commands from a script and records every
-// command and environment override it was asked to run.
 type fakeRunner struct {
 	commands [][]string
 	envs     [][]string

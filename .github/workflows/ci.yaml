@@ -1,16 +1,3 @@
-# The Go CI from the rework migration plan (docs/rework/SPEC.md), and now the
-# only CI there is: the Python suite's `ci.yml` went with the Python
-# implementation. Do not rename this file or its `name:` to reclaim the plain
-# "CI" the other one had: the README badge URL addresses the file name and a
-# required status check addresses `name:`, and either rename detaches one
-# silently rather than failing.
-#
-# It also builds the site in site/, and on a merge to main deploys it. The two
-# halves are filtered by the `changes` job below rather than by
-# `on.pull_request.paths`, because a workflow filtered out at the trigger
-# never reports its checks at all: a required check would sit pending forever,
-# where a job skipped by an `if:` reports success. Skipped and missing are not
-# the same thing.
 name: Go CI
 
 on:
@@ -23,14 +10,6 @@ permissions:
 
 jobs:
   changes:
-    # Decides which halves of this file run. The bias is toward running: the
-    # Go jobs are skipped only when a pull request touches nothing outside
-    # site/, and a push to main runs everything unconditionally, because main
-    # is what releases are cut from and is not the place to be clever.
-    #
-    # docs/ deliberately does NOT skip the Go jobs. A test asserts that
-    # `ripen schema` and docs/schema/v1/ are identical, so a docs edit can
-    # fail the Go suite.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -42,9 +21,6 @@ jobs:
           fetch-depth: 0
       - id: filter
         env:
-          # Empty on push; the checkout is the merge commit on a pull request,
-          # so diffing it against the base sha is exactly the pull request's
-          # own change set.
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: .github/ci/changed-halves.sh
 
@@ -55,12 +31,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      # `go 1.26` in go.mod is a floor, not a pin, so without check-latest
-      # setup-go takes whatever patch the runner image happens to have
-      # cached. That is not hypothetical: a run on go1.26.5 reported six
-      # called stdlib vulnerabilities minutes after an identical run got
-      # go1.26.6 and passed. The newest patch is the only thing this repo
-      # should be tested or released on.
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -102,8 +72,6 @@ jobs:
   build:
     needs: changes
     if: needs.changes.outputs.go == 'true'
-    # Cross-compiles the full release matrix (linux/darwin x amd64/arm64)
-    # from ubuntu-latest; no macOS runners.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -124,8 +92,6 @@ jobs:
           path: dist/ripen_linux_amd64_v1/ripen
 
   smoke:
-    # Runs the built binary against a minimal policy to catch packaging
-    # breaks: the three verbs that need no backend at all.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: build
@@ -160,31 +126,13 @@ jobs:
   nix:
     needs: changes
     if: needs.changes.outputs.go == 'true'
-    # The flake is a published install path (ADR 0003), so it builds on every
-    # push and pull request. Without this, `vendorHash` rots silently on the
-    # next dependency bump and the first person to notice is a stranger
-    # running `nix run`.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      # Full history: a flake reads its revision out of the checkout, and a
-      # shallow one has none to read.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # v22 is the current major and already runs on Node 24, so this new
-      # action arrives on the footing #66 put the rest of the file on.
       - uses: DeterminateSystems/nix-installer-action@v22
-      # The lock is what decides which Go this channel ships, so a lock
-      # nobody bumps is a channel frozen at whatever toolchain was current
-      # when it was written. .github/workflows/flake-lock.yaml bumps it
-      # weekly; this is what notices when that stops happening -- including
-      # the quiet way, where GitHub disables a scheduled workflow after 60
-      # days without repository activity and nothing says so.
-      #
-      # Deliberately generous. It is asserting that the channel is still
-      # tracking nixpkgs at all, not policing the weekly cadence, and it
-      # should survive a few missed runs without manufacturing a red build.
       - name: Check the lock is still tracking nixpkgs
         run: |
           locked="$(jq -r '.nodes.nixpkgs.locked.lastModified' flake.lock)"
@@ -200,9 +148,6 @@ jobs:
 
       - name: Build the flake
         run: nix build .#ripen --print-build-logs
-      # A binary that reports the internal/version defaults built fine and
-      # still lies about itself, which is half of what this job is for, so
-      # assert what it says rather than only that it ran.
       - name: Check the built binary reports what the flake built
         run: |
           reported="$(./result/bin/ripen version)"
@@ -217,12 +162,6 @@ jobs:
             exit 1
           fi
           ./result/bin/ripen schema > /dev/null
-      # The one channel nothing scanned. `govulncheck` in the job below reads
-      # the module with the toolchain setup-go installed, which is never the
-      # toolchain nixpkgs built this with -- so the only artifact that can
-      # carry a standard-library vulnerability was the only one nobody looked
-      # at, and it did (#69). Scanning the binary rather than the source
-      # because the source is identical across channels; the toolchain is not.
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -235,19 +174,12 @@ jobs:
             ./result/bin/ripen .github/nix-vuln-baseline.txt
 
   site:
-    # The site build. It runs on site/ edits, and on docs/ and CONTEXT.md
-    # edits too: those files are the docs pipeline's content, so an edit that
-    # breaks the site should fail as a visible check on the pull request that
-    # made it rather than on the next unrelated one.
     needs: changes
     if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      # site/.node-version is the pin. Cloudflare has moved Node majors across
-      # products before and does not read package.json engines, so the major
-      # lives in a file every runtime here agrees on.
       - uses: actions/setup-node@v7
         with:
           node-version-file: site/.node-version
@@ -256,10 +188,6 @@ jobs:
       - name: Install
         working-directory: site
         run: npm ci
-      # Type check as well as build. `astro check` covers the .astro files and
-      # the TypeScript beside them -- the sidebar map, the loader and the two
-      # build plugins -- which `astro build` will happily run without ever
-      # type checking.
       - name: Check types
         working-directory: site
         run: npm run check
@@ -268,35 +196,15 @@ jobs:
         run: npm run build
 
   deploy:
-    # The other half of the walking skeleton (#112): every merge to main
-    # publishes site/ to the Cloudflare Worker that serves ripen.dev.
-    #
-    # Deliberately here and not in release.yaml. The site ships on merge and
-    # the binaries ship on a tag; nothing about the site should be able to
-    # reach the release pipeline.
-    #
-    # `needs: site` is the gate, so a build that failed its own check never
-    # reaches the deploy, and the two failures stay distinguishable: a red
-    # `site` is a broken build, a red `deploy` is a broken deploy path.
     needs: [changes, site]
-    # The push trigger is already branch-limited, so the ref check is
-    # redundant today. It stays because this is the one job whose blast
-    # radius is a live site, and adding a branch to the trigger should not
-    # quietly start publishing from it.
     if: >-
       github.event_name == 'push'
       && github.ref == 'refs/heads/main'
       && needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Named here rather than inherited from the top of the file, because this
-    # is the job the claim is about: wrangler authenticates to Cloudflare with
-    # its own token, so the GitHub token needs nothing beyond the checkout.
     permissions:
       contents: read
-    # Two merges in quick succession would otherwise race, and the loser could
-    # be the newer commit. Queued rather than cancelled: cancelling would
-    # leave main and the live site disagreeing with nothing left to notice it.
     concurrency:
       group: site-deploy
       cancel-in-progress: false
@@ -310,19 +218,9 @@ jobs:
       - name: Install
         working-directory: site
         run: npm ci
-      # Rebuilt rather than carried over from the `site` job as an artifact.
-      # wrangler is a devDependency, so the deploy needs the same npm ci
-      # either way, and an artifact would only save the build itself -- at the
-      # cost of a second thing that can be stale. `npm ci` from the committed
-      # lockfile at the same commit builds the same directory.
       - name: Build
         working-directory: site
         run: npm run build
-      # Written after the build so it lands in the deployed directory without
-      # being checked in. It is what turns the check below into a proof: a 200
-      # only says something is being served, and something has been served
-      # from this Worker since #110 provisioned it. The sha says *this commit*
-      # is.
       - name: Stamp the build with the commit
         working-directory: site
         run: echo "$GITHUB_SHA" > dist/_deploy.txt
@@ -330,30 +228,8 @@ jobs:
         working-directory: site
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          # Not optional, and not a convenience. The token carries one
-          # permission row and cannot enumerate accounts, so wrangler has no
-          # way to discover which account to deploy to and has to be told
-          # (#110). The narrow scope is what makes the second secret
-          # necessary.
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
-      # Proving the deploy path is this job's whole purpose, so it reads the
-      # result back rather than trusting a zero exit. Retried because wrangler
-      # returns when the upload is accepted, not when the edge has caught up.
-      #
-      # Both conditions are checked inside the loop, and both have to hold in
-      # the same pass. The first version of this check tested the root once,
-      # inside the branch the stamp had already satisfied -- and the edge
-      # served the two paths out of step, so a deploy that had entirely
-      # succeeded failed on a root that was still seconds behind its own
-      # stamp. Anything the edge can serve late has to be retried with
-      # everything else, not after it.
-      # Both hosts, in the same pass, for the same reason the stamp and the
-      # root are checked together: anything the edge can serve late has to be
-      # retried with everything else. The apex is here because this file now
-      # declares the routes that hold it up (#121) -- a deploy that reverts or
-      # breaks ripen.dev has to fail the run that caused it, rather than
-      # waiting to be noticed by someone visiting.
       - name: Check the served site is this commit
         env:
           URLS: >-

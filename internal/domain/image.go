@@ -50,8 +50,6 @@ func ParseImageReference(value string) (ImageReference, error) {
 
 	repositoryPart := taggedPart
 	tag := "latest"
-	// A colon marks a tag only in the last path segment; earlier colons
-	// belong to a registry port (registry:5000/repo).
 	if cut := strings.LastIndex(taggedPart, ":"); cut > strings.LastIndex(taggedPart, "/") {
 		repositoryPart, tag = taggedPart[:cut], taggedPart[cut+1:]
 	}

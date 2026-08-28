@@ -33,16 +33,11 @@ const (
 		"\n  sidecar:\n    image: " + sidecarImage + "\n"
 )
 
-// --- fakes ---
-
 type deployment struct {
 	compose string
 	repull  bool
 }
 
-// fakeBackend is an engine that remembers: it deploys by replacing the
-// document it holds, and re-reads running digests out of that document's
-// pins, the way a real engine's running containers would follow it.
 type fakeBackend struct {
 	name         domain.Backend
 	compose      string
@@ -98,7 +93,6 @@ func (f *fakeBackend) Observe(stack config.StackPolicy) (backend.StackState, err
 		Handle:         stack.Name,
 	}
 	if f.resolved != nil {
-		// An interpolated image line reads one way and runs another.
 		observed.ServiceImages = maps.Clone(f.resolved)
 	}
 	if f.running != nil {
@@ -120,8 +114,6 @@ func (f *fakeBackend) Deploy(_ backend.StackState, compose string, repull bool) 
 	if f.deployErr != nil {
 		failure = f.deployErr(len(f.deployments))
 	}
-	// deployLands is the ambiguous case: the call failed but the
-	// deployment happened anyway, which is what a timeout looks like.
 	if failure != nil && !f.deployLands {
 		return failure
 	}
@@ -261,11 +253,7 @@ type fakeClock struct {
 
 func (c *fakeClock) Now() time.Time { return c.now }
 
-// Sleep moves the fake clock instead of blocking, so verification loops
-// reach their deadline in a test without waiting for it.
 func (c *fakeClock) Sleep(duration time.Duration) { c.now = c.now.Add(duration) }
-
-// --- policies ---
 
 func healthAt(target string) config.HealthPolicy {
 	return config.HealthPolicy{Type: "http", Target: target, AcceptedStatus: []int{200}, TimeoutSeconds: 5}
@@ -307,8 +295,6 @@ func policyFor(stacks ...config.StackPolicy) *config.Policy {
 		Stacks:                     stacks,
 	}
 }
-
-// --- harness ---
 
 type harness struct {
 	t         *testing.T
@@ -366,7 +352,6 @@ func newHarness(t *testing.T, policy *config.Policy, backends map[domain.Backend
 	return harness
 }
 
-// singleHarness is the common case: one stack on one backend.
 func singleHarness(t *testing.T, stack config.StackPolicy, engine *fakeBackend) *harness {
 	t.Helper()
 	return newHarness(t, policyFor(stack), map[domain.Backend]*fakeBackend{stack.Backend: engine})
@@ -381,7 +366,6 @@ func (h *harness) run(mode domain.Mode) Report {
 	return report
 }
 
-// result finds one Service's result by its state key service name.
 func (h *harness) result(report Report, service string) Result {
 	h.t.Helper()
 	for _, result := range report.Results {
@@ -423,8 +407,6 @@ func (h *harness) status() state.Status {
 	return status
 }
 
-// mature walks a Candidate through the maturity window: a second
-// observation and enough elapsed time.
 func (h *harness) mature() {
 	h.t.Helper()
 	h.clock.now = h.clock.now.Add(time.Duration(h.policy.CandidateMinAgeSeconds+1) * time.Second)

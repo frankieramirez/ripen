@@ -1,11 +1,3 @@
-/*
- * Reset, and the base element styling every custom page inherits.
- *
- * Scoped to the pages built by hand in src/pages/. The docs are Starlight's
- * layout and take only tokens.css and fonts.css; this file's element rules
- * would fight it.
- */
-
 @import "./fonts.css";
 
 *,
@@ -28,7 +20,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Display, terminal, labels, nav, buttons: all mono. */
 h1,
 h2,
 h3,
@@ -88,18 +79,12 @@ hr {
   margin: var(--space-12) 0;
 }
 
-/* Every interactive thing gets the same visible ring. Never removed without
-   a replacement -- keyboard reading of this page has to stay possible. */
 :where(a, button, [tabindex]):focus-visible {
   outline: 2px solid var(--ripe);
   outline-offset: 3px;
   border-radius: 1px;
 }
 
-/*
- * A label labels. Mono, small, tracked out, muted -- the same treatment
- * everywhere it appears, so the reader learns it once.
- */
 .label {
   font-family: var(--font-mono);
   font-size: var(--step-label);
@@ -108,13 +93,6 @@ hr {
   color: var(--muted);
 }
 
-/*
- * The terminal treatment: a bare block, one hairline, on surface. No title
- * bar and no traffic lights -- it is evidence, not a screenshot of an app.
- * Syntax is neutral except for one token, and the amber is applied by hand
- * where it is true rather than by a highlighter that would colour every
- * boolean on the page.
- */
 .terminal {
   font-family: var(--font-mono);
   font-size: var(--step-small);

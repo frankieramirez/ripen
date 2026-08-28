@@ -74,7 +74,7 @@ type CandidateRecord struct {
 // optional; an empty filter reads the newest attempts.
 type AuditFilter struct {
 	Limit   int
-	Cursor  int64 // page for attempts older than this id
+	Cursor  int64
 	RunID   string
 	Backend domain.Backend
 	Stack   string
@@ -200,8 +200,6 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// One connection: the store is a single-writer design (the run lease
-	// serializes writers) and this keeps transaction handling simple.
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()

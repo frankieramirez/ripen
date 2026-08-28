@@ -22,7 +22,6 @@ func gitBackend() *fakeBackend {
 	return engine
 }
 
-// proposed is the document a merged Proposal would leave behind.
 var proposedCompose = "services:\n  web:\n    image: \"" + webImage + "@" + newDigest + "\"\n"
 
 func TestAGitBackedStackProposesInsteadOfRedeploying(t *testing.T) {
@@ -126,7 +125,6 @@ func TestAGitDeploymentIsAcceptedOnlyAfterThePinAndTheRunningDigestMatch(t *test
 	ripen(harness, engine, newDigest)
 	harness.expect(harness.run(domain.ModeApply), "", domain.ResultProposed)
 
-	// The proposal is merged and the forge deploys it.
 	engine.compose = proposedCompose
 	engine.running["web"] = newDigest
 	report := harness.run(domain.ModeMonitor)
@@ -202,7 +200,6 @@ func TestAnOpenBreakerBlocksProposalsAsWellAsApplies(t *testing.T) {
 		t.Errorf("run = %+v, want the run halted", report.Results)
 	}
 
-	// The propose verb takes the same route to the same refusal.
 	result, _, err := harness.updater.Propose("media")
 	if err != nil {
 		t.Fatal(err)

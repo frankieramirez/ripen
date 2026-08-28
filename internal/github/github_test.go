@@ -26,8 +26,6 @@ type call struct {
 	body   map[string]any
 }
 
-// fakeForge is a GitHub API stand-in: it records every call and answers
-// from a route table keyed "METHOD /path".
 type fakeForge struct {
 	calls   []call
 	routes  map[string]any
@@ -76,7 +74,6 @@ func (f *fakeForge) called(method string) bool {
 }
 
 func contentsPayload(content, sha string) map[string]any {
-	// GitHub wraps base64 content in newlines; the adapter has to cope.
 	encoded := base64.StdEncoding.EncodeToString([]byte(content))
 	var wrapped strings.Builder
 	for index, character := range encoded {

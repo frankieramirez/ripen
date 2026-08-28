@@ -54,8 +54,6 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("Portainer HTTP %d: %s", e.Status, e.Detail)
 }
 
-// requester is the transport seam: production uses the https client
-// below, tests inject a fake.
 type requester interface {
 	request(method, path string, headers map[string]string, body any, timeout time.Duration) (int, any, error)
 }
@@ -66,8 +64,8 @@ type Options struct {
 	APIKeyFile        string
 	CAFile            string
 	FingerprintSHA256 string
-	Timeout           time.Duration // default 20s
-	UpdateTimeout     time.Duration // default 600s: deployments outlive API timeouts
+	Timeout           time.Duration
+	UpdateTimeout     time.Duration
 }
 
 // Adapter is the Portainer backend.
@@ -319,8 +317,6 @@ func (a *Adapter) imageDigest(endpointID int, imageID, service string) (string, 
 		if !ok {
 			continue
 		}
-		// Split on the last @: the digest suffix, whatever the reference
-		// shape before it.
 		if at := strings.LastIndex(reference, "@"); at >= 0 {
 			if digest := reference[at+1:]; strings.HasPrefix(digest, "sha256:") &&
 				!slices.Contains(digests, digest) {
@@ -356,8 +352,6 @@ func (a *Adapter) UpdateStack(stack Stack, compose string, env []EnvVar, repull 
 	return err
 }
 
-// --- https transport with pinned-fingerprint or CA trust ---
-
 type httpsClient struct {
 	base       string
 	httpClient *http.Client
@@ -378,10 +372,6 @@ func newHTTPSClient(baseURL, caFile, fingerprint string, timeout time.Duration) 
 			return nil, errors.New("portainer TLS fingerprint must be 64 hexadecimal characters")
 		}
 		tlsConfig = &tls.Config{
-			// Chain and hostname verification are replaced by an exact
-			// certificate pin: the peer's leaf must hash to the pinned
-			// fingerprint, constant-time compared. VerifyConnection (not
-			// VerifyPeerCertificate) so resumed sessions are pinned too.
 			InsecureSkipVerify: true, // #nosec G402 -- pin verified in VerifyConnection
 			VerifyConnection: func(state tls.ConnectionState) error {
 				if len(state.PeerCertificates) == 0 {

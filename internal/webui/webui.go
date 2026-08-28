@@ -34,8 +34,6 @@ var pages embed.FS
 //go:embed static
 var static embed.FS
 
-// tokenCookie carries the bearer token for browser navigation, which
-// cannot set an Authorization header.
 const tokenCookie = "ripen_ui"
 
 // Options configures the Web UI.
@@ -114,8 +112,6 @@ func ReadToken(tokenFile string) (string, error) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// /healthz is the one unauthenticated route, and it says nothing
-	// about the system beyond being alive.
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = writer.Write([]byte("ok\n"))
@@ -150,9 +146,6 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 	}
 	go func() {
 		<-ctx.Done()
-		// The shutdown deadline outlives the context that triggered it:
-		// cancelling is what got us here, and Shutdown needs time to
-		// finish the requests in flight.
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_ = s.server.Shutdown(shutdown)
@@ -167,11 +160,6 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 // for it.
 func (s *Server) Address() string { return s.address }
 
-// --- authentication ---
-
-// guard requires the bearer token when one is configured. On loopback
-// with no token there is nothing to check: reaching the socket already
-// means being on the host.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if s.token == "" || s.authorized(request) {
@@ -221,9 +209,6 @@ func (s *Server) signIn(writer http.ResponseWriter, request *http.Request) {
 		})
 		return
 	}
-	// Secure follows the connection: the UI speaks plain HTTP by design
-	// (put it behind a proxy for TLS), and a Secure cookie would simply
-	// never come back over loopback.
 	http.SetCookie(writer, &http.Cookie{ // #nosec G124 -- Secure is set exactly when the request was
 		Name:     tokenCookie,
 		Value:    s.token,
@@ -234,8 +219,6 @@ func (s *Server) signIn(writer http.ResponseWriter, request *http.Request) {
 	})
 	http.Redirect(writer, request, "/", http.StatusSeeOther)
 }
-
-// --- views ---
 
 func (s *Server) overview(writer http.ResponseWriter, _ *http.Request) {
 	status, err := s.loaded.Status()
@@ -274,12 +257,6 @@ func (s *Server) policy(writer http.ResponseWriter, _ *http.Request) {
 		"Status": status,
 	})
 }
-
-// --- the internal API ---
-//
-// These endpoints answer the same Response envelope the CLI prints, but
-// they are the UI's own plumbing: undocumented, unversioned, and not
-// part of the agent surface, which is the CLI and MCP.
 
 func (s *Server) statusAPI(writer http.ResponseWriter, _ *http.Request) {
 	status, err := s.loaded.Status()
@@ -320,21 +297,16 @@ func (s *Server) fail(writer http.ResponseWriter, err error) {
 func (s *Server) render(writer http.ResponseWriter, page string, data map[string]any) {
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates.ExecuteTemplate(writer, page, data); err != nil {
-		// The response is already partly written; there is nothing
-		// useful left to say to the browser.
 		_, _ = writer.Write([]byte("<p>the page could not be rendered</p>"))
 	}
 }
 
-// bindsToLoopback reports whether an address is reachable only from this
-// host.
 func bindsToLoopback(address string) (bool, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return false, fmt.Errorf("ui.address must be host:port: %w", err)
 	}
 	if host == "" {
-		// An empty host means every interface.
 		return false, nil
 	}
 	if host == "localhost" {
@@ -347,8 +319,6 @@ func bindsToLoopback(address string) (bool, error) {
 	return parsed.IsLoopback(), nil
 }
 
-// shortDigest renders a digest the way an operator reads one: the first
-// twelve hex characters, or an em dash when there is nothing to show.
 func shortDigest(value any) string {
 	var digest string
 	switch typed := value.(type) {

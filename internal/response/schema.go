@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// dialect is the JSON Schema dialect the published schemas declare.
 const dialect = "https://json-schema.org/draft/2020-12/schema"
 
 // Commands is every command with a published response schema, in the
@@ -17,9 +16,6 @@ var Commands = []string{
 	"notify-test", "schema", "version",
 }
 
-// payloads maps each command to the Go type of its data payload. The
-// schemas are generated from these types rather than hand-written, so
-// the published schema cannot drift from what the code emits.
 func payloads() map[string]reflect.Type {
 	return map[string]reflect.Type{
 		"status":         reflect.TypeOf(Status{}),
@@ -82,7 +78,6 @@ func schemaFor(kind reflect.Type) map[string]any {
 	case reflect.Map:
 		return map[string]any{"type": "object"}
 	case reflect.Interface:
-		// An unconstrained value: `data` on the envelope itself.
 		return map[string]any{}
 	case reflect.Struct:
 		return structSchema(kind)
@@ -106,8 +101,6 @@ func structSchema(kind reflect.Type) map[string]any {
 	}
 }
 
-// collectFields walks a struct's JSON shape, flattening embedded structs
-// the way encoding/json does.
 func collectFields(kind reflect.Type, properties map[string]any, required *[]any) {
 	for index := range kind.NumField() {
 		field := kind.Field(index)
@@ -133,8 +126,6 @@ func collectFields(kind reflect.Type, properties map[string]any, required *[]any
 	}
 }
 
-// nullable widens a schema's type to allow null, which is how every
-// absent value is rendered.
 func nullable(schema map[string]any) map[string]any {
 	existing, ok := schema["type"].(string)
 	if !ok {

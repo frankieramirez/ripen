@@ -72,9 +72,6 @@ func RunWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return ExitOK
 	}
 
-	// Two verbs own their process and never write a Response envelope.
-	// The daemon's whole output is the Event stream on stderr; the MCP
-	// server's stdout belongs to the protocol alone.
 	switch command {
 	case "daemon":
 		return daemonVerb(rest, stderr)
@@ -98,8 +95,6 @@ func write(stdout, stderr io.Writer, envelope response.Envelope, code int, prett
 		return ExitOperation
 	}
 	if !envelope.OK && envelope.Error != nil {
-		// The envelope is the contract; this line is for the person
-		// reading a terminal, and never carries a stack trace.
 		fmt.Fprintf(stderr, "ripen: %s: %s\n", envelope.Error.Code, envelope.Error.Message)
 	}
 	return code
@@ -128,17 +123,12 @@ func dispatch(command string, args []string, stream io.Writer) (response.Envelop
 	}
 }
 
-// withApp runs the verbs that need a policy and a state store.
 func withApp(command string, args []string, stream io.Writer) (response.Envelope, int, bool) {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", defaultConfigPath(), "path to the policy file")
 
 	options := registerFlags(command, flags)
-	// Parse in rounds so flags may follow the positional argument:
-	// `ripen clear-proposal media --reason ...` is the natural way to
-	// type it, and the standard flag package stops at the first
-	// non-flag token.
 	remaining := args
 	for {
 		if err := flags.Parse(remaining); err != nil {
@@ -162,9 +152,6 @@ func withApp(command string, args []string, stream io.Writer) (response.Envelope
 	return envelope, code, options.pretty
 }
 
-// verbOptions is every flag any verb takes. One struct keeps the
-// dispatch flat; each verb registers only the flags it accepts, so an
-// unknown flag is still a usage error.
 type verbOptions struct {
 	arguments []string
 	pretty    bool
@@ -369,10 +356,6 @@ func clearBreakerVerb(loaded *app.App, options *verbOptions,
 	}), ExitOK
 }
 
-// engineFor builds the write path with its Event stream attached. The
-// returned function drains the Notifier: delivery is asynchronous, and a
-// CLI process that exits immediately would otherwise take the queue with
-// it.
 func engineFor(loaded *app.App, stream io.Writer) (*updater.Updater, func(), error) {
 	events, webhook, err := loaded.Events(domain.ActorCLI, stream)
 	if err != nil {
@@ -418,7 +401,6 @@ func notifyTestVerb(loaded *app.App, stream io.Writer) (response.Envelope, int) 
 	}), ExitOK
 }
 
-// daemonVerb runs the scheduled loop. It writes nothing to stdout, ever.
 func daemonVerb(args []string, stream io.Writer) int {
 	flags := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -466,9 +448,6 @@ func daemonVerb(args []string, stream io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// The Web UI is off unless the policy turns it on. Its listener is
-	// bound before the loop starts, so a taken port or an exposed bind
-	// without a token fails now rather than quietly later.
 	if settings := loaded.Policy.UI; settings != nil && settings.Enabled {
 		token, err := webui.ReadToken(settings.TokenFile)
 		if err != nil {
@@ -508,8 +487,6 @@ func daemonVerb(args []string, stream io.Writer) int {
 	return ExitOK
 }
 
-// mcpVerb serves MCP over stdio. Nothing but the protocol is ever
-// written to stdout — not a log line, not an envelope, not a warning.
 func mcpVerb(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -551,9 +528,6 @@ func mcpVerb(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return ExitOK
 }
 
-// sessionEnded reports whether the server stopped because the client
-// hung up, which is how an MCP session normally ends — the host closes
-// the pipe — and not a failure to report.
 func sessionEnded(err error) bool {
 	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 		return true
@@ -562,12 +536,8 @@ func sessionEnded(err error) bool {
 	return errors.As(err, &wire) && wire.Code == serverClosingCode
 }
 
-// serverClosingCode is the JSON-RPC code the SDK uses for calls that
-// arrive while the connection is shutting down.
 const serverClosingCode = -32004
 
-// nopCloser lets the transport own a writer it must not close: stdout
-// belongs to the process, not to one session.
 type nopCloser struct {
 	io.Writer
 }
@@ -581,8 +551,6 @@ func argument(command string, options *verbOptions, message string) (string, res
 	return options.arguments[0], response.Envelope{}, true
 }
 
-// failure maps an operational error to its envelope. Adapter and engine
-// failures are reported, never raised as a stack trace.
 func failure(command string, err error) (response.Envelope, int) {
 	var engine *backend.EngineUnavailableError
 	switch {

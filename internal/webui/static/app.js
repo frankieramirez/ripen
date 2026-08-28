@@ -1,5 +1,3 @@
-// The overview polls the same status the CLI prints. Nothing here writes:
-// there is no endpoint to write to.
 (function () {
   "use strict";
 
@@ -95,9 +93,6 @@
           text(updated, "Last read " + new Date().toLocaleTimeString() + ".");
         }
         var banner = document.getElementById("breaker");
-        // A breaker that closed while the page was open should stop
-        // shouting; one that opened needs the page reloaded to show the
-        // reason, which a reload does correctly.
         if (banner && !envelope.data.breaker.open) {
           banner.remove();
         } else if (!banner && envelope.data.breaker.open) {

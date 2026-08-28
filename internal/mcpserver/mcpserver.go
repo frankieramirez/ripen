@@ -99,15 +99,11 @@ func (s *Server) Tools() []string {
 	return append([]string(nil), s.names...)
 }
 
-// addTool registers one tool and remembers its name.
 func addTool[In any](server *Server, tool *mcp.Tool, command string, handle func(In) (any, error)) {
 	mcp.AddTool(server.server, tool, answer(command, handle))
 	server.names = append(server.names, tool.Name)
 }
 
-// --- tool inputs ---
-
-// noInput is a tool that takes nothing.
 type noInput struct{}
 
 type auditInput struct {
@@ -128,8 +124,6 @@ type clearProposalInput struct {
 	Stack  string `json:"stack" jsonschema:"the stack whose pending proposal is being cleared"`
 	Reason string `json:"reason" jsonschema:"why it is being cleared; recorded in the audit trail"`
 }
-
-// --- registration ---
 
 func registerReads(server *Server, loaded *app.App) {
 	addTool(server, &mcp.Tool{
@@ -231,10 +225,6 @@ func registerWrites(server *Server, engine *updater.Updater) {
 	})
 }
 
-// answer adapts one read or write into a tool handler. Every result —
-// success or failure — is the same Response envelope the CLI prints,
-// carried as structuredContent. A failure sets isError so the caller can
-// see it and correct itself; it is never a JSON-RPC protocol error.
 func answer[In any](command string, handle func(In) (any, error)) mcp.ToolHandlerFor[In, response.Envelope] {
 	return func(_ context.Context, _ *mcp.CallToolRequest, input In) (
 		*mcp.CallToolResult, response.Envelope, error) {
@@ -250,8 +240,6 @@ func answer[In any](command string, handle func(In) (any, error)) mcp.ToolHandle
 	}
 }
 
-// errorCode classifies a failure into the same closed code set the CLI
-// uses, so an agent reads the same error shape a person would.
 func errorCode(err error) response.Code {
 	var unavailable *backend.EngineUnavailableError
 	switch {

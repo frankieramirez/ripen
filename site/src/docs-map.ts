@@ -1,20 +1,3 @@
-/*
- * The sidebar map: the one place a root markdown file becomes a published page.
- *
- * Discovery and publishing are deliberately separated. The loader globs
- * `docs/*.md` and a new file lands in the collection without anyone opting it
- * in -- but a globbed file that is absent from this list fails the build
- * rather than appearing at the bottom of the sidebar with a guessed title, or
- * being dropped where nobody would notice. Adding a doc is one line here.
- *
- * The canonical files carry no frontmatter, so this is also where the title
- * override, the description, and the order come from. Everything else -- the
- * page's own H1 -- is read out of the file.
- *
- * Order is the array's order: Vocabulary first, then the README documentation
- * table. Flat, no groups; eight pages do not need them.
- */
-
 export interface DocPage {
   /** The canonical file, relative to the repository root. */
   readonly source: string;
@@ -30,9 +13,6 @@ export interface DocPage {
 
 export const DOCS_MAP: readonly DocPage[] = [
   {
-    // CONTEXT.md is a root file, not a doc, and its H1 is the product name --
-    // a title that would read as the site's front page rather than as the
-    // glossary every other page leans on.
     source: "CONTEXT.md",
     id: "docs/vocabulary",
     label: "Vocabulary",
