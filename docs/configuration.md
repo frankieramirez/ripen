@@ -8,7 +8,15 @@ unknown fields, ambiguous rules, and unsafe values stop the process rather than
 producing a warning nobody reads. A typo must never silently disable a safety
 rule.
 
-Start from [`config.example.yaml`](../config.example.yaml).
+Start from [`config.example.yaml`](../config.example.yaml). Copy it to
+`policy.yaml`, edit it, and keep it out of Git — it names your hosts and the
+paths to your secrets.
+
+The example file is a working starting point, not the reference. It carries no
+annotations and shows only the sections a first install needs. This page is the
+reference: every field, its default, and what refuses. [Everything
+together](#everything-together) at the end is the whole policy in one block,
+optional sections included.
 
 ## Where the file comes from
 
@@ -107,6 +115,13 @@ where a boolean belongs is a startup error rather than a silent `true`.
       timeout_seconds: 5
 ```
 
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `type` | `http` | The only type in v1. |
+| `target` | — | Required. `url` is accepted as a synonym. |
+| `accepted_status` | `[200]` | Any other status is unhealthy. |
+| `timeout_seconds` | `5` | A check that does not answer in time is unhealthy. |
+
 A check that times out or refuses the connection is unhealthy — that is the
 question it exists to answer. A check Ripen cannot run at all (an unsupported
 type, a target that is not an http URL) is a configuration error.
@@ -131,9 +146,25 @@ compose:
     binary: podman
 ```
 
-A configured Compose socket that resolves to `/var/run/docker.sock` or
-`/run/docker.sock` — directly or through a symlink chain — refuses at config
-load. The privileged socket is out of scope permanently.
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `portainer.base_url` | — | Required for the Portainer backend. https only. |
+| `portainer.api_key_file` | — | Required. The file holding the API key. |
+| `portainer.expected_username` | — | Required. The run stops if the key belongs to someone else. |
+| `portainer.tls_fingerprint_sha256` | — | 64 hex characters. Exactly one of this and `tls_ca_file`. |
+| `portainer.tls_ca_file` | — | A CA bundle, as the alternative to a pin. |
+| `compose.docker.binary` | `docker` | The engine Ripen shells out to. |
+| `compose.podman.binary` | `podman` | The same, for Podman. |
+| `compose.<engine>.socket` | unset | Optional rootless socket. The engine's own default is used when unset. |
+
+There is no insecure mode for Portainer: a `base_url` that is not https, or
+both or neither of the two TLS fields, refuses at startup.
+
+Ripen shells out to the engine's own compose implementation and never touches a
+privileged socket. A configured Compose socket that resolves to
+`/var/run/docker.sock` or `/run/docker.sock` — directly or through a symlink
+chain — refuses at config load. The privileged socket is out of scope
+permanently.
 
 ## Proposals
 
@@ -144,8 +175,10 @@ github:
   token_file: /run/secrets/github-token
 ```
 
-Required whenever any stack sets `git_path`. The token file must not be readable
-by group or others; Ripen refuses to start otherwise. See
+All three fields are required whenever any stack sets `git_path`; there is no
+default branch. The token file must not be readable by group or others — mode
+`0600` — and Ripen refuses to start otherwise. Ripen opens a pull request
+pinning the digest and never deploys it; your existing workflow does that. See
 [Proposals](proposals.md).
 
 ## Notifications
@@ -160,9 +193,17 @@ notifier:
     events: [breaker.opened, stack.error, stack.recovered]
 ```
 
-Absent means silent-but-logging: the Event stream on stderr still records
-everything. An unknown Event name in `events` is a startup error. See
-[Notifications](notifications.md).
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `heartbeat_interval_seconds` | unset | Deliver something even when nothing changed. Off when absent. |
+| `webhook.url_file` | — | Required. The file holding the endpoint URL. |
+| `webhook.token_file` | unset | Optional bearer token. |
+| `webhook.timeout_seconds` | `10` | Per-delivery timeout. |
+| `webhook.events` | the paging set | Which Events page. An unknown name is a startup error. |
+
+Absent means silent-but-logging: the Event stream on stderr is always on and
+records everything, and the webhook adds one outbound sink that pages on state
+changes only. See [Notifications](notifications.md).
 
 ## The web interface
 
@@ -173,9 +214,14 @@ ui:
   token_file: /run/secrets/ui-token
 ```
 
-Off unless `enabled: true`. A non-loopback address refuses to start without a
-token, supplied by `token_file` or `RIPEN_UI_TOKEN`. There is no insecure
-escape hatch.
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | Off unless set. |
+| `address` | `127.0.0.1:7476` | A non-loopback address requires a token. |
+| `token_file` | unset | Or the `RIPEN_UI_TOKEN` environment variable. |
+
+It reads; it cannot change anything. A non-loopback address refuses to start
+without a token. There is no insecure escape hatch.
 
 ## Exclusions
 
@@ -209,3 +255,116 @@ Every one of these stops the process at startup:
   repository, or is not a YAML file;
 - a Compose socket that resolves to the privileged Docker socket;
 - an unknown Event name in `notifier.webhook.events`.
+
+## Everything together
+
+One policy with every section filled in, including the optional ones.
+[`config.example.yaml`](../config.example.yaml) is the shorter starting point;
+this is the shape of the whole thing.
+
+```yaml
+mode: monitor
+
+max_updates_per_run: 1
+candidate_min_age_seconds: 86400
+verification_timeout_seconds: 300
+lease_ttl_seconds: 1800
+
+check_interval_seconds: 86400
+state_file: /data/updater.db
+
+compose:
+  docker:
+    binary: docker
+    socket: /run/user/1000/docker.sock
+  podman:
+    binary: podman
+    socket: /run/user/1000/podman/podman.sock
+
+portainer:
+  base_url: https://portainer.example:9443
+  api_key_file: /run/secrets/portainer-api-key
+  expected_username: ripen
+  tls_fingerprint_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+
+github:
+  repository: owner/repository
+  base_branch: main
+  token_file: /run/secrets/github-token
+
+notifier:
+  heartbeat_interval_seconds: 86400
+  webhook:
+    url_file: /run/secrets/webhook-url
+    token_file: /run/secrets/webhook-token
+    timeout_seconds: 10
+    events:
+      - run.failed
+      - transaction.succeeded
+      - transaction.rolled_back
+      - transaction.rollback_failed
+      - breaker.opened
+      - breaker.cleared
+      - proposal.created
+      - stack.error
+      - stack.recovered
+
+ui:
+  enabled: true
+  address: 127.0.0.1:7476
+  token_file: /run/secrets/ui-token
+
+stacks:
+  media:
+    enabled: true
+    backend: docker-compose
+    file: /srv/media/compose.yaml
+    project: media
+    auto_apply: false
+    expected_services:
+      - jellyfin
+    health:
+      type: http
+      target: http://127.0.0.1:8096/health
+      accepted_status: [200]
+      timeout_seconds: 5
+
+  arr:
+    enabled: true
+    backend: portainer
+    expected_services:
+      - radarr
+      - sonarr
+      - flaresolverr
+    services:
+      radarr:
+        auto_apply: true
+        health:
+          target: http://127.0.0.1:7878/ping
+      sonarr:
+        auto_apply: true
+        health:
+          target: http://127.0.0.1:8989/ping
+      flaresolverr:
+        enabled: false
+        health:
+          target: http://127.0.0.1:8191/health
+
+  blog:
+    enabled: true
+    backend: docker-compose
+    file: /srv/blog/compose.yaml
+    git_path: stacks/blog/compose.yaml
+    auto_apply: true
+    expected_services: [ghost]
+    health:
+      target: http://127.0.0.1:2368/
+
+exclude:
+  - portainer
+```
+
+`media` is a single-service Compose stack. `arr` is a multi-service Portainer
+stack where `flaresolverr` is health-only. `blog` sets `git_path`, so it is a
+Proposal stack: Ripen opens a pull request against `stacks/blog/compose.yaml`
+and deploys nothing itself.
