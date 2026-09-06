@@ -23,3 +23,5 @@ compose.portainer.backup-*.yaml
 /site/node_modules/
 /site/dist/
 /site/.astro/
+
+/.claude/worktrees/

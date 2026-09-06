@@ -34,6 +34,7 @@ Then make the smallest edit that satisfies `change_note`:
 
 - Change what the note names. Leave the surrounding code alone, even where you see something you would improve.
 - Match the file's existing conventions: naming, error handling, import order, formatting. A fix that looks foreign to its file is not done.
+- Write the plainest code that answers the note. A new helper, parameter, or abstraction needs a present reason inside the item: the note asks for it, or a class item's sites share the same line. Otherwise inline it.
 - Do not add a comment that explains the fix or references the review. The diff speaks for itself.
 - If the reviewer suggested one approach and a clearly better one exists, take the better one and say why in `summary`. Report it as `fixed-differently`.
 - Add a test when the fix changes behavior and no test would catch a regression. Skip this for docs, comments, and string literals.
@@ -60,12 +61,16 @@ These are not grounds for `blocked`: the fix feels risky, you disagree with the 
 
 A blocked item goes back to the orchestrator, which re-judges it with your evidence and either sends it back with a corrected note or drops it from the fix list. Nothing you flag gets lost, so there is no reason to push through a contradiction.
 
+## Re-dispatch
+
+The orchestrator may hand an item back to you after a verifier read the combined diff. The new `change_note` says what the verifier found: the ask was not answered, the edit landed at the wrong site, a hunk nobody asked for, or a convention the file follows that the edit does not. Treat it as the spec, the same as the first time. Revert or adjust only your own earlier edit; another fixer's hunk in the same file is not yours to touch, even when it looks wrong. When the note says to revert, put the site back exactly as it was and return `reverted`. `files_changed` always lists the files as they stand after this pass because of your edits, so a fully reverted file drops off the list.
+
 ## Return shape
 
 Return exactly this, as plain text or a fenced block:
 
 ```
-status: fixed | fixed-differently | blocked
+status: fixed | fixed-differently | blocked | reverted
 files_changed:
   - <path>
   - <path>
@@ -77,4 +82,4 @@ blocked_reason: <the concrete contradiction with the quoted evidence, or
   empty when status is not blocked>
 ```
 
-`files_changed` is empty for `blocked`. List every file you touched, including new test files; the orchestrator stages exactly this list and nothing else.
+`files_changed` is empty for `blocked` and for a full `reverted`. List every file you touched, including new test files; the orchestrator stages exactly this list and nothing else.

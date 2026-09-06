@@ -1,65 +1,89 @@
 {
   "version": 1,
   "skills": {
+    "attune": {
+      "source": "frankieramirez/mana",
+      "sourceType": "github",
+      "skillPath": "skills/attune/SKILL.md",
+      "computedHash": "84a178e224489601b90b1c02b56b68d6c5cd68cf4a52b1066c3ea8be2c60f7e5"
+    },
+    "augur": {
+      "source": "frankieramirez/mana",
+      "sourceType": "github",
+      "skillPath": "skills/augur/SKILL.md",
+      "computedHash": "7d813d97811e6d7e167e58ed14fc4135f1f734f2f1e3da45942e05f86b3da74e"
+    },
     "banish": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/banish/SKILL.md",
-      "computedHash": "4e230d54759d0923691239ae4076bf29fad587dac1cf6ef80b24be1c49fecfc5"
+      "computedHash": "c4d965ae259711fefcbd191f18a1cce27aacbdc694feee18774047a862b1473e"
     },
     "cast": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/cast/SKILL.md",
-      "computedHash": "27d36f99f1498ebe907f0bf69e354f9713f0a8db66ba39c196d0071d9a743902"
+      "computedHash": "2db1e690b8d68b1129eca1b4d1cd94b628fcf11b0c6fa0e0dfdf69507cac44dc"
+    },
+    "conjure": {
+      "source": "frankieramirez/mana",
+      "sourceType": "github",
+      "skillPath": "skills/conjure/SKILL.md",
+      "computedHash": "5b8083dbafecbc426094eb80e13b6639d1d054ecad37809ed41d823f9981078d"
     },
     "dispel": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/dispel/SKILL.md",
-      "computedHash": "664050708d25db648a9d15fccac73e37073cc686bb9cee80610e7093e87e297f"
+      "computedHash": "ed3c57e29b4a4c6c49f274626d7e8d45b2d55a98e53b3195065c0c5fc4d027ce"
     },
     "mend": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/mend/SKILL.md",
-      "computedHash": "76d405b11eee023b315f6c26ce24ca88dd6b5d0b35a88a3252246aa5917a75be"
+      "computedHash": "137a03501b242e68778868ec5a3f199a07486c3c62e0a0d466e6ad9d52fa9a5d"
     },
     "mimic": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/mimic/SKILL.md",
-      "computedHash": "ee8dde3363fb8304694478e27b08a40d9ba9aafac9ae3461ece958bf027fc2c1"
+      "computedHash": "940a1db87276ac1cbd8c6f5005cf04790411b570d2604ae61003623a9f9daa2a"
     },
     "remedy": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/remedy/SKILL.md",
-      "computedHash": "d53b5a22db5537ddbcc8b899bee1983f0808624f5acb1d4a39b1d942f24df5ef"
+      "computedHash": "ce738514183251ef7a368ae76960374d89ee66db76e43365b6b33eaac9bc3a27"
     },
     "reveal": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/reveal/SKILL.md",
-      "computedHash": "e2a52e59e238faf6bd3457c14eafcd518df131bacb769d87bb74f004e0051154"
+      "computedHash": "e988e974a0b75d65d690548f97a94a6e3a52e917978cba8ba7f536eaf3cbed97"
     },
     "scan": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/scan/SKILL.md",
-      "computedHash": "6ffcd3e328ff2a812926d92a84c44835384e787c432d3c6da580f909b5e48c54"
+      "computedHash": "027f54ef9bde1eefc8f1359d45689b25a16057dc723819fe2ba359d427bb54bb"
     },
     "scry": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/scry/SKILL.md",
-      "computedHash": "30c8a2b55417f1ee41f38a0b533644aff094ca2883b49c0cd72cd1fabce1d69a"
+      "computedHash": "61b516dcb9439ef84aa4f0b6d9512db891a8da20f6353bcc16ccc8afd1b69193"
+    },
+    "setup-mana": {
+      "source": "frankieramirez/mana",
+      "sourceType": "github",
+      "skillPath": "skills/setup-mana/SKILL.md",
+      "computedHash": "cbd377c07e4cabd30a0c37e87de0f4f3ef0cc5d27c758e192fff0857a2d68cfc"
     },
     "sift": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/sift/SKILL.md",
-      "computedHash": "9d65ccdb7569c551f86bd4fd262037544342c3ddc6deceae0b81122ccb066250"
+      "computedHash": "6168915a98ab5f8f4a5a8b710c2eb7ea47f60f1d52d503c440453b6f8eba9ed4"
     }
   }
 }

@@ -5,7 +5,21 @@ argument-hint: "[loose idea | map number | ticket number | issue URL] [you-pick]
 disable-model-invocation: true
 ---
 
+<!-- BEGIN MANA PERSONA -->
+## Persona at invocation
+
+Before conversational narration, read `Persona:` and `Style:` in the active project's `## Agent skills` block from `CLAUDE.md` or `AGENTS.md`. Prefer the file containing the block, then an existing file; ties use `CLAUDE.md`. A symlink pair is one file. Read the saved value anew on each invocation, including from a subdirectory using the project root. No accessible project or no line means ordinary behavior. Do not search another project or global settings for this preference.
+
+During the `Persona at invocation` stage, `archmage` on either line loads this skill's own [references/archmage.md](references/archmage.md) for the active workflow. `off` or an absent value leaves ordinary behavior active. An unknown value leaves ordinary behavior active and gets a brief explanation when conversational output is allowed; it does not stop the work. Explicit conversation instructions override the saved voice without writing settings. A request to enable Archmage for this workflow also loads the local reference.
+
+Apply the voice only to lead-agent conversation. Deliverables, specialist roles, reply-only responses, and JSON-only output retain their contracts, with no added narration. End the persona with this workflow unless the user requests otherwise or a `Style:` line names `archmage`, which keeps the voice on for the whole session.
+<!-- END MANA PERSONA -->
+
 # Scry
+
+Honor the user's explicit instructions and decisions already made in this conversation over this skill's workflow defaults. A rule this file states with never, or as read-only, is a gate: it holds whatever the conversation says, and an instruction to cross one is declined and reported. Continue authorized work; ask only about unresolved choices that would materially change the result. Preparing or reviewing work does not authorize publishing it.
+
+If a skill rule requires a pause or leaves requested work unfinished, name and link to the exact SKILL.md and quote the rule. Then explain what decision or prerequisite is missing. Distinguish a required gate from your interpretation.
 
 A loose idea has arrived, too big for one session. The way to the destination is still fog. This skill charts that way as a shared map on GitHub, then works **decision tickets** (questions whose answer is a decision) one at a time until the route is clear.
 
@@ -19,7 +33,7 @@ The destination is named first. It might be a spec, a locked decision, or a chan
 - **Claim before work.** Assign the ticket to the person driving this session first, so a parallel session skips it. An open unassigned ticket is unclaimed.
 - **The map is an index.** A decision lives on its ticket. The map gists it and links. It does not restate the answer.
 
-`SKILL_DIR` is the absolute directory this SKILL.md lives in. The Bash tool forgets variables between calls, so every block that runs the bundled script sets `SKILL_DIR` again on its first line.
+`<SKILL_DIR>` is the absolute directory this SKILL.md lives in. Substitute the real path every time it appears. Do not assign it to a shell variable first: a sandboxed or worktree-isolated session refuses `bash "$VAR/script.sh"` because it cannot resolve the path to read the script.
 
 ## Arguments
 
@@ -33,8 +47,9 @@ Parse tokens, then treat the remainder as the idea, number, or URL.
 
 **A number or issue URL.** Load that issue.
 
-- Label `wayfinder:map`: walk that map.
-- Label `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, or `wayfinder:task`: walk its parent map and claim this ticket.
+- Label `scry:map`: walk that map.
+- Label `scry:research`, `scry:prototype`, `scry:grilling`, or `scry:task`: walk its parent map and claim this ticket.
+- The same labels under the older `wayfinder:` prefix mean the same thing. Walk them as they are; do not relabel.
 - Any other issue: chart a new map whose destination is informed by that issue.
 
 ## Execution spine
@@ -48,7 +63,7 @@ Parse tokens, then treat the remainder as the idea, number, or URL.
 
 ## Stage 1: Tracker
 
-If `docs/agents/issue-tracker.md` exists, read it and follow its "Wayfinding operations" section for any mechanic it specifies (extra labels, owning docs, parent-link fallbacks). Missing file: GitHub via `gh`, using the operations in `references/github-ops.md`.
+If `docs/agents/issue-tracker.md` exists, read it. Its `Tracker:` line names the tracker. On `github`, follow its "Wayfinding operations" section for any mechanic it specifies (extra labels, owning docs, parent-link fallbacks) and continue below. On any other tracker, that section replaces `map.sh` entirely: it says what a map, a ticket, a blocking edge, a claim, and a resolution are there, and which connector or API to use. Follow it for every operation in Stage 2 and Stage 3, keep the same map body and ticket shapes from `references/map-shape.md`, and skip the rest of this stage. When it says maps are not supported, read `references/scratch.md` and keep the map under `.scratch/`. Missing file: GitHub via `gh`, using the operations in `references/github-ops.md`.
 
 Load `references/github-ops.md` now. `scripts/map.sh` is the only way to create issues, attach children, wire blocks, query the frontier, and claim. Do not improvise those `gh` calls.
 
@@ -59,8 +74,7 @@ Pass `GH_HOST=<host>` inline on every `map.sh` invocation. Derive the host from 
 Ensure labels exist once per session:
 
 ```bash
-SKILL_DIR="<absolute path of the directory containing this SKILL.md>";
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" ensure-labels
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" ensure-labels
 ```
 
 Exit 3 from the script means this token cannot write issues (usually HTTP 403). Read `references/scratch.md` and follow it. Do not keep retrying `gh issue create`.
@@ -85,11 +99,10 @@ If this surfaces no fog (the way is already clear, and the whole journey fits on
 
 ### 2c. Write the map
 
-Create the map issue, label `wayfinder:map`. Destination and Notes filled in. Decisions so far empty. Fog sketched into **Not yet specified**.
+Create the map issue, label `scry:map`. Destination and Notes filled in. Decisions so far empty. Fog sketched into **Not yet specified**.
 
 ```bash
-SKILL_DIR="<absolute path of the directory containing this SKILL.md>";
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" create-map "Map: <destination in a few words>" <<'EOF'
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" create-map "Map: <destination in a few words>" <<'EOF'
 <body from references/map-shape.md>
 EOF
 ```
@@ -100,11 +113,10 @@ Notes record: domain; files every session should read; standing preferences; any
 
 A ticket is ready to file when you can state its **Question** precisely. Sharpness of the question matters. Whether you can answer it yet does not.
 
-Create each one as a child of the map, labelled `wayfinder:<type>` (`research`, `prototype`, `grilling`, `task`). See Ticket types in `references/map-shape.md`.
+Create each one as a child of the map, labelled `scry:<type>` (`research`, `prototype`, `grilling`, `task`). See Ticket types in `references/map-shape.md`.
 
 ```bash
-SKILL_DIR="<absolute path of the directory containing this SKILL.md>";
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" create-ticket MAP_NUMBER TYPE "Title" <<'EOF'
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" create-ticket MAP_NUMBER TYPE "Title" <<'EOF'
 ## Question
 
 <the decision or investigation>
@@ -114,8 +126,7 @@ EOF
 Wire blocking edges in a **second pass**, once every ticket has a number:
 
 ```bash
-SKILL_DIR="<absolute path of the directory containing this SKILL.md>";
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" wire CHILD_NUMBER BLOCKER_NUMBER
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" wire CHILD_NUMBER BLOCKER_NUMBER
 ```
 
 Everything still too dim to phrase stays in **Not yet specified**. Do not pre-slice fog into ticket-sized pieces.
@@ -137,9 +148,8 @@ Load `references/map-shape.md` if you have not this session.
 Fetch the map issue (the low-resolution view). Do not fetch every child body yet.
 
 ```bash
-SKILL_DIR="<absolute path of the directory containing this SKILL.md>";
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" view MAP_NUMBER
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" frontier MAP_NUMBER
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" view MAP_NUMBER
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" frontier MAP_NUMBER
 ```
 
 Orient to Destination and Notes before picking a ticket.
@@ -151,8 +161,7 @@ If the user named a ticket, use it. Otherwise take the first frontier row (open,
 Claim it before any work:
 
 ```bash
-SKILL_DIR="<absolute path of the directory containing this SKILL.md>";
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" claim TICKET_NUMBER
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" claim TICKET_NUMBER
 ```
 
 ### 3c. Resolve
@@ -177,13 +186,12 @@ If Notes name more files to read, read them. When the type is unclear, load gril
 Post the answer as a comment, close the ticket, append one gist line to the map's **Decisions so far**.
 
 ```bash
-SKILL_DIR="<absolute path of the directory containing this SKILL.md>";
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" comment TICKET_NUMBER <<'EOF'
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" comment TICKET_NUMBER <<'EOF'
 <answer>
 
 Docs impact: <owning doc and what changes, or none>
 EOF
-GH_HOST=<derived-host> bash "$SKILL_DIR/scripts/map.sh" close TICKET_NUMBER
+GH_HOST=<derived-host> bash "<SKILL_DIR>/scripts/map.sh" close TICKET_NUMBER
 ```
 
 Then `view` the map, splice a line under **Decisions so far**, and `update-body` the map:
