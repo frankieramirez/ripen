@@ -94,7 +94,6 @@ const (
 const (
 	// EventSchemaVersion is the Event envelope's version.
 	EventSchemaVersion = 1
-	// StateSchemaVersion is the SQLite state schema's version. Schema v1
-	// has no migration path from the Python schema by design.
-	StateSchemaVersion = 1
+	// StateSchemaVersion is the latest supported SQLite state schema version.
+	StateSchemaVersion = 2
 )

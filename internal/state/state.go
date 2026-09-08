@@ -1,7 +1,5 @@
-// Package state is the SQLite state store — schema v1. The store is the
-// system of record: every paging Event corresponds to a durable state
-// change written here first. There is no migration path from the Python
-// schema; existing deployments start cold and re-baseline.
+// Package state persists Baselines, Candidates, and coordination state in SQLite.
+// Go schema versions migrate in place; Python databases are unsupported.
 package state
 
 import (
@@ -112,7 +110,9 @@ type NotifierHealth struct {
 
 // Store is the SQLite-backed state store.
 type Store struct {
-	db *sql.DB
+	db    *sql.DB
+	token string
+	clock func() time.Time
 }
 
 const schema = `
@@ -201,7 +201,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	if err := migrate(db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("state schema: %w", err)
 	}
@@ -237,6 +237,9 @@ func (s *Store) SetAcceptedDigest(key Key, digest string, now time.Time) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := s.checkMutation(tx); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`
 		INSERT INTO accepted_digests(backend, stack, service, digest, accepted_at)
 		VALUES(?, ?, ?, ?, ?)
@@ -267,6 +270,9 @@ func (s *Store) ObserveCandidate(key Key, digest string, now time.Time) (Candida
 		return CandidateObservation{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := s.checkMutation(tx); err != nil {
+		return CandidateObservation{}, err
+	}
 
 	var firstSeen string
 	var count int
@@ -333,7 +339,7 @@ func (s *Store) PendingProposal(key Key) (*PendingProposal, error) {
 
 // SetPendingProposal records an open Proposal for a Key.
 func (s *Store) SetPendingProposal(key Key, digest, proposalURL string, now time.Time) error {
-	_, err := s.db.Exec(`
+	_, err := s.exec(`
 		INSERT INTO pending_proposals(backend, stack, service, digest, url, proposed_at)
 		VALUES(?, ?, ?, ?, ?, ?)
 		ON CONFLICT(backend, stack, service) DO UPDATE SET
@@ -345,7 +351,7 @@ func (s *Store) SetPendingProposal(key Key, digest, proposalURL string, now time
 // ClearPendingProposal removes a Key's Proposal record, reporting whether
 // one existed.
 func (s *Store) ClearPendingProposal(key Key) (bool, error) {
-	result, err := s.db.Exec(
+	result, err := s.exec(
 		"DELETE FROM pending_proposals WHERE backend = ? AND stack = ? AND service = ?",
 		key.Backend, key.Stack, key.Service)
 	if err != nil {
@@ -357,7 +363,7 @@ func (s *Store) ClearPendingProposal(key Key) (bool, error) {
 
 // RecordAttempt appends one Transaction attempt to the audit trail.
 func (s *Store) RecordAttempt(attempt Attempt, now time.Time) error {
-	_, err := s.db.Exec(`
+	_, err := s.exec(`
 		INSERT INTO attempts(run_id, actor, backend, stack, service, old_digest, new_digest, result, attempted_at, detail)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		attempt.RunID, attempt.Actor, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service,
@@ -565,13 +571,13 @@ func (s *Store) AcquireLease(now time.Time, ttlSeconds int) (string, bool, error
 // ReleaseLease releases the lease if the token still owns it; releasing a
 // superseded token is a no-op.
 func (s *Store) ReleaseLease(token string) error {
-	_, err := s.db.Exec("DELETE FROM lease WHERE singleton = 1 AND owner_token = ?", token)
+	_, err := s.exec("DELETE FROM lease WHERE singleton = 1 AND owner_token = ?", token)
 	return err
 }
 
 // OpenBreaker opens the Circuit breaker with a reason.
 func (s *Store) OpenBreaker(reason string, now time.Time) error {
-	_, err := s.db.Exec(`
+	_, err := s.exec(`
 		INSERT INTO breaker(singleton, is_open, reason, changed_at, clear_reason)
 		VALUES(1, 1, ?, ?, NULL)
 		ON CONFLICT(singleton) DO UPDATE SET
@@ -587,13 +593,31 @@ func (s *Store) ClearBreaker(reason string, now time.Time) error {
 	if reason == "" {
 		return errors.New("a clear-breaker reason is required")
 	}
-	_, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.checkMutation(tx); err != nil {
+		return err
+	}
+	var active int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM active_transaction").Scan(&active); err != nil {
+		return err
+	}
+	if active != 0 {
+		return errors.New("cannot clear breaker while an unfinished transaction requires reconciliation")
+	}
+	_, err = tx.Exec(`
 		INSERT INTO breaker(singleton, is_open, reason, changed_at, clear_reason)
 		VALUES(1, 0, NULL, ?, ?)
 		ON CONFLICT(singleton) DO UPDATE SET
 			is_open=0, reason=NULL, changed_at=excluded.changed_at, clear_reason=excluded.clear_reason`,
 		stamp(now), reason)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Status reads the durable state snapshot.
@@ -688,7 +712,7 @@ func (s *Store) NotifierHealth() (NotifierHealth, error) {
 // RecordNotifierSuccess records a successful delivery, resetting the
 // failure streak.
 func (s *Store) RecordNotifierSuccess(now time.Time) error {
-	_, err := s.db.Exec(`
+	_, err := s.exec(`
 		INSERT INTO notifier_health(singleton, last_success_at, consecutive_failures)
 		VALUES(1, ?, 0)
 		ON CONFLICT(singleton) DO UPDATE SET
@@ -699,7 +723,7 @@ func (s *Store) RecordNotifierSuccess(now time.Time) error {
 
 // RecordNotifierFailure increments the persisted failure streak.
 func (s *Store) RecordNotifierFailure() error {
-	_, err := s.db.Exec(`
+	_, err := s.exec(`
 		INSERT INTO notifier_health(singleton, last_success_at, consecutive_failures)
 		VALUES(1, NULL, 1)
 		ON CONFLICT(singleton) DO UPDATE SET
@@ -722,7 +746,7 @@ func (s *Store) NotifierDestination() (string, error) {
 // SetNotifierDestination records which destination the suppression table
 // belongs to.
 func (s *Store) SetNotifierDestination(fingerprint string) error {
-	_, err := s.db.Exec(`
+	_, err := s.exec(`
 		INSERT INTO notifier_destination(singleton, fingerprint) VALUES(1, ?)
 		ON CONFLICT(singleton) DO UPDATE SET fingerprint = excluded.fingerprint`, fingerprint)
 	return err
@@ -732,7 +756,7 @@ func (s *Store) SetNotifierDestination(fingerprint string) error {
 // uses this: a stack that failed, recovered, and fails again must page
 // the second time.
 func (s *Store) ClearSuppression(event, stack, service string) error {
-	_, err := s.db.Exec(
+	_, err := s.exec(
 		"DELETE FROM notification_suppression WHERE event = ? AND stack = ? AND service = ?",
 		event, stack, service)
 	return err
@@ -755,7 +779,7 @@ func (s *Store) SuppressionState(event, stack, service string) (string, bool, er
 
 // SetSuppressionState records the state a notification was last sent for.
 func (s *Store) SetSuppressionState(event, stack, service, state string, now time.Time) error {
-	_, err := s.db.Exec(`
+	_, err := s.exec(`
 		INSERT INTO notification_suppression(event, stack, service, state, notified_at)
 		VALUES(?, ?, ?, ?, ?)
 		ON CONFLICT(event, stack, service) DO UPDATE SET
@@ -768,7 +792,7 @@ func (s *Store) SetSuppressionState(event, stack, service, state string, now tim
 // webhook destination changes, so the new destination pages current
 // state once (which is correct).
 func (s *Store) ResetSuppression() error {
-	_, err := s.db.Exec("DELETE FROM notification_suppression")
+	_, err := s.exec("DELETE FROM notification_suppression")
 	return err
 }
 

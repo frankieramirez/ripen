@@ -13,6 +13,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/proposal"
+	"github.com/frankieramirez/ripen/internal/state"
 )
 
 const maximumPollInterval = 10 * time.Second
@@ -68,17 +69,30 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 		}
 	}
 
+	if err := t.updater.checkOwnership(); err != nil {
+		return t.failure(observed.key, err), false
+	}
+	if err := t.updater.state.BeginTransaction(t.updater.token, observed.key, t.runID, t.updater.clock.Now()); err != nil {
+		return t.failure(observed.key, err), false
+	}
+	t.updater = t.updater.withContext(t.updater.leaseCtx)
 	t.updater.emit(event.TransactionStarted, t.subject(observed.key),
 		event.Data{OldDigest: accepted, NewDigest: observed.remoteDigest})
 
 	var failure string
 	switch err := t.port().Deploy(fresh, deployCompose, repull); {
 	case err == nil:
+		if err := t.phase("verifying"); err != nil {
+			return t.failure(observed.key, err), true
+		}
 		if t.waitForHealth(fresh) && t.runningDigestIs(observed, observed.remoteDigest) {
 			return t.succeed(observed, accepted, "updated and passed functional health verification")
 		}
 		failure = "the functional health check timed out"
 	case isTimeout(err):
+		if err := t.phase("verifying"); err != nil {
+			return t.failure(observed.key, err), true
+		}
 		if t.waitForConfirmation(observed, fresh) {
 			return t.succeed(observed, accepted,
 				"the deploy response timed out, but image status and health proved success")
@@ -109,10 +123,9 @@ func (t *transaction) pin(stackState backend.StackState, observed observation, d
 
 func (t *transaction) succeed(observed observation, accepted, detail string) (Result, bool) {
 	now := t.updater.clock.Now()
-	if err := t.updater.state.SetAcceptedDigest(observed.key, observed.remoteDigest, now); err != nil {
-		return t.failure(observed.key, err), false
+	if err := t.complete(observed, accepted, domain.ResultUpdated, detail, observed.remoteDigest, "", true, now); err != nil {
+		return t.failure(observed.key, err), true
 	}
-	t.recordAttempt(observed, accepted, observed.remoteDigest, domain.ResultUpdated, detail, now)
 	t.updater.emit(event.TransactionSucceeded, t.subject(observed.key),
 		event.Data{OldDigest: accepted, NewDigest: observed.remoteDigest, Detail: detail})
 	return Result{
@@ -124,6 +137,9 @@ func (t *transaction) succeed(observed observation, accepted, detail string) (Re
 }
 
 func (t *transaction) rollback(observed observation, accepted, failure string) (Result, bool) {
+	if err := t.phase("rolling_back"); err != nil {
+		return t.failure(observed.key, err), true
+	}
 	reason := fmt.Sprintf("%s: %s", label(observed.key), failure)
 	rollbackCompose := observed.stack.Compose
 	if pinned, err := t.pin(observed.stack, observed, accepted); err == nil {
@@ -140,16 +156,15 @@ func (t *transaction) rollback(observed observation, accepted, failure string) (
 	}
 
 	now := t.updater.clock.Now()
-	if err := t.updater.state.OpenBreaker(reason, now); err != nil {
-		return t.failure(observed.key, err), true
-	}
 	code := domain.ResultRolledBack
 	detail := failure + "; restored the accepted baseline and opened the breaker"
 	if !healthy {
 		code = domain.ResultRollbackFailed
 		detail = failure + "; rollback health verification failed; the breaker is open"
 	}
-	t.recordAttempt(observed, accepted, observed.remoteDigest, code, detail, now)
+	if err := t.complete(observed, accepted, code, detail, "", reason, healthy, now); err != nil {
+		return t.failure(observed.key, err), true
+	}
 	t.updater.emit(event.BreakerOpened, t.subject(observed.key), event.Data{Reason: reason})
 	rollbackEvent := event.TransactionRolledBack
 	if code == domain.ResultRollbackFailed {
@@ -219,6 +234,15 @@ func (t *transaction) propose(observed observation, fresh backend.StackState, ac
 		return t.failure(observed.key, err), false
 	}
 
+	if err := t.updater.checkOwnership(); err != nil {
+		return t.failure(observed.key, err), false
+	}
+	if err := t.updater.state.BeginTransaction(t.updater.token, observed.key, t.runID, t.updater.clock.Now()); err != nil {
+		return t.failure(observed.key, err), false
+	}
+	if err := t.phase("proposing"); err != nil {
+		return t.failure(observed.key, err), false
+	}
 	result, err := t.updater.proposals.Propose(proposal.Change{
 		Label:           label(observed.key),
 		RepositoryPath:  t.stack.GitPath,
@@ -231,6 +255,9 @@ func (t *transaction) propose(observed observation, fresh backend.StackState, ac
 	}
 	if err := t.updater.state.SetPendingProposal(observed.key, observed.remoteDigest,
 		result.URL, t.updater.clock.Now()); err != nil {
+		return t.failure(observed.key, err), false
+	}
+	if err := t.updater.state.FinishTransaction(t.updater.token); err != nil {
 		return t.failure(observed.key, err), false
 	}
 	detail := "opened a digest-pin proposal"
@@ -298,6 +325,9 @@ func (t *transaction) waitUntil(condition func() bool) bool {
 	deadline := t.updater.clock.Now().
 		Add(time.Duration(t.updater.policy.VerificationTimeoutSeconds) * time.Second)
 	for {
+		if t.updater.checkOwnership() != nil {
+			return false
+		}
 		if condition() {
 			return true
 		}
@@ -326,4 +356,15 @@ func isTimeout(err error) bool {
 	}
 	var timeout interface{ Timeout() bool }
 	return errors.As(err, &timeout) && timeout.Timeout()
+}
+
+func (t *transaction) phase(phase string) error {
+	if err := t.updater.checkOwnership(); err != nil {
+		return err
+	}
+	return t.updater.state.SetTransactionPhase(t.updater.token, phase, t.updater.clock.Now())
+}
+
+func (t *transaction) complete(observed observation, accepted string, code domain.ResultCode, detail, digest, reason string, clearMarker bool, now time.Time) error {
+	return t.updater.state.CompleteTransaction(t.updater.token, state.Attempt{Key: observed.key, RunID: t.runID, Actor: t.updater.actor, OldDigest: accepted, NewDigest: observed.remoteDigest, Result: code, Detail: detail}, digest, reason, clearMarker, now)
 }

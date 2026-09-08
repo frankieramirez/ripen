@@ -9,9 +9,11 @@
 package updater
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,6 +99,10 @@ type Options struct {
 
 // Updater runs Transactions.
 type Updater struct {
+	eventMu   *sync.Mutex
+	ctx       context.Context
+	leaseCtx  context.Context
+	token     string
 	policy    *config.Policy
 	backends  map[domain.Backend]backend.Port
 	registry  Registry
@@ -142,6 +148,7 @@ func New(options Options) (*Updater, error) {
 		options.Actor = domain.ActorCLI
 	}
 	return &Updater{
+		eventMu:   &sync.Mutex{},
 		policy:    options.Policy,
 		backends:  options.Backends,
 		registry:  options.Registry,
@@ -155,6 +162,8 @@ func New(options Options) (*Updater, error) {
 }
 
 func (u *Updater) emit(name event.Name, subject event.Subject, data event.Data) {
+	u.eventMu.Lock()
+	defer u.eventMu.Unlock()
 	defer func() { _ = recover() }()
 	u.events.Emit(name, subject, data)
 }
@@ -213,6 +222,14 @@ func (u *Updater) proposalKeys(stack string) []state.Key {
 // the state lease for its whole life, so two Ripen processes can never
 // act at once.
 func (u *Updater) Run(mode domain.Mode) (Report, error) {
+	return u.RunContext(context.Background(), mode)
+}
+
+// RunContext executes a finite run with cancellable observation.
+func (u *Updater) RunContext(ctx context.Context, mode domain.Mode) (Report, error) {
+	if err := ctx.Err(); err != nil {
+		return Report{}, err
+	}
 	started := u.clock.Now()
 	report := Report{RunID: newRunID(), Mode: mode, Actor: u.actor, Started: started}
 
@@ -229,7 +246,8 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 		}}
 		return report, nil
 	}
-	defer func() { _ = u.state.ReleaseLease(token) }()
+	u, release := u.owned(ctx, token)
+	defer release()
 
 	status, err := u.state.Status(started)
 	if err != nil {
@@ -364,7 +382,8 @@ func (u *Updater) Propose(stackName string) (Result, string, error) {
 	if !acquired {
 		return Result{Key: key, Code: domain.ResultBusy, Detail: "another run holds the lease"}, runID, nil
 	}
-	defer func() { _ = u.state.ReleaseLease(token) }()
+	u, release := u.owned(context.Background(), token)
+	defer release()
 
 	status, err := u.state.Status(started)
 	if err != nil {

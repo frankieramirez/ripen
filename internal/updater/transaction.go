@@ -18,10 +18,11 @@ import (
 var runtimePlatform = registry.Platform{OS: "linux", Architecture: "amd64"}
 
 type transaction struct {
-	updater *Updater
-	stack   config.StackPolicy
-	runID   string
-	mode    domain.Mode
+	updater     *Updater
+	stack       config.StackPolicy
+	runID       string
+	mode        domain.Mode
+	refreshOnly bool
 }
 
 type observation struct {
@@ -167,6 +168,9 @@ func (t *transaction) observeService(stackState backend.StackState, service stri
 }
 
 func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result, bool) {
+	if err := t.updater.checkOwnership(); err != nil {
+		return t.failure(observed.key, err), false
+	}
 	now := t.updater.clock.Now()
 	accepted, found, err := t.updater.state.AcceptedDigest(observed.key)
 	if err != nil {
@@ -185,7 +189,7 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 		if t.proposalMode(observed.stack) && pending != nil &&
 			pending.Digest == observed.runningDigest &&
 			observed.image.PinnedDigest == observed.runningDigest {
-			return t.acceptGitDeployment(observed, accepted, pending.URL, now)
+			return t.acceptGitDeployment(observed, accepted, *pending, now)
 		}
 		return Result{
 			Key:    observed.key,
@@ -221,12 +225,24 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 		}, false
 	}
 
-	candidate, err := t.updater.state.ObserveCandidate(observed.key, observed.remoteDigest, now)
-	if err != nil {
-		return t.failure(observed.key, err), false
+	var candidate state.CandidateObservation
+	if t.refreshOnly {
+		recorded, readErr := t.updater.state.Candidate(observed.key)
+		err = readErr
+		if err != nil {
+			return t.failure(observed.key, err), false
+		}
+		if recorded == nil || recorded.Digest != observed.remoteDigest {
+			return Result{Key: observed.key, Code: domain.ResultIneligible, Detail: "the candidate changed after scheduled observation"}, false
+		}
+		candidate = state.CandidateObservation{Digest: recorded.Digest, FirstSeen: recorded.FirstSeen, LastSeen: recorded.LastSeen, Count: recorded.Count}
+	} else {
+		candidate, err = t.updater.state.ObserveCandidate(observed.key, observed.remoteDigest, now)
+		if err != nil {
+			return t.failure(observed.key, err), false
+		}
+		t.updater.emit(event.CandidateObserved, t.subject(observed.key), event.Data{Digest: observed.remoteDigest, Observations: candidate.Count})
 	}
-	t.updater.emit(event.CandidateObserved, t.subject(observed.key),
-		event.Data{Digest: observed.remoteDigest, Observations: candidate.Count})
 	age := now.Sub(candidate.FirstSeen)
 	mature := candidate.Count >= 2 && age >= time.Duration(t.updater.policy.CandidateMinAgeSeconds)*time.Second
 	if mature {
@@ -285,7 +301,7 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 	}, false
 }
 
-func (t *transaction) acceptGitDeployment(observed observation, accepted, proposalURL string,
+func (t *transaction) acceptGitDeployment(observed observation, accepted string, pending state.PendingProposal,
 	now time.Time) (Result, bool) {
 	if !t.healthyOnce(observed.stack) {
 		reason := fmt.Sprintf("%s: the deployed proposal failed functional health verification",
@@ -303,12 +319,16 @@ func (t *transaction) acceptGitDeployment(observed observation, accepted, propos
 		}, false
 	}
 	detail := "the proposal deployed and passed functional health verification"
-	if err := t.updater.state.SetAcceptedDigest(observed.key, observed.runningDigest, now); err != nil {
+	changed, err := t.updater.state.AcceptPendingProposal(t.updater.token, observed.key, pending, t.updater.clock.Now())
+	if err != nil {
 		return t.failure(observed.key, err), false
+	}
+	if !changed {
+		return Result{Key: observed.key, Code: domain.ResultIneligible, Detail: "the pending proposal changed during verification"}, false
 	}
 	t.recordAttempt(observed, accepted, observed.runningDigest, domain.ResultUpdated, detail, now)
 	t.updater.emit(event.ProposalDeployed, t.subject(observed.key),
-		event.Data{Digest: observed.runningDigest, ProposalURL: proposalURL})
+		event.Data{Digest: observed.runningDigest, ProposalURL: pending.URL})
 	return Result{
 		Key:    observed.key,
 		Code:   domain.ResultUpdated,

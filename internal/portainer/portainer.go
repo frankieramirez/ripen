@@ -353,6 +353,7 @@ func (a *Adapter) UpdateStack(stack Stack, compose string, env []EnvVar, repull 
 }
 
 type httpsClient struct {
+	ctx        context.Context
 	base       string
 	httpClient *http.Client
 	timeout    time.Duration
@@ -402,6 +403,7 @@ func newHTTPSClient(baseURL, caFile, fingerprint string, timeout time.Duration) 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = tlsConfig
 	return &httpsClient{
+		ctx:        context.Background(),
 		base:       strings.TrimRight(parsed.String(), "/"),
 		httpClient: &http.Client{Transport: transport},
 		timeout:    timeout,
@@ -412,7 +414,11 @@ func (c *httpsClient) request(method, path string, headers map[string]string, bo
 	if timeout == 0 {
 		timeout = c.timeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	parent := c.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	var reader io.Reader

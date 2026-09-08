@@ -1,6 +1,7 @@
 package portainer
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -136,4 +137,17 @@ func fingerprint(compose string, env []EnvVar) string {
 	digest.Add("compose", compose)
 	digest.Add("env", strings.Join(entries, "\n"))
 	return digest.Sum()
+}
+
+// WithContext returns a backend bound to the caller lifetime.
+func (b *Backend) WithContext(ctx context.Context) backend.Port {
+	clone := *b
+	adapter := *b.adapter
+	if client, ok := adapter.client.(*httpsClient); ok {
+		contextual := *client
+		contextual.ctx = ctx
+		adapter.client = &contextual
+	}
+	clone.adapter = &adapter
+	return &clone
 }
