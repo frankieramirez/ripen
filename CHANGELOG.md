@@ -10,6 +10,8 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-08
+
 ### Added
 
 - Concurrent stack observation with `observation_concurrency` (default `2`, range
@@ -103,6 +105,7 @@ Each release's section here is what GitHub shows as the release notes.
   user-owned private repositories, so a release is now refused before it
   publishes anything rather than after.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/frankieramirez/ripen/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/frankieramirez/ripen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/frankieramirez/ripen/releases/tag/v1.0.0
