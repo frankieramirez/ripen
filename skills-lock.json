@@ -23,7 +23,7 @@
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/cast/SKILL.md",
-      "computedHash": "2db1e690b8d68b1129eca1b4d1cd94b628fcf11b0c6fa0e0dfdf69507cac44dc"
+      "computedHash": "dd7992f0a245ae78c4dcaaabcaae4a9209cd89787970b4265c4fcffe1daf9151"
     },
     "conjure": {
       "source": "frankieramirez/mana",
@@ -41,7 +41,7 @@
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/mend/SKILL.md",
-      "computedHash": "137a03501b242e68778868ec5a3f199a07486c3c62e0a0d466e6ad9d52fa9a5d"
+      "computedHash": "b0727d55b4d2576a1285803a5604a3211e9482e9b6c42705d5a824eb265d4100"
     },
     "mimic": {
       "source": "frankieramirez/mana",
@@ -53,25 +53,25 @@
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/remedy/SKILL.md",
-      "computedHash": "ce738514183251ef7a368ae76960374d89ee66db76e43365b6b33eaac9bc3a27"
+      "computedHash": "c75575bc12a102a83c19b3fd32148dd02777a8d15f44e27f3e54dc9ab635796c"
     },
     "reveal": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/reveal/SKILL.md",
-      "computedHash": "e988e974a0b75d65d690548f97a94a6e3a52e917978cba8ba7f536eaf3cbed97"
+      "computedHash": "1dc8ff4ecdd19e6e3579f56d6585f80c64fd659edcbbac0f8fdf4852edca9535"
     },
     "scan": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/scan/SKILL.md",
-      "computedHash": "027f54ef9bde1eefc8f1359d45689b25a16057dc723819fe2ba359d427bb54bb"
+      "computedHash": "cc7991ba196fccec601809016366d3e08616a3f722fdbc0dcf05d2ec944f7816"
     },
     "scry": {
       "source": "frankieramirez/mana",
       "sourceType": "github",
       "skillPath": "skills/scry/SKILL.md",
-      "computedHash": "61b516dcb9439ef84aa4f0b6d9512db891a8da20f6353bcc16ccc8afd1b69193"
+      "computedHash": "f07c2057905e0ff211e0bc328f762492080e7fd9058a6e54d52edabf354e7785"
     },
     "setup-mana": {
       "source": "frankieramirez/mana",
