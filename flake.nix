@@ -14,7 +14,7 @@
       ];
       perSystemPkgs = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      version = "1.0.0";
+      version = "1.1.0";
 
       commit = self.shortRev or self.dirtyShortRev or "none";
 

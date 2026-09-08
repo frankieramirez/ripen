@@ -10,6 +10,8 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-08
+
 ### Added
 
 - `status`, `candidates`, `audit`, and `explain` accept `--pretty`, which
@@ -18,6 +20,11 @@ Each release's section here is what GitHub shows as the release notes.
   accidentally get prose.
 
 ### Fixed
+
+- The daemon continues Monitor observations when the Circuit breaker blocks
+  Apply, keeping unrelated Candidates current after a rollback. Blocked Apply
+  runs emit `run.finished` with the breaker reason. Updates and Proposals remain
+  blocked until a person clears the breaker.
 
 - `go install github.com/frankieramirez/ripen/cmd/ripen@version` reported
   `dev` / `none` because only GoReleaser and the flake stamped the version
@@ -76,5 +83,6 @@ Each release's section here is what GitHub shows as the release notes.
   user-owned private repositories, so a release is now refused before it
   publishes anything rather than after.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/frankieramirez/ripen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/frankieramirez/ripen/releases/tag/v1.0.0
