@@ -90,6 +90,66 @@ func TestARollbackAnnouncesItselfOnlyOnceTheBreakerIsWritten(t *testing.T) {
 	}
 }
 
+func TestABreakerBlockedRunEmitsItsCompletionAndReason(t *testing.T) {
+	engine := newBackend(domain.BackendDockerCompose, singleCompose)
+	harness := singleHarness(t, singleStack("media", domain.BackendDockerCompose), engine)
+	if err := harness.store.OpenBreaker("media: verification failed", harness.clock.now); err != nil {
+		t.Fatal(err)
+	}
+
+	report := harness.run(domain.ModeApply)
+
+	if len(harness.events.events) != 1 {
+		t.Fatalf("events = %v, want one completion", harness.events.events)
+	}
+	got := harness.events.events[0]
+	if got.name != event.RunFinished || got.subject.RunID != report.RunID ||
+		!got.data.BreakerOpen || got.data.Mode != "apply" || got.data.ResultCount != 1 ||
+		got.data.Reason != "media: verification failed" {
+		t.Fatalf("completion = %+v", got)
+	}
+}
+
+func TestARollbackFinishesTheRunAndMonitorRefreshesUnrelatedCandidates(t *testing.T) {
+	engine := newBackend(domain.BackendDockerCompose, multiCompose)
+	engine.running = map[string]string{"web": baseDigest, "sidecar": sidecarDigest}
+	observer := newBackend(domain.BackendPortainer, singleCompose)
+	observer.imageStatus = "updated"
+	stack := singleStack("observer", domain.BackendPortainer)
+	stack.AutoApply = false
+	harness := newHarness(t, policyFor(multiStack(), stack), map[domain.Backend]*fakeBackend{
+		domain.BackendDockerCompose: engine, domain.BackendPortainer: observer,
+	})
+	ripen(harness, engine, newDigest)
+	harness.health.answer = func(_ config.HealthPolicy, _ int) (bool, error) {
+		return len(engine.deployments) != 1, nil
+	}
+	harness.events.events = nil
+
+	report := harness.run(domain.ModeApply)
+
+	harness.expect(report, "web", domain.ResultRolledBack)
+	if !harness.events.saw(event.RunFinished) || !report.BreakerOpen {
+		t.Fatal("the rollback run must finish with an open breaker")
+	}
+	observerKey := state.Key{Backend: domain.BackendPortainer, Stack: "observer"}
+	before, err := harness.store.Candidate(observerKey)
+	if err != nil || before == nil {
+		t.Fatalf("candidate = %v, error = %v", before, err)
+	}
+	harness.mature()
+	harness.run(domain.ModeApply)
+	harness.run(domain.ModeMonitor)
+
+	after, err := harness.store.Candidate(observerKey)
+	if err != nil || after == nil || after.Count != before.Count+1 || !after.LastSeen.After(before.LastSeen) {
+		t.Fatalf("candidate before = %+v, after = %+v, error = %v", before, after, err)
+	}
+	if len(engine.deployments) != 2 || len(observer.deployments) != 0 || !harness.status().BreakerOpen {
+		t.Fatal("monitor must preserve the breaker and deploy nothing after rollback")
+	}
+}
+
 func TestAProposalIsAnnouncedOnlyOnceItIsRecorded(t *testing.T) {
 	engine := gitBackend()
 	harness := singleHarness(t, gitStack(), engine)

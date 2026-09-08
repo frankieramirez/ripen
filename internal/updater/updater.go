@@ -243,6 +243,9 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 			Code:   domain.ResultBreakerOpen,
 			Detail: breakerDetail(status),
 		}}
+		u.emit(event.RunFinished, event.Subject{RunID: report.RunID}, event.Data{
+			Mode: string(mode), BreakerOpen: true, ResultCount: 1, Reason: breakerDetail(status),
+		})
 		return report, nil
 	}
 

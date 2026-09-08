@@ -228,6 +228,9 @@ Extracted from the Python test suite (2026-08-18). **This list gated the Python-
 
 ### Circuit breaker
 
+- [x] The daemon follows an Apply result with an open breaker with Monitor in the same cycle, keeps observing on later intervals, and resumes Apply after a human clears the breaker (#145). — Go: `daemon.TestAnOpenBreakerKeepsScheduledObservationRunningAndClearingItResumesApply`, `updater.TestARollbackFinishesTheRunAndMonitorRefreshesUnrelatedCandidates`
+- [x] An Apply run blocked by the breaker emits `run.finished` with the breaker reason (#145). — Go: `updater.TestABreakerBlockedRunEmitsItsCompletionAndReason`
+
 - [x] Failed rollback verification opens the breaker, and an open breaker stops future apply runs with result BREAKER_OPEN (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply) — Go: `updater.TestAFailedRollbackIsReportedAndBlocksEveryFutureApply`
 - [x] The breaker opens on failed post-update health even when the rollback itself succeeds (test_updater.py::test_failed_health_rolls_back_to_digest_and_opens_breaker) — Go: `updater.TestFailedPostUpdateHealthRollsBackAndOpensTheBreaker`
 - [x] An unhealthy deployment observed via Git-flow reconciliation also opens the breaker (test_updater.py::test_unhealthy_git_deployment_opens_breaker_without_accepting_digest) — Go: `updater.TestAPinnedButUnhealthyGitDeploymentOpensTheBreakerWithoutAccepting`

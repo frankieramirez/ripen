@@ -40,7 +40,10 @@ func Run(ctx context.Context, options Options) error {
 		options.Interval = time.Hour
 	}
 	for {
-		_, err := options.Updater.Run(options.Mode)
+		report, err := options.Updater.Run(options.Mode)
+		if err == nil && options.Mode == domain.ModeApply && report.BreakerOpen && ctx.Err() == nil {
+			_, err = options.Updater.Run(domain.ModeMonitor)
+		}
 		if options.Once {
 			return err
 		}
