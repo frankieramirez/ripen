@@ -402,38 +402,6 @@ func (a *App) Candidates() (response.Candidates, error) {
 	return candidates, nil
 }
 
-// Audit answers `ripen audit` from the attempts table — the record of
-// what Ripen did, never the Event stream.
-func (a *App) Audit(filter state.AuditFilter) (response.Audit, error) {
-	if filter.Limit <= 0 {
-		filter.Limit = 50
-	}
-	filter.Limit++
-	attempts, err := a.Store.AuditPage(filter)
-	if err != nil {
-		return response.Audit{}, err
-	}
-	audit := response.Audit{Attempts: []response.Attempt{}}
-	if len(attempts) == filter.Limit {
-		attempts = attempts[:filter.Limit-1]
-		cursor := fmt.Sprintf("%d", attempts[len(attempts)-1].ID)
-		audit.NextCursor = &cursor
-	}
-	for _, attempt := range attempts {
-		audit.Attempts = append(audit.Attempts, response.Attempt{
-			Identity:    identity(attempt.Key),
-			RunID:       attempt.RunID,
-			Actor:       string(attempt.Actor),
-			Result:      string(attempt.Result),
-			Detail:      attempt.Detail,
-			OldDigest:   response.Optional(attempt.OldDigest),
-			NewDigest:   response.Optional(attempt.NewDigest),
-			AttemptedAt: response.Stamp(attempt.AttemptedAt),
-		})
-	}
-	return audit, nil
-}
-
 // Explain answers `ripen explain <stack>`: what the next run would do
 // with this stack, and what is standing in the way. It reads policy and
 // state only — no backend, no registry, no network.

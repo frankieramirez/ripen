@@ -213,6 +213,110 @@ func TestTheInternalAPIAnswersTheResponseEnvelope(t *testing.T) {
 	}
 }
 
+func TestTheAuditPageRejectsInvalidCursorsWithBadRequest(t *testing.T) {
+	server := serve(t, loadedApp(t), "")
+
+	for _, cursor := range []string{"abc", "12junk", "0", "-1", "+1", " ", "9223372036854775808"} {
+		answer, _ := get(t, server, "/audit?cursor="+cursor, "")
+
+		if answer.StatusCode != http.StatusBadRequest {
+			t.Errorf("cursor %q status = %d, want 400", cursor, answer.StatusCode)
+		}
+	}
+}
+
+func TestTheAuditPageRejectsMalformedAndOverflowingLimitsWithBadRequest(t *testing.T) {
+	server := serve(t, loadedApp(t), "")
+
+	for _, limit := range []string{"abc", "9223372036854775807"} {
+		answer, _ := get(t, server, "/audit?limit="+limit, "")
+
+		if answer.StatusCode != http.StatusBadRequest {
+			t.Errorf("limit %q status = %d, want 400", limit, answer.StatusCode)
+		}
+	}
+}
+
+func TestTheAuditAPIRejectsInvalidCursorsWithUsageBadRequest(t *testing.T) {
+	server := serve(t, loadedApp(t), "")
+
+	answer, body := get(t, server, "/api/audit?cursor=abc", "")
+
+	if answer.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", answer.StatusCode)
+	}
+	var envelope response.Envelope
+	if err := json.Unmarshal([]byte(body), &envelope); err != nil {
+		t.Fatalf("the api did not answer an envelope: %s", body)
+	}
+	if envelope.OK || envelope.Error == nil || envelope.Error.Code != response.CodeUsage {
+		t.Errorf("envelope = %+v, want a usage failure", envelope)
+	}
+}
+
+func TestTheAuditAPIRejectsMalformedAndOverflowingLimitsWithUsageBadRequest(t *testing.T) {
+	server := serve(t, loadedApp(t), "")
+
+	for _, limit := range []string{"abc", "9223372036854775807"} {
+		answer, body := get(t, server, "/api/audit?limit="+limit, "")
+		if answer.StatusCode != http.StatusBadRequest {
+			t.Errorf("limit %q status = %d, want 400", limit, answer.StatusCode)
+		}
+		var envelope response.Envelope
+		if err := json.Unmarshal([]byte(body), &envelope); err != nil {
+			t.Fatalf("limit %q did not answer an envelope: %s", limit, body)
+		}
+		if envelope.Error == nil || envelope.Error.Code != response.CodeUsage {
+			t.Errorf("limit %q error = %+v, want usage", limit, envelope.Error)
+		}
+	}
+}
+
+func TestTheAuditAPIContinuesFromItsNextCursor(t *testing.T) {
+	loaded := loadedApp(t)
+	key := state.Key{Backend: domain.BackendDockerCompose, Stack: "media"}
+	for index := range 3 {
+		if err := loaded.Store.RecordAttempt(state.Attempt{
+			Key: key, RunID: fmt.Sprintf("run-%d", index), Actor: domain.ActorDaemon,
+			Result: domain.ResultUpdated,
+		}, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := serve(t, loaded, "")
+
+	firstAnswer, firstBody := get(t, server, "/api/audit?limit=2", "")
+	if firstAnswer.StatusCode != http.StatusOK {
+		t.Fatalf("first status = %d", firstAnswer.StatusCode)
+	}
+	var first struct {
+		Data response.Audit `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(firstBody), &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.Data.NextCursor == nil {
+		t.Fatal("first page has no next_cursor")
+	}
+
+	secondAnswer, secondBody := get(t, server, "/api/audit?limit=2&cursor="+*first.Data.NextCursor, "")
+	if secondAnswer.StatusCode != http.StatusOK {
+		t.Fatalf("second status = %d", secondAnswer.StatusCode)
+	}
+	var second struct {
+		Data response.Audit `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(secondBody), &second); err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Data.Attempts) != 1 || second.Data.Attempts[0].RunID != "run-0" {
+		t.Errorf("second page = %+v, want run-0", second.Data.Attempts)
+	}
+	if second.Data.NextCursor != nil {
+		t.Errorf("second next_cursor = %q, want null on the last page", *second.Data.NextCursor)
+	}
+}
+
 func TestNothingCanBeWritten(t *testing.T) {
 	server := serve(t, loadedApp(t), "")
 	client := &http.Client{

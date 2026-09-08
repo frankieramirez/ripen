@@ -19,13 +19,11 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/frankieramirez/ripen/internal/app"
 	"github.com/frankieramirez/ripen/internal/response"
-	"github.com/frankieramirez/ripen/internal/state"
 )
 
 //go:embed assets/*.html
@@ -233,9 +231,10 @@ func (s *Server) overview(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) audit(writer http.ResponseWriter, request *http.Request) {
-	limit, _ := strconv.Atoi(request.URL.Query().Get("limit"))
-	cursor, _ := strconv.ParseInt(request.URL.Query().Get("cursor"), 10, 64)
-	trail, err := s.loaded.Audit(state.AuditFilter{Limit: limit, Cursor: cursor})
+	trail, err := s.loaded.Audit(app.AuditRequest{
+		Limit:  request.URL.Query().Get("limit"),
+		Cursor: request.URL.Query().Get("cursor"),
+	})
 	if err != nil {
 		s.fail(writer, err)
 		return
@@ -268,8 +267,10 @@ func (s *Server) statusAPI(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) auditAPI(writer http.ResponseWriter, request *http.Request) {
-	limit, _ := strconv.Atoi(request.URL.Query().Get("limit"))
-	trail, err := s.loaded.Audit(state.AuditFilter{Limit: limit})
+	trail, err := s.loaded.Audit(app.AuditRequest{
+		Limit:  request.URL.Query().Get("limit"),
+		Cursor: request.URL.Query().Get("cursor"),
+	})
 	if err != nil {
 		s.failAPI(writer, "audit", err)
 		return
@@ -280,17 +281,29 @@ func (s *Server) auditAPI(writer http.ResponseWriter, request *http.Request) {
 func (s *Server) writeEnvelope(writer http.ResponseWriter, envelope response.Envelope) {
 	writer.Header().Set("Content-Type", "application/json")
 	if !envelope.OK {
-		writer.WriteHeader(http.StatusInternalServerError)
+		if envelope.Error != nil && envelope.Error.Code == response.CodeUsage {
+			writer.WriteHeader(http.StatusBadRequest)
+		} else {
+			writer.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 	_ = response.Write(writer, envelope)
 }
 
 func (s *Server) failAPI(writer http.ResponseWriter, command string, err error) {
-	s.writeEnvelope(writer, response.Fail(command, time.Now().UTC(), response.CodeInternal, err.Error()))
+	code := response.CodeInternal
+	if errors.Is(err, app.ErrInvalidAuditRequest) {
+		code = response.CodeUsage
+	}
+	s.writeEnvelope(writer, response.Fail(command, time.Now().UTC(), code, err.Error()))
 }
 
 func (s *Server) fail(writer http.ResponseWriter, err error) {
-	writer.WriteHeader(http.StatusInternalServerError)
+	status := http.StatusInternalServerError
+	if errors.Is(err, app.ErrInvalidAuditRequest) {
+		status = http.StatusBadRequest
+	}
+	writer.WriteHeader(status)
 	s.render(writer, "error.html", map[string]any{"Title": "Something went wrong", "Error": err.Error()})
 }
 
