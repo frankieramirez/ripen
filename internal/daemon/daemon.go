@@ -39,10 +39,23 @@ func Run(ctx context.Context, options Options) error {
 	if options.Interval <= 0 {
 		options.Interval = time.Hour
 	}
+	if !options.Once {
+		if scheduled, ok := options.Updater.(interface {
+			Schedule(context.Context, domain.Mode, time.Duration) error
+		}); ok {
+			return scheduled.Schedule(ctx, options.Mode, options.Interval)
+		}
+	}
+	run := options.Updater.Run
+	if contextual, ok := options.Updater.(interface {
+		RunContext(context.Context, domain.Mode) (updater.Report, error)
+	}); ok {
+		run = func(mode domain.Mode) (updater.Report, error) { return contextual.RunContext(ctx, mode) }
+	}
 	for {
-		report, err := options.Updater.Run(options.Mode)
+		report, err := run(options.Mode)
 		if err == nil && options.Mode == domain.ModeApply && report.BreakerOpen && ctx.Err() == nil {
-			_, err = options.Updater.Run(domain.ModeMonitor)
+			_, err = run(domain.ModeMonitor)
 		}
 		if options.Once {
 			return err

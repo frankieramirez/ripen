@@ -98,16 +98,30 @@ ripen audit --pretty        # what Ripen has actually done
 Without `--pretty`, each of those prints the JSON Response envelope. The flag
 is never inferred from a TTY.
 
-Run it on a schedule with `ripen daemon`, which does the same thing every
-`check_interval_seconds` and writes its Event stream to stderr.
-When Apply reports an open Circuit breaker, the daemon runs Monitor in the same
-cycle so Candidate observations stay current. Blocked Apply runs emit
-`run.finished` with `breaker_open: true` and the recorded reason. A person must
-still clear the breaker before updates or Proposals can resume.
+Run it on a schedule with `ripen daemon`. It observes at startup and on fixed
+`check_interval_seconds` ticks, checking up to two stacks concurrently. Set
+`observation_concurrency` from 1 through 8 to change that limit. While one stack
+deploys, verifies, or rolls back, unrelated stacks continue receiving checks.
+The active stack waits until a later scheduled check. Missed checks coalesce
+instead of accumulating a backlog.
+
+Deployments remain sequential, with at most one update per Apply cycle and a
+full interval after Apply completes before another cycle may update. An open
+Circuit breaker permits observation but blocks updates and Proposals until a
+person clears it. The daemon writes its Event stream to stderr.
 
 `status` reads stored state; a successful response does not prove that the daemon
-is making progress. Check the `run.finished` Events in the container log. The
+is making progress. Its scheduler, stack checks, and service evaluations show
+stored progress separately from Candidate age; an unfinished Transaction shows
+its phase and whether its ownership has expired. Check the `run.finished` Events
+in the container log. The
 Notifier is off unless configured; use `ripen notify test` to verify delivery.
+
+If status shows an interrupted Transaction, ordinary breaker clearing refuses
+to resume deployments. Once you have confirmed the earlier backend request
+finished and restored a healthy Baseline, use `clear-breaker --reconcile
+--reason "..."`. See [recovery requirements](docs/configuration.md#run-settings),
+including the restriction on interrupted Proposal requests.
 
 ## How a Transaction works
 

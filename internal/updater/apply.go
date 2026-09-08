@@ -76,6 +76,9 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 		return t.failure(observed.key, err), false
 	}
 	t.updater = t.updater.withContext(t.updater.leaseCtx)
+	if err := t.phase("deploying"); err != nil {
+		return t.failure(observed.key, err), true
+	}
 	t.updater.emit(event.TransactionStarted, t.subject(observed.key),
 		event.Data{OldDigest: accepted, NewDigest: observed.remoteDigest})
 
@@ -362,7 +365,18 @@ func (t *transaction) phase(phase string) error {
 	if err := t.updater.checkOwnership(); err != nil {
 		return err
 	}
-	return t.updater.state.SetTransactionPhase(t.updater.token, phase, t.updater.clock.Now())
+	if err := t.updater.state.SetTransactionPhase(t.updater.token, phase, t.updater.clock.Now()); err != nil {
+		return err
+	}
+	marker, err := t.updater.state.ActiveTransaction()
+	if err != nil {
+		return err
+	}
+	if marker == nil {
+		return errors.New("transaction progress lost its durable marker")
+	}
+	t.updater.emit(event.TransactionProgress, t.subject(marker.Key), event.Data{Phase: event.Phase(phase)})
+	return nil
 }
 
 func (t *transaction) complete(observed observation, accepted string, code domain.ResultCode, detail, digest, reason string, clearMarker bool, now time.Time) error {

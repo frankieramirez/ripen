@@ -134,3 +134,14 @@ func TestEachEventIsOneLineOfJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestTransactionProgressDoesNotEnterThePagingCatalogue(t *testing.T) {
+	if Known(TransactionProgress) {
+		t.Fatal("transaction progress can be configured for paging")
+	}
+	for _, name := range DefaultPaging {
+		if name == TransactionProgress {
+			t.Fatal("transaction progress pages by default")
+		}
+	}
+}

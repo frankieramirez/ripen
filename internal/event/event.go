@@ -52,12 +52,13 @@ const (
 	StackRecovered Name = "stack.recovered"
 )
 
-// Two Events exist outside the paging catalogue. NotifierTest is what
+// Operational Events also exist outside the paging catalogue. NotifierTest is what
 // `ripen notify test` sends, and it bypasses filtering by definition —
 // the point is to prove the real path works. NotifierDeliveryFailed
 // never leaves the stream: a Notifier cannot page about its own inability
 // to page.
 const (
+	TransactionProgress    Name = "transaction.progress"
 	NotifierTest           Name = "notifier.test"
 	NotifierDeliveryFailed Name = "notifier.delivery_failed"
 )
@@ -95,10 +96,23 @@ func Known(name Name) bool {
 	return false
 }
 
+// Phase names a persisted Transaction phase.
+type Phase string
+
+// Persisted Transaction phases.
+const (
+	PhaseDeploying   Phase = "deploying"
+	PhaseVerifying   Phase = "verifying"
+	PhaseRollingBack Phase = "rolling_back"
+	PhaseProposing   Phase = "proposing"
+)
+
 // Data is every field any Event payload may carry. One closed struct,
 // deliberately: an Event cannot carry a field nobody reviewed, so no
 // secret can travel in one.
 type Data struct {
+	Phase          Phase  `json:"phase,omitempty"`
+	SkippedStacks  int    `json:"skipped_stacks,omitempty"`
 	Mode           string `json:"mode,omitempty"`
 	Result         string `json:"result,omitempty"`
 	Digest         string `json:"digest,omitempty"`

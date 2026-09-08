@@ -35,13 +35,58 @@ RIPEN_CONFIG=/etc/ripen/policy.yaml ripen status
 | `max_updates_per_run` | `1` | v1 requires `1`. One Service per run, always. |
 | `candidate_min_age_seconds` | `86400` | How long a new digest must exist before it may be applied. |
 | `verification_timeout_seconds` | `300` | How long health checks have to come good after a deploy. |
-| `lease_ttl_seconds` | `1800` | How long one run may hold the exclusive lease. |
-| `check_interval_seconds` | `86400` | How often `ripen daemon` runs a cycle. |
+| `lease_ttl_seconds` | `1800` | Lease expiry window; active work renews ownership every one-third of this interval. |
+| `check_interval_seconds` | `86400` | Fixed observation cadence and cooldown after each Apply cycle. |
+| `observation_concurrency` | `2` | Maximum concurrent stack observations, an integer from `1` through `8`. |
 | `state_file` | `/data/updater.db` | The state database. |
 
 The state database is the system of record. Baselines, Candidates, Proposals,
 the audit trail, the Circuit breaker, and Notifier health all live there. Back it
 up; losing it means Ripen re-baselines from scratch on the next Monitor run.
+
+Observation starts when the daemon starts and continues on fixed ticks. Each
+stack has at most one pending check. Slow checks coalesce missed ticks, and the
+stack currently deploying, verifying, or rolling back stays excluded until its
+next scheduled opportunity after completion. Other stacks continue receiving
+checks. Setting `observation_concurrency: 1` limits simultaneous reads while
+preserving observation during another stack's update.
+
+Only one deployment may run at a time. The next Apply cycle waits a full
+`check_interval_seconds` after the previous Apply cycle finishes. Increasing
+observation concurrency does not increase the deployment rate.
+
+This release migrates Go state schema v1 to v2 on open and preserves existing
+Baselines, Candidates, and the Circuit breaker. Back up the database before
+upgrading. Older binaries must not open or share the migrated database; restore
+the pre-upgrade backup if downgrading. The Response and Event schema versions
+remain independent of the state schema.
+
+An interrupted Transaction retains its ownership record after lease expiry.
+Ripen refuses another deployment until that Transaction is reconciled. Inspect
+`ripen status --pretty`, the audit history, and the actual stack state before
+resuming updates. Clearing the Circuit breaker alone does not remove an
+unfinished Transaction.
+
+After you have confirmed that the earlier backend request has finished, use:
+
+```sh
+ripen clear-breaker --config /config/policy.yaml --reconcile \
+  --reason "Confirmed the earlier backend request finished and restored the baseline"
+```
+
+`--reconcile` is your explicit confirmation that the earlier request has settled.
+Ripen cannot prove that an external request has stopped merely from lease expiry
+or a healthy container. It acquires the lease, checks backend identity and the
+configured service set, and verifies stack and sibling health plus the affected
+service's accepted Baseline digest. On success it records the reconciliation,
+removes the interrupted marker, and clears the breaker. It refuses an active
+lease, missing Baseline, or unproven recovery. It does not deploy or roll back
+the stack for you.
+
+An interrupted `proposing` phase remains blocked: this command cannot prove
+whether the external Proposal request created a pull request. Inspect the
+external repository and resolve that uncertainty before seeking recovery;
+healthy containers alone cannot reconcile a Proposal request.
 
 ## Stacks
 
@@ -271,6 +316,7 @@ verification_timeout_seconds: 300
 lease_ttl_seconds: 1800
 
 check_interval_seconds: 86400
+observation_concurrency: 2
 state_file: /data/updater.db
 
 compose:
