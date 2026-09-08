@@ -42,27 +42,6 @@ func (t *transaction) port() backend.Port {
 	return t.updater.backends[t.stack.Backend]
 }
 
-func (t *transaction) run(slots int) ([]Result, int) {
-	stackState, err := t.port().Observe(t.stack)
-	if err != nil {
-		return []Result{t.failure(state.Key{Backend: t.stack.Backend, Stack: t.stack.Name}, err)}, 0
-	}
-	observations, err := t.observe(stackState)
-	if err != nil {
-		return []Result{t.failure(state.Key{Backend: t.stack.Backend, Stack: t.stack.Name}, err)}, 0
-	}
-	results := make([]Result, 0, len(observations))
-	applied := 0
-	for _, observed := range observations {
-		result, changed := t.evaluate(observed, slots-applied > 0)
-		if changed {
-			applied++
-		}
-		results = append(results, result)
-	}
-	return results, applied
-}
-
 func (t *transaction) failure(key state.Key, err error) Result {
 	var notVisible *backend.NotVisibleError
 	var ineligible *backend.IneligibleError

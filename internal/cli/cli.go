@@ -153,6 +153,7 @@ func withApp(command string, args []string, stream io.Writer) (response.Envelope
 }
 
 type verbOptions struct {
+	reconcile bool
 	arguments []string
 	pretty    bool
 	mode      string
@@ -168,6 +169,9 @@ type verbOptions struct {
 
 func registerFlags(command string, flags *flag.FlagSet) *verbOptions {
 	options := &verbOptions{}
+	if command == "clear-breaker" {
+		flags.BoolVar(&options.reconcile, "reconcile", false, "confirm the interrupted backend request has finished and verify recovery")
+	}
 	switch command {
 	case "status", "candidates", "audit", "explain":
 		flags.BoolVar(&options.pretty, "pretty", false, "render the same payload as text")
@@ -344,7 +348,12 @@ func clearBreakerVerb(loaded *app.App, options *verbOptions,
 		return failure("clear-breaker", err)
 	}
 	defer drain()
-	status, err := engine.ClearBreaker(options.reason)
+	var status state.Status
+	if options.reconcile {
+		status, err = engine.ReconcileTransaction(options.reason)
+	} else {
+		status, err = engine.ClearBreaker(options.reason)
+	}
 	if err != nil {
 		return failure("clear-breaker", err)
 	}

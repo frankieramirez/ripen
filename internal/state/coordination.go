@@ -442,3 +442,26 @@ func (s *Store) CompleteTransaction(token string, attempt Attempt, acceptedDiges
 	}
 	return tx.Commit()
 }
+
+// ReconcileTransaction records an explicitly verified interrupted Transaction and clears its breaker atomically.
+func (s *Store) ReconcileTransaction(token string, attempt Attempt, reason string, now time.Time) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := checkLease(tx, token, now); err != nil {
+		return err
+	}
+	result, err := tx.Exec("DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase!='proposing'", attempt.RunID, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service)
+	if err := requireOwner(result, err); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO attempts(run_id,actor,backend,stack,service,old_digest,new_digest,result,attempted_at,detail) VALUES(?,?,?,?,?,?,?,?,?,?)`, attempt.RunID, attempt.Actor, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service, attempt.OldDigest, attempt.NewDigest, attempt.Result, stamp(now), attempt.Detail); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO breaker VALUES(1,0,NULL,?,?) ON CONFLICT(singleton) DO UPDATE SET is_open=0,reason=NULL,changed_at=excluded.changed_at,clear_reason=excluded.clear_reason`, stamp(now), reason); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
