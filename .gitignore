@@ -20,8 +20,4 @@ secrets/
 compose.portainer.backup-*.yaml
 /scripts/
 
-/site/node_modules/
-/site/dist/
-/site/.astro/
-
 /.claude/worktrees/

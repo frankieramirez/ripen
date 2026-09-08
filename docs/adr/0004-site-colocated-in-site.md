@@ -1,6 +1,9 @@
 # The site lives in `site/`; root `docs/` stays canonical
 
-Status: accepted.
+Status: superseded by [ADR 0005](0005-private-website-repository.md).
+
+This records the original colocation decision. Operator documentation remains
+canonical here; the website now has its own private repository.
 
 ripen.dev is built from a `site/` directory in this repository. The
 documentation it publishes is the root `docs/` directory, which remains the
@@ -11,7 +14,9 @@ bytes.
 
 Full detail: [ripen.dev map](https://github.com/frankieramirez/ripen/issues/98)
 and [Docs pipeline shape](https://github.com/frankieramirez/ripen/issues/103).
-The site's own design document is [`site/README.md`](../../site/README.md).
+The site's design record moved to
+[`ripen-site/DESIGN.md`](https://github.com/frankieramirez/ripen-site/blob/main/DESIGN.md)
+(maintainer access required).
 
 This earns an ADR because it will surprise a future reader — `site/` reaches
 *outside itself* for content, which no framework's default project layout
