@@ -84,6 +84,12 @@
       "sourceType": "github",
       "skillPath": "skills/sift/SKILL.md",
       "computedHash": "6168915a98ab5f8f4a5a8b710c2eb7ea47f60f1d52d503c440453b6f8eba9ed4"
+    },
+    "ward": {
+      "source": "frankieramirez/mana",
+      "sourceType": "github",
+      "skillPath": "skills/ward/SKILL.md",
+      "computedHash": "395f6ac40b07f2831f73694f71f59604961d0a7d3049698bc24c748c91f188aa"
     }
   }
 }
