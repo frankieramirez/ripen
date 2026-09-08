@@ -102,7 +102,7 @@ func (u *Updater) schedule(ctx context.Context, mode domain.Mode, interval time.
 				c.startPass(ctx, mode)
 			}
 		case completion := <-c.results:
-			c.complete(ctx, mode, completion)
+			c.complete(mode, completion)
 		}
 	}
 }
@@ -198,7 +198,7 @@ func (c *coordinator) dispatch() {
 	}
 }
 
-func (c *coordinator) complete(ctx context.Context, mode domain.Mode, done stackCompletion) {
+func (c *coordinator) complete(mode domain.Mode, done stackCompletion) {
 	index := done.work.index
 	c.busy[index] = false
 	c.running[index] = false
@@ -223,20 +223,16 @@ func (c *coordinator) complete(ctx context.Context, mode domain.Mode, done stack
 		if pass.remaining == 0 {
 			c.finishPass(pass)
 		}
-		if !c.stopping {
-			c.admit(mode)
-		}
-		if c.due[index] && !c.stopping && !c.busy[index] {
-			c.due[index] = false
-			c.busy[index] = true
-			next := &observationPass{report: Report{RunID: newRunID(), Mode: domain.ModeMonitor, Actor: c.root.actor, Started: c.root.clock.Now()}, remaining: 1}
-			c.queue = append(c.queue, stackWork{index: index, pass: next})
-		}
 	}
 	if !c.stopping {
 		c.admit(mode)
 	}
-	_ = ctx
+	if c.due[index] && !c.stopping && !c.busy[index] {
+		c.due[index] = false
+		c.busy[index] = true
+		next := &observationPass{report: Report{RunID: newRunID(), Mode: domain.ModeMonitor, Actor: c.root.actor, Started: c.root.clock.Now()}, remaining: 1}
+		c.queue = append(c.queue, stackWork{index: index, pass: next})
+	}
 }
 
 func (c *coordinator) finishPass(pass *observationPass) {

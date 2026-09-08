@@ -252,7 +252,7 @@ Extracted from the Python test suite (2026-08-18). **This list gated the Python-
 
 ### Circuit breaker
 
-- [x] The daemon follows an Apply result with an open breaker with Monitor in the same cycle, keeps observing on later intervals, and resumes Apply after a human clears the breaker (#145). — Go: `daemon.TestAnOpenBreakerKeepsScheduledObservationRunningAndClearingItResumesApply`, `updater.TestARollbackFinishesTheRunAndMonitorRefreshesUnrelatedCandidates`
+- [x] The daemon keeps observing on scheduled intervals with an open breaker and resumes Apply after a human clears it. A finite `--once` follows a blocked Apply with Monitor (#145). — Go: `updater.TestTheCoordinatorKeepsObservingWithAnOpenBreakerAndResumesApplyAfterClearing`, `daemon.TestOnceRoutesApplyAndBreakerObservationThroughTheCallerContext`, `updater.TestARollbackFinishesTheRunAndMonitorRefreshesUnrelatedCandidates`
 - [x] An Apply run blocked by the breaker emits `run.finished` with the breaker reason (#145). — Go: `updater.TestABreakerBlockedRunEmitsItsCompletionAndReason`
 
 - [x] Failed rollback verification opens the breaker, and an open breaker stops future apply runs with result BREAKER_OPEN (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply) — Go: `updater.TestAFailedRollbackIsReportedAndBlocksEveryFutureApply`

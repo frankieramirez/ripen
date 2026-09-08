@@ -210,23 +210,6 @@ func (s *Store) AcceptPendingProposal(token string, key Key, expected PendingPro
 	return true, tx.Commit()
 }
 
-// FinishInterruptedTransaction clears the observed interrupted run under current ownership.
-func (s *Store) FinishInterruptedTransaction(token, expectedRunID string, now time.Time) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := checkLease(tx, token, now); err != nil {
-		return err
-	}
-	r, err := tx.Exec("DELETE FROM active_transaction WHERE singleton=1 AND run_id=?", expectedRunID)
-	if err := requireOwner(r, err); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 // StackCheck records the most recent observation attempt for a stack.
 type StackCheck struct {
 	OwnerToken  string
