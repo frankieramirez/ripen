@@ -32,10 +32,14 @@ credentials belong only in `ripen-site` after cutover. Its `SITE_DEPLOY_ENABLED`
 variable controls automatic deployments. Retry failed notifications or deployments
 through GitHub Actions.
 
-During migration, the old deployment job recognizes `SITE_DEPLOY_OWNER=private`
-in this repository. Set that variable and drain old deployment jobs before
-enabling the new deployment. After verifying the new serving revision pair,
-remove `site/`, the old deployment jobs, and both Cloudflare secrets here.
+Before merging the extraction PR, follow the pre-merge cutover procedure in the
+private site's [MIGRATION.md](https://github.com/frankieramirez/ripen-site/blob/main/MIGRATION.md).
+
+After the split, verify both existing hostnames, `https://ripen.dev` and
+`https://ripen-site.cloudflare-punctual727.workers.dev`, serve the root page,
+`/docs/configuration/`, and the custom 404 page. Verify that `/_deploy.txt` on
+both hosts reports the same checked-out site and source revisions as the
+deployment.
 
 For recovery, pause the active deployment owner first and restore a known-good
 Worker version through Cloudflare's rollback command or dashboard. The pre-split
