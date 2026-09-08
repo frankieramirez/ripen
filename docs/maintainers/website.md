@@ -6,9 +6,11 @@ remain in this repository.
 
 ## Notifications and PR checks
 
-`Site notify` runs after `Go CI`. It checks GitHub metadata using trusted main
-code and dispatches a site build for changed `docs/**` or `CONTEXT.md`. The exact
-repository guard makes it skip forks.
+`Site notify` uses GitHub's native push path filter to publish changes to
+`docs/**` or `CONTEXT.md` on main. PR validation runs after `Go CI`, using only
+GitHub metadata and trusted main code. The exact repository guard makes it skip
+forks. Publication depends on the website build, so a Go CI failure does not
+hold up a documentation correction.
 
 `SITE_WORKFLOW_TOKEN` is a fine-grained PAT scoped to `ripen-site` with Actions:
 write. Save it as an Actions secret here. The site repository holds
@@ -16,9 +18,9 @@ write. Save it as an Actions secret here. The site repository holds
 Record each token's expiry and rotate it under the same secret name.
 
 Docs PRs receive `site/docs`. The status is informational; it was not added to a
-branch protection rule during the split. Failed dispatches report an error and
-hourly private reconciliation retries missing or stalled checks. Content failures
-need a fix or a maintainer's manual retry. Detailed build logs remain private.
+branch protection rule during the split. Failed dispatches report an error.
+Retry failed or interrupted checks through the private validation workflow;
+content failures need a fix. Detailed build logs remain private.
 
 If a docs PR introduces a new page, ask a website maintainer to update its sidebar
 map. A new file fails website validation until its publication is decided.
@@ -27,15 +29,15 @@ map. A new file fails website validation until its publication is decided.
 
 The existing Cloudflare Worker, routes, and hostnames are unchanged. Cloudflare
 credentials belong only in `ripen-site` after cutover. Its `SITE_DEPLOY_ENABLED`
-variable controls automatic deployments; `SITE_CHECKS_ENABLED` enables hourly
-PR reconciliation.
+variable controls automatic deployments. Retry failed notifications or deployments
+through GitHub Actions.
 
 During migration, the old deployment job recognizes `SITE_DEPLOY_OWNER=private`
 in this repository. Set that variable and drain old deployment jobs before
 enabling the new deployment. After verifying the new serving revision pair,
 remove `site/`, the old deployment jobs, and both Cloudflare secrets here.
 
-For recovery, pause the active deployment owner first. The private repository
-supports rebuilding a known-good pair of site and Ripen SHAs. The pre-split
+For recovery, pause the active deployment owner first and restore a known-good
+Worker version through Cloudflare's rollback command or dashboard. The pre-split
 fallback is Ripen commit `49f3ee72294f61212bdaa0b25e60aff8007fda03`; it contains the
 original site and deployment workflow. Do not run both owners at once.

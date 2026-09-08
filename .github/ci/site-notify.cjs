@@ -35,19 +35,6 @@ async function changed(github, base, head) {
   return files.some(file => [file.filename, file.previous_filename].some(path => path === 'CONTEXT.md' || path?.startsWith('docs/')))
 }
 
-async function priorPush(github, current) {
-  const { owner, repo } = parts(sourceRepo)
-  for (let page = 1; page <= 10; page++) {
-    const result = await github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: current.workflow_id, event: 'push', branch: current.head_branch, status: 'completed', per_page: 100, page })
-    const runs = result.data.workflow_runs
-    if (!Array.isArray(runs)) throw new Error('workflow run listing was truncated')
-    const found = runs.find(run => run.id < current.id && run.conclusion === 'success' && run.head_sha)
-    if (found) return found
-    if (runs.length < 100) return null
-  }
-  throw new Error('workflow run listing was truncated')
-}
-
 async function findPR(github, run) {
   const { owner, repo } = parts(sourceRepo)
   const listed = Array.isArray(run.pull_requests) ? run.pull_requests : []
@@ -78,21 +65,17 @@ async function notifyPR(github, core, token, run) {
   }
 }
 
-async function notifyMain(github, core, token, run) {
-  if (run.conclusion !== 'success' || run.event !== 'push' || run.head_branch !== 'main') return
+async function notifyMain(core, token, context) {
+  if (context.eventName !== 'push' || context.ref !== 'refs/heads/main') return
   try {
-    const previous = await priorPush(github, run)
-    if (previous && !(await changed(github, previous.head_sha, run.head_sha))) return
-    await dispatch(token, 'deploy.yaml', { source_sha: run.head_sha })
+    await dispatch(token, 'deploy.yaml', {})
   } catch (error) { core.setFailed(error.message) }
 }
 
 module.exports = async function siteNotify(github, context, core, dispatchToken) {
   const run = runOf(context)
   if (context.payload.repository?.full_name !== sourceRepo) return
-  if (run.event === 'push' && run.head_repository?.full_name !== sourceRepo) return
   if (run.event === 'pull_request') return notifyPR(github, core, dispatchToken, run)
-  return notifyMain(github, core, dispatchToken, run)
+  if (run.event === 'push') return
+  return notifyMain(core, dispatchToken, context)
 }
-
-module.exports._test = { changed, findPR, priorPush, runOf }
