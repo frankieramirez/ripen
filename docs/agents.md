@@ -97,6 +97,16 @@ ripen audit --run 01920e2f-…               # one run
 ripen audit --stack media --result rolled_back
 ```
 
+An empty cursor starts at the newest attempts. Otherwise, pass a positive
+decimal integer from `next_cursor`, within the signed 64-bit range. Signs,
+whitespace, and trailing text are rejected with a `usage` error. A null
+`next_cursor` means the last page.
+
+The limit defaults to 50 when omitted, zero, or negative. Malformed limits
+and values that overflow pagination are rejected. CLI and MCP use the same
+pagination rules. The Web UI's `/audit` and `/api/audit` routes accept `limit`
+and `cursor` query parameters and return HTTP 400 for invalid values.
+
 `explain` answers offline, from policy and state alone. No backend call, no
 registry call, no network. It lists the blockers in the order a run would hit
 them:

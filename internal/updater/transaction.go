@@ -42,27 +42,6 @@ func (t *transaction) port() backend.Port {
 	return t.updater.backends[t.stack.Backend]
 }
 
-func (t *transaction) run(slots int) ([]Result, int) {
-	stackState, err := t.port().Observe(t.stack)
-	if err != nil {
-		return []Result{t.failure(state.Key{Backend: t.stack.Backend, Stack: t.stack.Name}, err)}, 0
-	}
-	observations, err := t.observe(stackState)
-	if err != nil {
-		return []Result{t.failure(state.Key{Backend: t.stack.Backend, Stack: t.stack.Name}, err)}, 0
-	}
-	results := make([]Result, 0, len(observations))
-	applied := 0
-	for _, observed := range observations {
-		result, changed := t.evaluate(observed, slots-applied > 0)
-		if changed {
-			applied++
-		}
-		results = append(results, result)
-	}
-	return results, applied
-}
-
 func (t *transaction) failure(key state.Key, err error) Result {
 	var notVisible *backend.NotVisibleError
 	var ineligible *backend.IneligibleError
@@ -199,6 +178,9 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 		}, false
 	}
 	t.recovered(observed, accepted, now)
+	if err := t.updater.checkOwnership(); err != nil {
+		return t.failure(observed.key, err), false
+	}
 
 	if pending != nil && pending.Digest != observed.remoteDigest {
 		return Result{
@@ -303,7 +285,11 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 
 func (t *transaction) acceptGitDeployment(observed observation, accepted string, pending state.PendingProposal,
 	now time.Time) (Result, bool) {
-	if !t.healthyOnce(observed.stack) {
+	healthy := t.healthyOnce(observed.stack)
+	if err := t.updater.checkOwnership(); err != nil {
+		return t.failure(observed.key, err), false
+	}
+	if !healthy {
 		reason := fmt.Sprintf("%s: the deployed proposal failed functional health verification",
 			label(observed.key))
 		if err := t.updater.state.OpenBreaker(reason, now); err != nil {
@@ -365,7 +351,7 @@ func (t *transaction) recovered(observed observation, accepted string, now time.
 	if observed.runningDigest != "" && observed.runningDigest != accepted {
 		return
 	}
-	if !t.healthyOnce(observed.stack) {
+	if !t.healthyOnce(observed.stack) || t.updater.checkOwnership() != nil {
 		return
 	}
 	detail := "the service is running its accepted baseline again"

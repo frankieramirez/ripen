@@ -244,6 +244,25 @@ func TestTheAuditToolTakesTheSameFiltersAsTheCommand(t *testing.T) {
 	}
 }
 
+func TestTheAuditToolRejectsInvalidCursorsAsUsageErrors(t *testing.T) {
+	server, err := New(Options{App: composeApp(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connected := session(t, server)
+
+	for _, cursor := range []string{"abc", "12junk", "0", "-1", "+1", " ", "9223372036854775808"} {
+		result, envelope := call(t, connected, "audit", map[string]any{"cursor": cursor})
+
+		if !result.IsError {
+			t.Errorf("cursor %q did not report a tool error", cursor)
+		}
+		if envelope.Error == nil || envelope.Error.Code != response.CodeUsage {
+			t.Errorf("cursor %q error = %+v, want usage", cursor, envelope.Error)
+		}
+	}
+}
+
 func TestAWriteThroughMCPIsRecordedAsTheMCPActor(t *testing.T) {
 	loaded := composeApp(t)
 	server, err := New(Options{App: loaded, EnableWrites: true, Stream: os.Stderr})

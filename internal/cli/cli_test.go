@@ -272,6 +272,36 @@ func TestAuditFiltersByRun(t *testing.T) {
 	}
 }
 
+func TestAuditRejectsInvalidCursorsAsUsageErrors(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	for _, cursor := range []string{"abc", "12junk", "0", "-1", "+1", " ", "9223372036854775808"} {
+		result := invoke(t, configPath, "audit", "--cursor", cursor)
+
+		if result.code != ExitUsage {
+			t.Errorf("cursor %q exit = %d, want %d", cursor, result.code, ExitUsage)
+		}
+		if result.envelope.Error == nil || result.envelope.Error.Code != response.CodeUsage {
+			t.Errorf("cursor %q error = %+v, want usage", cursor, result.envelope.Error)
+		}
+	}
+}
+
+func TestAuditRejectsMalformedAndOverflowingLimitsAsUsageErrors(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	for _, limit := range []string{"abc", "9223372036854775807"} {
+		result := invoke(t, configPath, "audit", "--limit", limit)
+
+		if result.code != ExitUsage {
+			t.Errorf("limit %q exit = %d, want %d", limit, result.code, ExitUsage)
+		}
+		if result.envelope.Error == nil || result.envelope.Error.Code != response.CodeUsage {
+			t.Errorf("limit %q error = %+v, want usage", limit, result.envelope.Error)
+		}
+	}
+}
+
 func TestExplainNamesEverythingBlockingAnApply(t *testing.T) {
 	configPath, _ := policyFile(t)
 

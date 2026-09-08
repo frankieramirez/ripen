@@ -210,23 +210,6 @@ func (s *Store) AcceptPendingProposal(token string, key Key, expected PendingPro
 	return true, tx.Commit()
 }
 
-// FinishInterruptedTransaction clears the observed interrupted run under current ownership.
-func (s *Store) FinishInterruptedTransaction(token, expectedRunID string, now time.Time) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := checkLease(tx, token, now); err != nil {
-		return err
-	}
-	r, err := tx.Exec("DELETE FROM active_transaction WHERE singleton=1 AND run_id=?", expectedRunID)
-	if err := requireOwner(r, err); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 // StackCheck records the most recent observation attempt for a stack.
 type StackCheck struct {
 	OwnerToken  string
@@ -439,6 +422,29 @@ func (s *Store) CompleteTransaction(token string, attempt Attempt, acceptedDiges
 		if _, err := tx.Exec("DELETE FROM active_transaction WHERE singleton=1 AND owner_token=?", token); err != nil {
 			return err
 		}
+	}
+	return tx.Commit()
+}
+
+// ReconcileTransaction records an explicitly verified interrupted Transaction and clears its breaker atomically.
+func (s *Store) ReconcileTransaction(token string, attempt Attempt, reason string, now time.Time) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := checkLease(tx, token, now); err != nil {
+		return err
+	}
+	result, err := tx.Exec("DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase!='proposing'", attempt.RunID, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service)
+	if err := requireOwner(result, err); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO attempts(run_id,actor,backend,stack,service,old_digest,new_digest,result,attempted_at,detail) VALUES(?,?,?,?,?,?,?,?,?,?)`, attempt.RunID, attempt.Actor, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service, attempt.OldDigest, attempt.NewDigest, attempt.Result, stamp(now), attempt.Detail); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO breaker VALUES(1,0,NULL,?,?) ON CONFLICT(singleton) DO UPDATE SET is_open=0,reason=NULL,changed_at=excluded.changed_at,clear_reason=excluded.clear_reason`, stamp(now), reason); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

@@ -99,6 +99,7 @@ type Options struct {
 
 // Updater runs Transactions.
 type Updater struct {
+	stopReads context.CancelFunc
 	eventMu   *sync.Mutex
 	ctx       context.Context
 	leaseCtx  context.Context
@@ -272,22 +273,9 @@ func (u *Updater) RunContext(ctx context.Context, mode domain.Mode) (Report, err
 		return Report{}, u.failed(report, err)
 	}
 
-	for _, stack := range u.policy.Stacks {
-		if !stack.Enabled {
-			continue
-		}
-		if reason, down := unavailable[stack.Backend]; down {
-			report.Results = append(report.Results, Result{
-				Key:    state.Key{Backend: stack.Backend, Stack: stack.Name},
-				Code:   domain.ResultEngineUnavailable,
-				Detail: reason,
-			})
-			continue
-		}
-		transaction := &transaction{updater: u, stack: stack, runID: report.RunID, mode: mode}
-		results, applied := transaction.run(u.policy.MaxUpdatesPerRun - report.UpdatesApplied)
-		report.Results = append(report.Results, results...)
-		report.UpdatesApplied += applied
+	report.Results, report.UpdatesApplied, err = u.runFinite(report, unavailable)
+	if err != nil {
+		return Report{}, u.failed(report, err)
 	}
 
 	report.Finished = u.clock.Now()
@@ -296,12 +284,7 @@ func (u *Updater) RunContext(ctx context.Context, mode domain.Mode) (Report, err
 		return Report{}, u.failed(report, err)
 	}
 	report.BreakerOpen = final.BreakerOpen
-	u.emit(event.RunFinished, event.Subject{RunID: report.RunID}, event.Data{
-		Mode:           string(mode),
-		UpdatesApplied: report.UpdatesApplied,
-		BreakerOpen:    report.BreakerOpen,
-		ResultCount:    len(report.Results),
-	})
+	u.finishReport(report, nil)
 	return report, nil
 }
 

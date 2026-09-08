@@ -36,6 +36,7 @@ func (u *Updater) owned(ctx context.Context, token string) (*Updater, func()) {
 	reads, cancelReads := context.WithCancel(ctx)
 	stopReadCancel := context.AfterFunc(leaseCtx, cancelReads)
 	scoped := u.withContext(reads)
+	scoped.stopReads = cancelReads
 	scoped.token = token
 	scoped.state = u.state.WithLease(token, u.clock.Now)
 	scoped.leaseCtx = leaseCtx
@@ -43,13 +44,13 @@ func (u *Updater) owned(ctx context.Context, token string) (*Updater, func()) {
 	go func() {
 		defer close(done)
 		interval := time.Duration(u.policy.LeaseTTLSeconds) * time.Second / 3
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		ticks, stop := u.ticker(interval)
+		defer stop()
 		for {
 			select {
 			case <-leaseCtx.Done():
 				return
-			case <-ticker.C:
+			case <-ticks:
 				if err := u.state.RenewLease(token, u.clock.Now(), u.policy.LeaseTTLSeconds); err != nil {
 					cancelLease()
 					return
@@ -68,4 +69,14 @@ func (u *Updater) checkOwnership() error {
 		return errors.New("no run owns the state lease")
 	}
 	return u.state.CheckLease(u.token, u.clock.Now())
+}
+
+func (u *Updater) ticker(interval time.Duration) (<-chan time.Time, func()) {
+	if clock, ok := u.clock.(interface {
+		Ticker(time.Duration) (<-chan time.Time, func())
+	}); ok {
+		return clock.Ticker(interval)
+	}
+	ticker := time.NewTicker(interval)
+	return ticker.C, ticker.Stop
 }
