@@ -9,6 +9,15 @@ permissions:
   contents: read
 
 jobs:
+  site-notifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: node --test .github/ci/site-notify.test.cjs
+
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -201,6 +210,7 @@ jobs:
       github.event_name == 'push'
       && github.ref == 'refs/heads/main'
       && needs.changes.outputs.site == 'true'
+      && vars.SITE_DEPLOY_OWNER != 'private'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
