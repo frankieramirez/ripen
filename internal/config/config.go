@@ -115,6 +115,7 @@ type Policy struct {
 	CandidateMinAgeSeconds     int
 	LeaseTTLSeconds            int
 	CheckIntervalSeconds       int
+	ObservationConcurrency     int
 	StateFile                  string
 	Portainer                  *PortainerSettings
 	Compose                    ComposeSettings
@@ -155,7 +156,7 @@ func Load(path string) (*Policy, error) {
 	}
 	if err := exactKeys(root, []string{
 		"mode", "max_updates_per_run", "verification_timeout_seconds",
-		"candidate_min_age_seconds", "lease_ttl_seconds", "check_interval_seconds",
+		"candidate_min_age_seconds", "lease_ttl_seconds", "check_interval_seconds", "observation_concurrency",
 		"portainer", "github", "compose", "notifier", "ui", "state_file", "stacks", "exclude",
 	}, "config"); err != nil {
 		return nil, err
@@ -186,6 +187,12 @@ func Load(path string) (*Policy, error) {
 	}
 	if policy.CheckIntervalSeconds, err = positiveInt(root, "check_interval_seconds", 86400); err != nil {
 		return nil, err
+	}
+	if policy.ObservationConcurrency, err = positiveInt(root, "observation_concurrency", 2); err != nil {
+		return nil, err
+	}
+	if policy.ObservationConcurrency > 8 {
+		return nil, fmt.Errorf("observation_concurrency must be between 1 and 8")
 	}
 	policy.StateFile = stringOr(root, "state_file", "/data/updater.db")
 

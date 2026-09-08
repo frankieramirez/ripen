@@ -289,6 +289,11 @@ func (a *App) Status() (response.Status, error) {
 		Versions:        Versions(),
 		EffectivePolicy: a.effectivePolicy(),
 		Services:        []response.Service{},
+		Checks:          []response.StackCheck{},
+		Evaluations:     []response.Evaluation{},
+	}
+	if err := a.statusProgress(&status, now); err != nil {
+		return response.Status{}, err
 	}
 	for _, ref := range a.Services() {
 		service := response.Service{
@@ -325,6 +330,58 @@ func (a *App) Status() (response.Status, error) {
 		status.Services = append(status.Services, service)
 	}
 	return status, nil
+}
+
+func optionalProgressStamp(value *time.Time) *string {
+	if value == nil {
+		return nil
+	}
+	text := response.Stamp(*value)
+	return &text
+}
+
+func (a *App) statusProgress(status *response.Status, now time.Time) error {
+	scheduler, err := a.Store.Scheduler()
+	if err != nil {
+		return err
+	}
+	status.Scheduler = response.Scheduler{
+		LastCompletedAt: optionalProgressStamp(scheduler.LastCompletedAt),
+		NextTickAt:      optionalProgressStamp(scheduler.NextTickAt),
+		Stale:           scheduler.NextTickAt != nil && !scheduler.NextTickAt.After(now) && !status.Lease.Active,
+	}
+	checks, err := a.Store.StackChecks()
+	if err != nil {
+		return err
+	}
+	for _, check := range checks {
+		outcome := check.Outcome
+		if outcome == "running" {
+			if err := a.Store.CheckLease(check.OwnerToken, now); errors.Is(err, state.ErrLeaseLost) {
+				outcome = "interrupted"
+			} else if err != nil {
+				return err
+			}
+		}
+		status.Checks = append(status.Checks, response.StackCheck{Identity: identity(check.Key), RunID: check.RunID, StartedAt: response.Stamp(check.StartedAt), CompletedAt: optionalProgressStamp(check.CompletedAt), Outcome: outcome})
+	}
+	evaluations, err := a.Store.Evaluations()
+	if err != nil {
+		return err
+	}
+	for _, evaluation := range evaluations {
+		status.Evaluations = append(status.Evaluations, response.Evaluation{Identity: identity(evaluation.Key), RunID: evaluation.RunID, Result: string(evaluation.Result), Detail: evaluation.Detail, EvaluatedAt: response.Stamp(evaluation.EvaluatedAt)})
+	}
+	transaction, err := a.Store.ActiveTransaction()
+	if err != nil || transaction == nil {
+		return err
+	}
+	err = a.Store.CheckLease(transaction.OwnerToken, now)
+	if err != nil && !errors.Is(err, state.ErrLeaseLost) {
+		return err
+	}
+	status.ActiveTransaction = &response.TransactionProgress{Identity: identity(transaction.Key), RunID: transaction.RunID, Phase: transaction.Phase, StartedAt: response.Stamp(transaction.StartedAt), PhaseStartedAt: response.Stamp(transaction.PhaseStartedAt), Interrupted: errors.Is(err, state.ErrLeaseLost)}
+	return nil
 }
 
 // Candidates answers `ripen candidates`: every Candidate under
@@ -466,6 +523,7 @@ func (a *App) effectivePolicy() response.EffectivePolicy {
 		VerificationTimeoutSeconds: a.Policy.VerificationTimeoutSeconds,
 		LeaseTTLSeconds:            a.Policy.LeaseTTLSeconds,
 		CheckIntervalSeconds:       a.Policy.CheckIntervalSeconds,
+		ObservationConcurrency:     a.Policy.ObservationConcurrency,
 		StateFile:                  a.Policy.StateFile,
 		Backends:                   backends,
 		StackCount:                 len(a.Policy.Stacks),

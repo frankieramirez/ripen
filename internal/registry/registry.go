@@ -11,6 +11,7 @@
 package registry
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +48,7 @@ func (p Platform) String() string {
 
 // Client resolves image digests over the registry HTTP API.
 type Client struct {
+	ctx        context.Context
 	httpClient *http.Client
 }
 
@@ -61,7 +63,7 @@ func WithHTTPClient(httpClient *http.Client) Option {
 
 // New builds a Client with a 20-second default timeout.
 func New(options ...Option) *Client {
-	client := &Client{httpClient: &http.Client{Timeout: 20 * time.Second}}
+	client := &Client{ctx: context.Background(), httpClient: &http.Client{Timeout: 20 * time.Second}}
 	for _, option := range options {
 		option(client)
 	}
@@ -153,14 +155,14 @@ func (c *Client) ResolvePlatformDigest(image domain.ImageReference, platform Pla
 
 func (c *Client) verifyConfigPlatform(image domain.ImageReference, configDigest, authorization string, platform Platform) error {
 	blobURL := fmt.Sprintf("https://%s/v2/%s/blobs/%s", image.Registry, image.Repository, configDigest)
-	request, err := http.NewRequest(http.MethodGet, blobURL, nil)
+	request, err := http.NewRequestWithContext(c.ctx, http.MethodGet, blobURL, nil)
 	if err != nil {
 		return err
 	}
 	if authorization != "" {
 		request.Header.Set("Authorization", authorization)
 	}
-	response, err := c.httpClient.Do(request)
+	response, err := c.httpClient.Do(request.WithContext(c.ctx))
 	if err != nil {
 		return fmt.Errorf("registry config request failed: %w", err)
 	}
@@ -188,7 +190,7 @@ func (c *Client) manifestRequest(method string, image domain.ImageReference) (*h
 	if err != nil {
 		return nil, "", err
 	}
-	response, err := c.httpClient.Do(request)
+	response, err := c.httpClient.Do(request.WithContext(c.ctx))
 	if err != nil {
 		return nil, "", fmt.Errorf("registry manifest request failed: %w", err)
 	}
@@ -211,7 +213,7 @@ func (c *Client) manifestRequest(method string, image domain.ImageReference) (*h
 	if err != nil {
 		return nil, "", err
 	}
-	response, err = c.httpClient.Do(retry)
+	response, err = c.httpClient.Do(retry.WithContext(c.ctx))
 	if err != nil {
 		return nil, "", fmt.Errorf("registry manifest request failed: %w", err)
 	}
@@ -256,7 +258,11 @@ func (c *Client) bearerToken(challenge string) (string, error) {
 	}
 	parsed.RawQuery = query.Encode()
 
-	response, err := c.httpClient.Get(parsed.String())
+	request, err := http.NewRequestWithContext(c.ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	response, err := c.httpClient.Do(request.WithContext(c.ctx))
 	if err != nil {
 		return "", fmt.Errorf("registry token request failed: %w", err)
 	}
@@ -316,4 +322,11 @@ func closeBody(response *http.Response) {
 	if response.Body != nil {
 		_ = response.Body.Close()
 	}
+}
+
+// WithContext returns a copy bound to the caller lifetime.
+func (c *Client) WithContext(ctx context.Context) *Client {
+	clone := *c
+	clone.ctx = ctx
+	return &clone
 }

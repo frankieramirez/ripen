@@ -9,9 +9,11 @@
 package updater
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,6 +99,11 @@ type Options struct {
 
 // Updater runs Transactions.
 type Updater struct {
+	stopReads context.CancelFunc
+	eventMu   *sync.Mutex
+	ctx       context.Context
+	leaseCtx  context.Context
+	token     string
 	policy    *config.Policy
 	backends  map[domain.Backend]backend.Port
 	registry  Registry
@@ -142,6 +149,7 @@ func New(options Options) (*Updater, error) {
 		options.Actor = domain.ActorCLI
 	}
 	return &Updater{
+		eventMu:   &sync.Mutex{},
 		policy:    options.Policy,
 		backends:  options.Backends,
 		registry:  options.Registry,
@@ -155,6 +163,8 @@ func New(options Options) (*Updater, error) {
 }
 
 func (u *Updater) emit(name event.Name, subject event.Subject, data event.Data) {
+	u.eventMu.Lock()
+	defer u.eventMu.Unlock()
 	defer func() { _ = recover() }()
 	u.events.Emit(name, subject, data)
 }
@@ -213,6 +223,14 @@ func (u *Updater) proposalKeys(stack string) []state.Key {
 // the state lease for its whole life, so two Ripen processes can never
 // act at once.
 func (u *Updater) Run(mode domain.Mode) (Report, error) {
+	return u.RunContext(context.Background(), mode)
+}
+
+// RunContext executes a finite run with cancellable observation.
+func (u *Updater) RunContext(ctx context.Context, mode domain.Mode) (Report, error) {
+	if err := ctx.Err(); err != nil {
+		return Report{}, err
+	}
 	started := u.clock.Now()
 	report := Report{RunID: newRunID(), Mode: mode, Actor: u.actor, Started: started}
 
@@ -229,7 +247,8 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 		}}
 		return report, nil
 	}
-	defer func() { _ = u.state.ReleaseLease(token) }()
+	u, release := u.owned(ctx, token)
+	defer release()
 
 	status, err := u.state.Status(started)
 	if err != nil {
@@ -254,22 +273,9 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 		return Report{}, u.failed(report, err)
 	}
 
-	for _, stack := range u.policy.Stacks {
-		if !stack.Enabled {
-			continue
-		}
-		if reason, down := unavailable[stack.Backend]; down {
-			report.Results = append(report.Results, Result{
-				Key:    state.Key{Backend: stack.Backend, Stack: stack.Name},
-				Code:   domain.ResultEngineUnavailable,
-				Detail: reason,
-			})
-			continue
-		}
-		transaction := &transaction{updater: u, stack: stack, runID: report.RunID, mode: mode}
-		results, applied := transaction.run(u.policy.MaxUpdatesPerRun - report.UpdatesApplied)
-		report.Results = append(report.Results, results...)
-		report.UpdatesApplied += applied
+	report.Results, report.UpdatesApplied, err = u.runFinite(report, unavailable)
+	if err != nil {
+		return Report{}, u.failed(report, err)
 	}
 
 	report.Finished = u.clock.Now()
@@ -278,12 +284,7 @@ func (u *Updater) Run(mode domain.Mode) (Report, error) {
 		return Report{}, u.failed(report, err)
 	}
 	report.BreakerOpen = final.BreakerOpen
-	u.emit(event.RunFinished, event.Subject{RunID: report.RunID}, event.Data{
-		Mode:           string(mode),
-		UpdatesApplied: report.UpdatesApplied,
-		BreakerOpen:    report.BreakerOpen,
-		ResultCount:    len(report.Results),
-	})
+	u.finishReport(report, nil)
 	return report, nil
 }
 
@@ -364,7 +365,8 @@ func (u *Updater) Propose(stackName string) (Result, string, error) {
 	if !acquired {
 		return Result{Key: key, Code: domain.ResultBusy, Detail: "another run holds the lease"}, runID, nil
 	}
-	defer func() { _ = u.state.ReleaseLease(token) }()
+	u, release := u.owned(context.Background(), token)
+	defer release()
 
 	status, err := u.state.Status(started)
 	if err != nil {

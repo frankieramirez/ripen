@@ -16,6 +16,7 @@ import (
 
 // Checker runs HTTP health checks.
 type Checker struct {
+	ctx    context.Context
 	client *http.Client
 }
 
@@ -29,7 +30,7 @@ func WithHTTPClient(client *http.Client) Option {
 
 // New builds a Checker.
 func New(options ...Option) *Checker {
-	checker := &Checker{client: &http.Client{}}
+	checker := &Checker{ctx: context.Background(), client: &http.Client{}}
 	for _, option := range options {
 		option(checker)
 	}
@@ -53,7 +54,7 @@ func (c *Checker) Check(policy config.HealthPolicy) (bool, error) {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(c.ctx, timeout)
 	defer cancel()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
@@ -62,6 +63,9 @@ func (c *Checker) Check(policy config.HealthPolicy) (bool, error) {
 	}
 	response, err := c.client.Do(request)
 	if err != nil {
+		if c.ctx.Err() != nil {
+			return false, c.ctx.Err()
+		}
 		return false, nil
 	}
 	defer func() { _ = response.Body.Close() }()
@@ -71,4 +75,11 @@ func (c *Checker) Check(policy config.HealthPolicy) (bool, error) {
 		accepted = []int{http.StatusOK}
 	}
 	return slices.Contains(accepted, response.StatusCode), nil
+}
+
+// WithContext returns a copy bound to the caller lifetime.
+func (c *Checker) WithContext(ctx context.Context) *Checker {
+	clone := *c
+	clone.ctx = ctx
+	return &clone
 }

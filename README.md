@@ -94,21 +94,30 @@ format and exit codes.
 ripen daemon --config policy.yaml
 ```
 
-The daemon runs every `check_interval_seconds` and writes its Event stream to
-stderr. Keep `mode: monitor` while reviewing observations; see
-[Configuration](docs/configuration.md) before enabling Apply.
+The daemon observes at startup and on fixed
+`check_interval_seconds` ticks, checking up to two stacks concurrently. Set
+`observation_concurrency` from 1 through 8 to change that limit. While one stack
+deploys, verifies, or rolls back, unrelated stacks continue receiving checks.
+The active stack waits until a later scheduled check. Missed checks coalesce
+instead of accumulating a backlog.
 
-**Check progress in the logs.** `status` reads stored state, so a successful
-response does not prove that the daemon is making progress. Look for
-`run.finished` Events. Notifications are off unless configured; use
-`ripen notify test --config policy.yaml` to verify delivery after following the
-[Notifications guide](docs/notifications.md).
+Deployments remain sequential, with at most one update per Apply cycle and a
+full interval after Apply completes before another cycle may update. An open
+Circuit breaker permits observation but blocks updates and Proposals until a
+person clears it. The daemon writes its Event stream to stderr.
 
-**An open Circuit breaker blocks updates and Proposals.** When Apply reports an
-open breaker, the daemon runs Monitor in the same cycle to keep Candidate
-observations current. Blocked Apply runs emit `run.finished` with
-`breaker_open: true` and the recorded reason. A person must clear the breaker
-before updates or Proposals can resume.
+`status` reads stored state; a successful response does not prove that the daemon
+is making progress. Its scheduler, stack checks, and service evaluations show
+stored progress separately from Candidate age; an unfinished Transaction shows
+its phase and whether its ownership has expired. Check the `run.finished` Events
+in the container log. The
+Notifier is off unless configured; use `ripen notify test` to verify delivery.
+
+If status shows an interrupted Transaction, ordinary breaker clearing refuses
+to resume deployments. Once you have confirmed the earlier backend request
+finished and restored a healthy Baseline, use `clear-breaker --reconcile
+--reason "..."`. See [recovery requirements](docs/configuration.md#run-settings),
+including the restriction on interrupted Proposal requests.
 
 ### Run in a container
 

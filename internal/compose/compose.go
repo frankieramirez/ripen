@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -55,7 +56,20 @@ type Adapter struct {
 	runner        Runner
 	timeout       time.Duration
 	deployTimeout time.Duration
-	probed        bool
+	probeState    *probeState
+	ctx           context.Context
+}
+
+type probeState struct {
+	sync.Mutex
+	succeeded bool
+}
+
+// WithContext returns a backend bound to the caller lifetime.
+func (a *Adapter) WithContext(ctx context.Context) backend.Port {
+	clone := *a
+	clone.ctx = ctx
+	return &clone
 }
 
 // Option adjusts an Adapter.
@@ -87,6 +101,8 @@ func NewPodman(settings config.EngineSettings, options ...Option) *Adapter {
 func newAdapter(name domain.Backend, settings config.EngineSettings,
 	defaultBinary, socketVar string, options []Option) *Adapter {
 	adapter := &Adapter{
+		ctx:           context.Background(),
+		probeState:    &probeState{},
 		backendName:   name,
 		binary:        settings.Binary,
 		socketVar:     socketVar,
@@ -245,7 +261,12 @@ type container struct {
 }
 
 func (a *Adapter) probe() error {
-	if a.probed {
+	a.probeState.Lock()
+	defer a.probeState.Unlock()
+	if err := a.ctx.Err(); err != nil {
+		return err
+	}
+	if a.probeState.succeeded {
 		return nil
 	}
 	output, err := a.run(a.timeout, "compose", "version", "--format", "json")
@@ -257,7 +278,7 @@ func (a *Adapter) probe() error {
 		return backend.EngineUnavailable(string(a.backendName),
 			fmt.Errorf("%s compose does not support --format json", a.binary))
 	}
-	a.probed = true
+	a.probeState.succeeded = true
 	return nil
 }
 
@@ -383,7 +404,7 @@ func (a *Adapter) projectArgs(handle Handle, verb ...string) []string {
 }
 
 func (a *Adapter) run(timeout time.Duration, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(a.ctx, timeout)
 	defer cancel()
 	return a.runner.Run(ctx, a.binary, args, a.environment())
 }

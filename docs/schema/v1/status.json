@@ -9,6 +9,52 @@
     "data": {
       "additionalProperties": false,
       "properties": {
+        "active_transaction": {
+          "additionalProperties": false,
+          "properties": {
+            "backend": {
+              "type": "string"
+            },
+            "interrupted": {
+              "type": "boolean"
+            },
+            "phase": {
+              "type": "string"
+            },
+            "phase_started_at": {
+              "type": "string"
+            },
+            "run_id": {
+              "type": "string"
+            },
+            "service": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "stack": {
+              "type": "string"
+            },
+            "started_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "backend",
+            "interrupted",
+            "phase",
+            "phase_started_at",
+            "run_id",
+            "service",
+            "stack",
+            "started_at"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
         "breaker": {
           "additionalProperties": false,
           "properties": {
@@ -27,6 +73,54 @@
             "reason"
           ],
           "type": "object"
+        },
+        "checks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "backend": {
+                "type": "string"
+              },
+              "completed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "service": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stack": {
+                "type": "string"
+              },
+              "started_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "backend",
+              "completed_at",
+              "outcome",
+              "run_id",
+              "service",
+              "stack",
+              "started_at"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "effective_policy": {
           "additionalProperties": false,
@@ -58,6 +152,9 @@
             "notifier_configured": {
               "type": "boolean"
             },
+            "observation_concurrency": {
+              "type": "integer"
+            },
             "proposals_configured": {
               "type": "boolean"
             },
@@ -79,12 +176,58 @@
             "max_updates_per_run",
             "mode",
             "notifier_configured",
+            "observation_concurrency",
             "proposals_configured",
             "stack_count",
             "state_file",
             "verification_timeout_seconds"
           ],
           "type": "object"
+        },
+        "evaluations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "backend": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "evaluated_at": {
+                "type": "string"
+              },
+              "result": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "service": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stack": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "backend",
+              "detail",
+              "evaluated_at",
+              "result",
+              "run_id",
+              "service",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "lease": {
           "additionalProperties": false,
@@ -118,6 +261,32 @@
             "consecutive_failures",
             "dropped_since_start",
             "last_success_at"
+          ],
+          "type": "object"
+        },
+        "scheduler": {
+          "additionalProperties": false,
+          "properties": {
+            "last_completed_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "next_tick_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "stale": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "last_completed_at",
+            "next_tick_at",
+            "stale"
           ],
           "type": "object"
         },
@@ -291,10 +460,14 @@
         }
       },
       "required": [
+        "active_transaction",
         "breaker",
+        "checks",
         "effective_policy",
+        "evaluations",
         "lease",
         "notifier",
+        "scheduler",
         "services",
         "versions"
       ],

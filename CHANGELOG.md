@@ -10,6 +10,28 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-08
+
+### Added
+
+- Concurrent stack observation with `observation_concurrency` (default `2`, range
+  `1` through `8`). Observation continues on fixed ticks while another stack
+  deploys, verifies, or rolls back. Deployments remain sequential with the
+  existing cooldown after each Apply cycle.
+- Status includes stack check timestamps, per-service evaluation outcomes, and
+  scheduler progress. Unfinished Transactions expose their phase and expired
+  ownership; `--pretty` shows elapsed phase time for current ownership.
+- `transaction.progress` logs persisted deployment phases. Terminal run Events
+  include skipped stack counts and the open breaker reason.
+- State schema v2 records coordination and progress. Upgrade preserves existing
+  state. Back up before upgrading; older binaries must not share the migrated
+  database. Interrupted Transactions require reconciliation before deployment
+  resumes.
+- `clear-breaker --reconcile --reason` verifies a healthy accepted Baseline and
+  clears an interrupted deployment after the operator confirms the earlier
+  backend request has finished. Interrupted Proposal requests remain blocked
+  because container health cannot prove whether a Proposal was created.
+
 ## [1.1.0] - 2026-09-08
 
 ### Added
@@ -83,6 +105,7 @@ Each release's section here is what GitHub shows as the release notes.
   user-owned private repositories, so a release is now refused before it
   publishes anything rather than after.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/frankieramirez/ripen/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/frankieramirez/ripen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/frankieramirez/ripen/releases/tag/v1.0.0

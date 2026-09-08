@@ -83,6 +83,52 @@ func TestLoadDefaultsToSingleUpdateMonitorMode(t *testing.T) {
 	}
 }
 
+func TestObservationConcurrencyDefaultsToTwo(t *testing.T) {
+	policy := mustLoad(t, valid)
+
+	if policy.ObservationConcurrency != 2 {
+		t.Fatalf("ObservationConcurrency = %d, want 2", policy.ObservationConcurrency)
+	}
+}
+
+func TestObservationConcurrencyAcceptsOneThroughEight(t *testing.T) {
+	for _, concurrency := range []struct {
+		value string
+		want  int
+	}{{"1", 1}, {"2", 2}, {"8", 8}} {
+		t.Run(concurrency.value, func(t *testing.T) {
+			value := valid + "\nobservation_concurrency: " + concurrency.value + "\n"
+
+			policy := mustLoad(t, value)
+
+			if policy.ObservationConcurrency != concurrency.want {
+				t.Fatalf("ObservationConcurrency = %d, want %d", policy.ObservationConcurrency, concurrency.want)
+			}
+		})
+	}
+}
+
+func TestObservationConcurrencyRefusesInvalidLimits(t *testing.T) {
+	for _, invalid := range []struct {
+		value string
+		error string
+	}{
+		{"0", "must be greater than zero"},
+		{"-1", "must be greater than zero"},
+		{"9", "must be between 1 and 8"},
+		{"1.5", "must be an integer"},
+		{"\"2\"", "must be an integer"},
+		{"true", "must be an integer"},
+		{"null", "must be an integer"},
+	} {
+		t.Run(invalid.value, func(t *testing.T) {
+			value := valid + "\nobservation_concurrency: " + invalid.value + "\n"
+
+			assertLoadError(t, value, invalid.error)
+		})
+	}
+}
+
 func TestLoadSupportsGitNativeStackSource(t *testing.T) {
 	value := strings.Replace(valid,
 		"portainer:\n",

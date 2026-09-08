@@ -1,6 +1,8 @@
 package health
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,5 +99,22 @@ func TestANonHTTPTargetIsAnError(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "http or https") {
 		t.Errorf("error = %v, want the scheme error", err)
+	}
+}
+
+func TestCallerCancellationDoesNotCancelTheOriginalChecker(t *testing.T) {
+	checker := New()
+	policy := config.HealthPolicy{Target: serving(t, http.StatusOK)}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	healthy, err := checker.WithContext(ctx).Check(policy)
+
+	if healthy || !errors.Is(err, context.Canceled) {
+		t.Fatalf("healthy=%v err=%v", healthy, err)
+	}
+	healthy, err = checker.Check(policy)
+	if !healthy || err != nil {
+		t.Fatalf("original healthy=%v err=%v", healthy, err)
 	}
 }

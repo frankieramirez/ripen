@@ -96,7 +96,7 @@ A Go rewrite of the existing Python updater, keeping its fail-closed Transaction
 - Server-rendered Go `html/template`, vanilla JS, polling. No Node toolchain; `go build` stays the only build.
 - The HTTP API reuses the Response envelope internally but is undocumented and unversioned — the Agent surface remains CLI + MCP only.
 
-## State schema v1
+## State schema v1 and v2
 
 New SQLite schema, from [Plan the rework migration](https://github.com/frankieramirez/ripen/issues/16) folding in [#17](https://github.com/frankieramirez/ripen/issues/17)/[#18](https://github.com/frankieramirez/ripen/issues/18):
 
@@ -107,6 +107,12 @@ New SQLite schema, from [Plan the rework migration](https://github.com/frankiera
 - Notification-suppression table keyed `(event, stack, service)` — new.
 - The misnamed `stack` columns (actually `state_key`) split into `backend`/`stack`/`service` in `attempts`, `candidates`, `accepted_digests`.
 - **No migration from the Python schema.** This is schema v1; existing deployments start cold and re-baseline on first Monitor run. No config-migration tooling either — `policy.yaml` is hand-rewritten.
+
+Go state schema v2 adds durable Transaction ownership, stack checks, service
+evaluations, and scheduler progress. Opening a v1 Go database migrates it in
+place and preserves existing state. Back up before upgrading; older binaries
+must not open or share the migrated database. Downgrading requires restoring
+the pre-upgrade backup. Response and Event schema versions are independent.
 
 ## Migration plan
 
@@ -227,9 +233,27 @@ Extracted from the Python test suite (2026-08-18). **This list gated the Python-
 - [x] When health also fails after rollback, the result is ROLLBACK_FAILED and the breaker blocks any future apply (next run reports BREAKER_OPEN) (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply) — Go: `updater.TestAFailedRollbackIsReportedAndBlocksEveryFutureApply`
 - [x] An exception thrown by the health adapter is treated as unhealthy (times out into rollback) rather than crashing the run (test_updater.py::test_health_adapter_exception_times_out_into_rollback) — Go: `updater.TestAHealthCheckThatErrorsCountsAsUnhealthy`
 
+### Concurrent observation and ownership
+
+- [x] Long deployments permit repeated unrelated observation while excluding the whole active stack. Go: `updater.TestLongDeploymentAllowsRepeatedUnrelatedObservationsAndExcludesItsWholeStack`.
+- [x] Observation workers stay bounded and missed ticks coalesce. Go: `updater.TestObservationWorkersAreBoundedAndMissedTicksCoalesce`.
+- [x] Deployment admission preserves policy order and waits for the cooldown. Go: `updater.TestDeploymentAdmissionPreservesPolicyOrderAndWaitsForCooldown`.
+- [x] A breaker opened during observation prevents subsequent deployment admission. Go: `updater.TestBreakerOpeningDuringObservationPreventsSubsequentDeployment`.
+- [x] Cancellation drains observation workers; lease loss cancels observation and stops queued admissions. Go: `updater.TestSchedulerCancellationDrainsBlockedObservationWorkers`, `updater.TestLeaseLossCancelsObservationAndStopsQueuedAdmissions`.
+- [x] Finite checks refresh drift and ineligibility independently of Candidate history. Go: `updater.TestFiniteChecksRefreshDriftAndIneligibilityWithoutChangingCandidateHistory`.
+- [x] Explicit reconciliation records a healthy accepted Baseline and clears interrupted ownership; unproven digests, unhealthy stacks, active leases, and uncertain Proposals refuse recovery. Go: `updater.TestExplicitReconciliationRecordsHealthyBaselineAndClearsInterruptedMarker`, `updater.TestExplicitReconciliationRefusesAnUnprovenRunningDigest`, `updater.TestExplicitReconciliationRefusesAnUnhealthyStack`, `updater.TestExplicitReconciliationRefusesAnActiveLease`, `updater.TestExplicitReconciliationCannotClearAnUncertainProposal`.
+
+- [x] Observation concurrency defaults to two and accepts only integers from one through eight. Go: `config.TestObservationConcurrencyDefaultsToTwo`, `config.TestObservationConcurrencyAcceptsOneThroughEight`, `config.TestObservationConcurrencyRefusesInvalidLimits`.
+- [x] Renewal cannot revive expired or superseded ownership; reconciliation writes refuse a lost lease. Go: `state.TestLeaseRenewalCannotReviveExpiredOrSupersededOwnership`, `state.TestGuardedReconciliationWritesRefuseLostOwnership`.
+- [x] An interrupted Transaction survives lease expiry and prevents competing deployment. Go: `state.TestInterruptedTransactionSurvivesExpiredLeaseAndBlocksNewDeployment`.
+- [x] Proposal reconciliation cannot restore a Proposal cleared by an operator. Go: `state.TestProposalReconciliationCannotUndoConcurrentOperatorClear`.
+- [x] State migration preserves v1 data and refuses newer database versions. Go: `state.TestMigrationPreservesVersionOneStateAndRefusesNewerDatabases`.
+- [x] Check outcomes persist independently of Candidate history, and status distinguishes interrupted work. Go: `state.TestCheckProgressPersistsRefusalsWithoutChangingCandidateHistory`, `cli.TestStatusSeparatesEvaluationTimeFromCandidateHistoryAndMarksInterruptedWork`.
+- [x] Pretty status derives elapsed phase time from the response timestamp and suppresses live elapsed time for interrupted ownership. Go: `cli.TestPrettyProgressDerivesElapsedFromTheResponseTime`.
+
 ### Circuit breaker
 
-- [x] The daemon follows an Apply result with an open breaker with Monitor in the same cycle, keeps observing on later intervals, and resumes Apply after a human clears the breaker (#145). — Go: `daemon.TestAnOpenBreakerKeepsScheduledObservationRunningAndClearingItResumesApply`, `updater.TestARollbackFinishesTheRunAndMonitorRefreshesUnrelatedCandidates`
+- [x] The daemon keeps observing on scheduled intervals with an open breaker and resumes Apply after a human clears it. A finite `--once` follows a blocked Apply with Monitor (#145). — Go: `updater.TestTheCoordinatorKeepsObservingWithAnOpenBreakerAndResumesApplyAfterClearing`, `daemon.TestOnceRoutesApplyAndBreakerObservationThroughTheCallerContext`, `updater.TestARollbackFinishesTheRunAndMonitorRefreshesUnrelatedCandidates`
 - [x] An Apply run blocked by the breaker emits `run.finished` with the breaker reason (#145). — Go: `updater.TestABreakerBlockedRunEmitsItsCompletionAndReason`
 
 - [x] Failed rollback verification opens the breaker, and an open breaker stops future apply runs with result BREAKER_OPEN (test_updater.py::test_failed_rollback_health_opens_breaker_and_stops_future_apply) — Go: `updater.TestAFailedRollbackIsReportedAndBlocksEveryFutureApply`
@@ -303,3 +327,28 @@ Collected from the design tickets; each gets a dedicated test in the Go suite:
 8. `ripen schema` output matches `docs/schema/v1/` (CI assertion, [#17](https://github.com/frankieramirez/ripen/issues/17)). — Go: `response.TestPublishedSchemasMatchTheGeneratedOnes`
 9. No Event payload field name matches the secret-marker list ([#18](https://github.com/frankieramirez/ripen/issues/18)). — Go: `event.TestNoEventPayloadFieldCanCarryASecret`
 10. A configured compose socket resolving to the privileged docker socket refuses at config load ([#21](https://github.com/frankieramirez/ripen/issues/21)). — Go: `config.TestPrivilegedDockerSocketRefusesAtConfigLoad`, `config.TestSymlinkToPrivilegedDockerSocketRefusesAtConfigLoad`
+
+## Observation benchmark
+
+Measured on 2026-09-08 with darwin/arm64, Apple M2 Pro, using the scheduler's
+controlled backend with a 1 ms delay per observation. Each sample runs three
+passes and includes scheduler startup, SQLite progress writes, and shutdown.
+The fixture excludes live network and registry latency. Reproduce with:
+
+```sh
+go test ./internal/updater -run '^$' -bench '^BenchmarkObservationPass$' -benchtime=3x -count=1
+```
+
+| Stacks | Workers | Milliseconds/pass | Observe requests/pass | Peak concurrent reads |
+| --- | --- | --- | --- | --- |
+| 4 | 1 | 7.41 | 4 | 1 |
+| 4 | 2 | 4.77 | 4 | 2 |
+| 16 | 1 | 27.12 | 16 | 1 |
+| 16 | 2 | 17.62 | 16 | 2 |
+| 64 | 1 | 118.18 | 64 | 1 |
+| 64 | 2 | 76.07 | 64 | 2 |
+
+Two workers shortened these measured passes by about 35% with unchanged
+observation request counts. These small synthetic samples establish bounded
+parallelism and give a local timing comparison; deployment duration and live
+backend performance require measurements against those systems.

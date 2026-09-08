@@ -7,6 +7,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/frankieramirez/ripen/internal/config"
@@ -117,4 +118,17 @@ func (e *EngineUnavailableError) Unwrap() error { return e.Err }
 // EngineUnavailable builds an EngineUnavailableError.
 func EngineUnavailable(engine string, err error) error {
 	return &EngineUnavailableError{Engine: engine, Err: err}
+}
+
+// ContextPort binds backend operations to a caller lifetime.
+type ContextPort interface {
+	WithContext(context.Context) Port
+}
+
+// WithContext binds supported adapters to ctx without mutating the original.
+func WithContext(ctx context.Context, port Port) Port {
+	if contextual, ok := port.(ContextPort); ok {
+		return contextual.WithContext(ctx)
+	}
+	return port
 }
