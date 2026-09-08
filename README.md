@@ -7,53 +7,48 @@
 [![License](https://img.shields.io/github/license/frankieramirez/ripen)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/frankieramirez/ripen/badge)](https://securityscorecards.dev/viewer/?uri=github.com/frankieramirez/ripen)
 
-**Fail-closed image updates for Portainer and Compose. A digest ripens. You apply.**
+**Fail-closed container image updates for Portainer, Docker Compose, and Podman Compose.**
 
-Ripen watches the registries behind the images you already run. When a new digest
-appears it waits, watches it again, and tells you. If you have said so explicitly,
-it will update one service — pinned to an exact digest, verified afterwards, and
-rolled back the moment health fails. Then it stops and waits for you.
+Ripen watches image registries and waits for a new digest to mature before it
+can update a service. You choose which stacks may update automatically. Ripen
+verifies service health after each update and rolls back if verification fails.
+Git-backed stacks receive a pull request for human review.
 
-It never mounts the Docker socket.
-
-```console
-$ ripen status
-{"schema_version":1,"command":"status","occurred_at":"2026-08-19T09:14:22Z","ok":true,"data":{
-  "breaker":{"open":false,"reason":null},
-  "services":[{"backend":"docker-compose","stack":"media","service":null,
-    "baseline":"sha256:6f8c…","candidate":{"digest":"sha256:19ab…","observations":2,"mature":true}}]}}
-```
+[Quick start](#quick-start) · [Run continuously](#run-continuously) ·
+[How it works](#how-a-transaction-works) · [Safety limits](#safety-limits) ·
+[Documentation](#documentation)
 
 > [!WARNING]
-> Ripen recreates containers. Start in monitor mode, read what it records, and
+> Ripen recreates containers. Start in monitor mode, review what it records, and
 > only then decide whether any stack should carry `auto_apply: true`.
 
 ## Quick start
 
-Ripen needs a policy file and somewhere to keep its state. Nothing else. Every
-field of the policy is documented in
-[docs/configuration.md](docs/configuration.md).
+### 1. Install Ripen
+
+Download a binary from [Releases](https://github.com/frankieramirez/ripen/releases)
+(see [release verification](#security)), or install with Go:
 
 ```bash
-# 1. Get the binary
 go install github.com/frankieramirez/ripen/cmd/ripen@latest
-# or: docker pull ghcr.io/frankieramirez/ripen
-# or: nix run github:frankieramirez/ripen -- version
-# or: grab a signed archive from the Releases page
-
-# 2. Describe exactly what Ripen may look at
-cp config.example.yaml policy.yaml
-$EDITOR policy.yaml
-
-# 3. Watch, and only watch
-ripen run --mode monitor --config policy.yaml
 ```
 
-A minimal policy for one Compose stack:
+With Nix, run `nix run github:frankieramirez/ripen -- version`.
+For the container image, see [Run in a container](#run-in-a-container).
+
+### 2. Create a policy
+
+For a local Compose stack, run Ripen where the Docker or Podman Compose CLI can
+reach your engine. The Compose file and its directory must be writable.
+Read the [Compose setup guide](docs/compose.md) for engine requirements and
+rootless connections. Ripen refuses the privileged Docker socket.
+
+Save this as `policy.yaml`, adapting the stack path, service name, and health URL
+to your deployment:
 
 ```yaml
 mode: monitor
-state_file: /var/lib/ripen/ripen.db
+state_file: ./ripen.db
 
 stacks:
   media:
@@ -65,7 +60,65 @@ stacks:
       target: http://127.0.0.1:8096/health
 ```
 
-Or as a container, which is how most people run it:
+For Portainer, follow the [Portainer setup guide](docs/portainer.md) to configure
+its API credentials and TLS trust. The [example policy](config.example.yaml)
+shows both backends; [Configuration](docs/configuration.md) documents every field.
+
+### 3. Run once in monitor mode
+
+```bash
+ripen run --mode monitor --config policy.yaml
+```
+
+The first run records the running digest as the **Baseline**. Later runs report a
+**Candidate** when the registry moves. A Candidate matures after
+`candidate_min_age_seconds` (one day by default) and a second observation.
+Monitor mode leaves your services unchanged.
+
+### 4. Inspect the results
+
+| Command | What it shows |
+| --- | --- |
+| `ripen status --config policy.yaml --pretty` | Configured services and their current state |
+| `ripen candidates --config policy.yaml --pretty` | Candidates and whether they have matured |
+| `ripen explain media --config policy.yaml --pretty` | Why Ripen would or would not act on the stack |
+| `ripen audit --config policy.yaml --pretty` | Recorded actions |
+
+Omit `--pretty` for the JSON Response envelope used by scripts and agents. Ripen
+never infers this flag from a TTY. See [Agents](docs/agents.md) for the response
+format and exit codes.
+
+## Run continuously
+
+```bash
+ripen daemon --config policy.yaml
+```
+
+The daemon runs every `check_interval_seconds` and writes its Event stream to
+stderr. Keep `mode: monitor` while reviewing observations; see
+[Configuration](docs/configuration.md) before enabling Apply.
+
+**Check progress in the logs.** `status` reads stored state, so a successful
+response does not prove that the daemon is making progress. Look for
+`run.finished` Events. Notifications are off unless configured; use
+`ripen notify test --config policy.yaml` to verify delivery after following the
+[Notifications guide](docs/notifications.md).
+
+**An open Circuit breaker blocks updates and Proposals.** When Apply reports an
+open breaker, the daemon runs Monitor in the same cycle to keep Candidate
+observations current. Blocked Apply runs emit `run.finished` with
+`breaker_open: true` and the recorded reason. A person must clear the breaker
+before updates or Proposals can resume.
+
+### Run in a container
+
+The published image includes Ripen and CA certificates. Use it with a Portainer
+policy; local Compose backends also need an engine CLI, which this image does
+not include.
+
+Set `state_file: /data/ripen.db` in your policy. Create a writable `./data`
+directory for the container's UID/GID `65532:65532`, and mount the credential
+file at the path configured by `portainer.api_key_file`:
 
 ```yaml
 services:
@@ -78,65 +131,41 @@ services:
     volumes:
       - ./policy.yaml:/config/policy.yaml:ro
       - ./data:/data
-      - /srv/media/compose.yaml:/srv/media/compose.yaml   # only for compose backends
+      - ./portainer-api-key:/run/secrets/portainer-api-key:ro
 ```
 
-No socket mount. Ever.
-
-The first run records what is running now as the **Baseline** — nothing else.
-Later runs report a **Candidate** when the registry moves. After
-`candidate_min_age_seconds` (a day, by default) and a second sighting, that
-Candidate is mature and apply mode may act on it.
-
-```bash
-ripen status --pretty       # every configured service and where it stands
-ripen candidates --pretty   # what is waiting, and whether it has matured
-ripen explain media --pretty  # why the next run would, or would not, act
-ripen audit --pretty        # what Ripen has actually done
-```
-
-Without `--pretty`, each of those prints the JSON Response envelope. The flag
-is never inferred from a TTY.
-
-Run it on a schedule with `ripen daemon`, which does the same thing every
-`check_interval_seconds` and writes its Event stream to stderr.
-When Apply reports an open Circuit breaker, the daemon runs Monitor in the same
-cycle so Candidate observations stay current. Blocked Apply runs emit
-`run.finished` with `breaker_open: true` and the recorded reason. A person must
-still clear the breaker before updates or Proposals can resume.
-
-`status` reads stored state; a successful response does not prove that the daemon
-is making progress. Check the `run.finished` Events in the container log. The
-Notifier is off unless configured; use `ripen notify test` to verify delivery.
+Ensure the container user can read the policy and credential file. If you use a
+custom CA, mount that file read-only at `portainer.tls_ca_file` too. Health check
+URLs must be reachable from inside the container.
 
 ## How a Transaction works
 
 1. **Observe.** Read what is deployed and what is running, and ask the registry
    what the tag points at now.
-2. **Baseline.** The first time, record the running digest — and only if it can
-   be proven. If an update is already pending, Ripen refuses to guess.
+2. **Baseline.** The first time, record the running digest only if it can be proven. If an update is already pending, Ripen refuses to guess.
 3. **Ripen.** A new digest becomes a Candidate. It must be seen twice and be
    older than the maturity window before it is eligible for anything.
 4. **Apply**, in apply mode, on a stack that opted in: check every configured
    service's health first, pin exactly one image to `tag@sha256:…`, deploy, and
    verify every service again.
 5. **Roll back** if verification fails: restore the Baseline digest and open the
-   Circuit breaker. Ripen takes no further outbound action until a person clears
-   it with a reason.
+   Circuit breaker. Further updates and Proposals stay blocked until a person clears
+   it with a reason. Monitor and reads continue.
 
 Git-backed stacks replace step 4 with a Proposal: one deterministic pull request
 pinning the digest, which Ripen opens and never merges.
 
-## What it will not do
+## Safety limits
 
-- **No privileged Docker socket.** Permanently out of scope, not a roadmap item.
-- **No unattended sprees.** One service per run, and only where you opted in.
-- **No self-merging.** A Proposal is a pull request for a human to review.
-- **No insecure TLS.** A CA file or an exact fingerprint. There is no bypass.
-- **No agent path to apply.** The MCP surface cannot apply an update or clear
-  the breaker; those tools do not exist.
+| Limit | Behavior |
+| --- | --- |
+| Privileged Docker socket | Ripen refuses it at configuration load. |
+| Update scope | One service per run, only where you opted in. |
+| Proposals | Ripen opens a pull request and leaves merging to a person. |
+| Portainer TLS | An explicit CA file or exact certificate fingerprint is required. |
+| Agent permissions | MCP has no tools to apply updates or clear the Circuit breaker. |
 
-[`ROADMAP.md`](ROADMAP.md) has the full list of non-goals and what may come later.
+[Roadmap](ROADMAP.md) covers non-goals and possible future work.
 
 ## Documentation
 
@@ -170,7 +199,7 @@ The checksums file is attested the same way.
 
 ## Contributing
 
-Issue first, then a pull request — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Open an issue before a pull request. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 This is a project maintained for its author's own use; contributions are
 welcome and reviewed on a best-effort basis.
 
