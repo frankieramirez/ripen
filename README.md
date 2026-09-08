@@ -100,6 +100,14 @@ is never inferred from a TTY.
 
 Run it on a schedule with `ripen daemon`, which does the same thing every
 `check_interval_seconds` and writes its Event stream to stderr.
+When Apply reports an open Circuit breaker, the daemon runs Monitor in the same
+cycle so Candidate observations stay current. Blocked Apply runs emit
+`run.finished` with `breaker_open: true` and the recorded reason. A person must
+still clear the breaker before updates or Proposals can resume.
+
+`status` reads stored state; a successful response does not prove that the daemon
+is making progress. Check the `run.finished` Events in the container log. The
+Notifier is off unless configured; use `ripen notify test` to verify delivery.
 
 ## How a Transaction works
 
