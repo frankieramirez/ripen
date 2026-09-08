@@ -178,6 +178,9 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 		}, false
 	}
 	t.recovered(observed, accepted, now)
+	if err := t.updater.checkOwnership(); err != nil {
+		return t.failure(observed.key, err), false
+	}
 
 	if pending != nil && pending.Digest != observed.remoteDigest {
 		return Result{
@@ -282,7 +285,11 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 
 func (t *transaction) acceptGitDeployment(observed observation, accepted string, pending state.PendingProposal,
 	now time.Time) (Result, bool) {
-	if !t.healthyOnce(observed.stack) {
+	healthy := t.healthyOnce(observed.stack)
+	if err := t.updater.checkOwnership(); err != nil {
+		return t.failure(observed.key, err), false
+	}
+	if !healthy {
 		reason := fmt.Sprintf("%s: the deployed proposal failed functional health verification",
 			label(observed.key))
 		if err := t.updater.state.OpenBreaker(reason, now); err != nil {
@@ -344,7 +351,7 @@ func (t *transaction) recovered(observed observation, accepted string, now time.
 	if observed.runningDigest != "" && observed.runningDigest != accepted {
 		return
 	}
-	if !t.healthyOnce(observed.stack) {
+	if !t.healthyOnce(observed.stack) || t.updater.checkOwnership() != nil {
 		return
 	}
 	detail := "the service is running its accepted baseline again"

@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,7 +26,6 @@ import (
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/notifier"
 	"github.com/frankieramirez/ripen/internal/response"
-	"github.com/frankieramirez/ripen/internal/state"
 	"github.com/frankieramirez/ripen/internal/updater"
 	"github.com/frankieramirez/ripen/internal/version"
 )
@@ -150,14 +150,14 @@ func registerReads(server *Server, loaded *app.App) {
 			"Maps to the `ripen audit` command.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, "audit", func(input auditInput) (any, error) {
-		return loaded.Audit(state.AuditFilter{
-			Limit:   input.Limit,
-			Cursor:  cursorOf(input.Cursor),
+		return loaded.Audit(app.AuditRequest{
+			Limit:   strconv.Itoa(input.Limit),
+			Cursor:  input.Cursor,
 			RunID:   input.Run,
-			Backend: domain.Backend(input.Backend),
+			Backend: input.Backend,
 			Stack:   input.Stack,
 			Service: input.Service,
-			Result:  domain.ResultCode(input.Result),
+			Result:  input.Result,
 		})
 	})
 
@@ -243,6 +243,8 @@ func answer[In any](command string, handle func(In) (any, error)) mcp.ToolHandle
 func errorCode(err error) response.Code {
 	var unavailable *backend.EngineUnavailableError
 	switch {
+	case errors.Is(err, app.ErrInvalidAuditRequest):
+		return response.CodeUsage
 	case errors.Is(err, updater.ErrUnknownStack):
 		return response.CodeNotFound
 	case errors.Is(err, updater.ErrNotProposable):
@@ -252,10 +254,4 @@ func errorCode(err error) response.Code {
 	default:
 		return response.CodePreconditionFailed
 	}
-}
-
-func cursorOf(value string) int64 {
-	var cursor int64
-	_, _ = fmt.Sscanf(value, "%d", &cursor)
-	return cursor
 }

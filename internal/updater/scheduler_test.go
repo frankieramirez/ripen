@@ -510,3 +510,46 @@ func TestLeaseLossCancelsObservationAndStopsQueuedAdmissions(t *testing.T) {
 		t.Fatalf("old owner's cleanup removed replacement lease: %v", err)
 	}
 }
+
+func TestTheCoordinatorKeepsObservingWithAnOpenBreakerAndResumesApplyAfterClearing(t *testing.T) {
+	u, port, clock, sink := scheduleFixture(t, 2, 2)
+	if err := u.state.OpenBreaker("review required", clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ticks, cancel, done := startSchedule(t, u, domain.ModeApply)
+	waitScheduleEvent(t, sink, event.RunFinished, "monitor")
+
+	clock.Sleep(time.Minute)
+	ticks <- clock.Now()
+	waitScheduleEvent(t, sink, event.RunFinished, "monitor")
+
+	for _, name := range []string{"stack-00", "stack-01"} {
+		if got := port.count(name); got != 2 {
+			t.Fatalf("%s observations=%d want 2", name, got)
+		}
+	}
+	port.mu.Lock()
+	deployments := len(port.deployments)
+	port.mu.Unlock()
+	if deployments != 0 {
+		t.Fatalf("open breaker allowed %d deployments", deployments)
+	}
+	if err := u.state.ClearBreaker("review completed", clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	clock.Sleep(time.Minute)
+	ticks <- clock.Now()
+	started := waitScheduleEvent(t, sink, event.TransactionStarted, "")
+	waitScheduleEvent(t, sink, event.RunFinished, "apply")
+	finishSchedule(t, cancel, done)
+
+	if started.subject.Stack != "stack-00" {
+		t.Fatalf("resumed stack=%s want policy-first stack", started.subject.Stack)
+	}
+	port.mu.Lock()
+	defer port.mu.Unlock()
+	if len(port.deployments) != 1 {
+		t.Fatalf("resumed deployments=%v", port.deployments)
+	}
+}

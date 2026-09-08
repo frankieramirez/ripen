@@ -83,11 +83,11 @@ func TestLoadDefaultsToSingleUpdateMonitorMode(t *testing.T) {
 	}
 }
 
-func TestObservationConcurrencyDefaultsToOne(t *testing.T) {
+func TestObservationConcurrencyDefaultsToTwo(t *testing.T) {
 	policy := mustLoad(t, valid)
 
-	if policy.ObservationConcurrency != 1 {
-		t.Fatalf("ObservationConcurrency = %d, want 1", policy.ObservationConcurrency)
+	if policy.ObservationConcurrency != 2 {
+		t.Fatalf("ObservationConcurrency = %d, want 2", policy.ObservationConcurrency)
 	}
 }
 

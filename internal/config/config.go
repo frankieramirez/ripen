@@ -188,7 +188,7 @@ func Load(path string) (*Policy, error) {
 	if policy.CheckIntervalSeconds, err = positiveInt(root, "check_interval_seconds", 86400); err != nil {
 		return nil, err
 	}
-	if policy.ObservationConcurrency, err = positiveInt(root, "observation_concurrency", 1); err != nil {
+	if policy.ObservationConcurrency, err = positiveInt(root, "observation_concurrency", 2); err != nil {
 		return nil, err
 	}
 	if policy.ObservationConcurrency > 8 {

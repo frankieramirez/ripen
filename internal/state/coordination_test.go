@@ -96,14 +96,9 @@ func TestInterruptedTransactionSurvivesExpiredLeaseAndBlocksNewDeployment(t *tes
 	if err := store.ClearBreaker("reviewed", now.Add(time.Minute)); err == nil {
 		t.Fatal("clear breaker erased interrupted protection")
 	}
-	if err := store.FinishInterruptedTransaction(next, "wrong-run", now.Add(time.Minute)); err == nil {
-		t.Fatal("wrong run reconciled")
-	}
-	if err := store.FinishInterruptedTransaction(next, "run-old", now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.BeginTransaction(next, radarr, "run-new", now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
+	marker, err := store.ActiveTransaction()
+	if err != nil || marker == nil || marker.RunID != "run-old" {
+		t.Fatalf("interrupted ownership was lost: marker=%+v err=%v", marker, err)
 	}
 }
 

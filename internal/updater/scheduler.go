@@ -102,7 +102,7 @@ func (u *Updater) schedule(ctx context.Context, mode domain.Mode, interval time.
 				c.startPass(ctx, mode)
 			}
 		case completion := <-c.results:
-			c.complete(ctx, mode, completion)
+			c.complete(mode, completion)
 		}
 	}
 }
@@ -198,7 +198,7 @@ func (c *coordinator) dispatch() {
 	}
 }
 
-func (c *coordinator) complete(ctx context.Context, mode domain.Mode, done stackCompletion) {
+func (c *coordinator) complete(mode domain.Mode, done stackCompletion) {
 	index := done.work.index
 	c.busy[index] = false
 	c.running[index] = false
@@ -223,20 +223,16 @@ func (c *coordinator) complete(ctx context.Context, mode domain.Mode, done stack
 		if pass.remaining == 0 {
 			c.finishPass(pass)
 		}
-		if !c.stopping {
-			c.admit(mode)
-		}
-		if c.due[index] && !c.stopping && !c.busy[index] {
-			c.due[index] = false
-			c.busy[index] = true
-			next := &observationPass{report: Report{RunID: newRunID(), Mode: domain.ModeMonitor, Actor: c.root.actor, Started: c.root.clock.Now()}, remaining: 1}
-			c.queue = append(c.queue, stackWork{index: index, pass: next})
-		}
 	}
 	if !c.stopping {
 		c.admit(mode)
 	}
-	_ = ctx
+	if c.due[index] && !c.stopping && !c.busy[index] {
+		c.due[index] = false
+		c.busy[index] = true
+		next := &observationPass{report: Report{RunID: newRunID(), Mode: domain.ModeMonitor, Actor: c.root.actor, Started: c.root.clock.Now()}, remaining: 1}
+		c.queue = append(c.queue, stackWork{index: index, pass: next})
+	}
 }
 
 func (c *coordinator) finishPass(pass *observationPass) {
@@ -350,16 +346,28 @@ func (u *Updater) checkStack(index int, runID string, mode domain.Mode, refresh 
 }
 
 func (u *Updater) finishReport(report Report, failure error) {
-	if failure != nil {
-		_ = u.failed(report, failure)
-		return
+	data := event.Data{Mode: string(report.Mode), UpdatesApplied: report.UpdatesApplied, ResultCount: len(report.Results)}
+	skipped := map[state.Key]bool{}
+	for _, result := range report.Results {
+		if result.Code == domain.ResultBusy {
+			key := result.Key
+			key.Service = ""
+			skipped[key] = true
+		}
 	}
+	data.SkippedStacks = len(skipped)
 	status, err := u.Status()
-	if err != nil {
-		_ = u.failed(report, err)
-		return
+	failure = errors.Join(failure, err)
+	data.BreakerOpen = status.BreakerOpen
+	if status.BreakerOpen {
+		data.Reason = status.BreakerReason
 	}
-	u.emit(event.RunFinished, event.Subject{RunID: report.RunID}, event.Data{Mode: string(report.Mode), UpdatesApplied: report.UpdatesApplied, BreakerOpen: status.BreakerOpen, ResultCount: len(report.Results)})
+	name := event.RunFinished
+	if failure != nil {
+		name = event.RunFailed
+		data.Detail = failure.Error()
+	}
+	u.emit(name, event.Subject{RunID: report.RunID}, data)
 }
 
 type stackSnapshot struct {

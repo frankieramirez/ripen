@@ -4,12 +4,14 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/frankieramirez/ripen/internal/response"
 )
 
 func writePretty(writer io.Writer, envelope response.Envelope) error {
 	var printed printer
+	printed.at, _ = time.Parse(time.RFC3339Nano, envelope.OccurredAt)
 	if !envelope.OK {
 		prettyFailure(&printed, envelope)
 	} else if !prettyData(&printed, envelope.Data) {
@@ -20,7 +22,8 @@ func writePretty(writer io.Writer, envelope response.Envelope) error {
 }
 
 type printer struct {
-	b strings.Builder
+	b  strings.Builder
+	at time.Time
 }
 
 func (p *printer) kv(indent int, key, value string) {
@@ -75,6 +78,7 @@ func prettyStatus(p *printer, status response.Status) {
 	p.kv(0, "mode", status.EffectivePolicy.Mode)
 	prettyBreaker(p, 0, status.Breaker)
 	p.kv(0, "lease", active(status.Lease.Active))
+	prettyProgress(p, status)
 	p.section(0, "notifier")
 	p.kv(1, "last success", orNone(status.Notifier.LastSuccessAt))
 	p.kv(1, "consecutive failures", strconv.Itoa(status.Notifier.ConsecutiveFailures))
@@ -82,6 +86,45 @@ func prettyStatus(p *printer, status response.Status) {
 	prettyServices(p, status.Services)
 	prettyEffectivePolicy(p, status.EffectivePolicy)
 	prettyVersions(p, status.Versions)
+}
+
+func prettyProgress(p *printer, status response.Status) {
+	if status.Scheduler.NextTickAt != nil || status.Scheduler.LastCompletedAt != nil {
+		p.section(0, "scheduler")
+		p.kv(1, "last completed observation", orNone(status.Scheduler.LastCompletedAt))
+		p.kv(1, "next scheduled tick", orNone(status.Scheduler.NextTickAt))
+		p.kv(1, "stale", boolText(status.Scheduler.Stale))
+	}
+	if transaction := status.ActiveTransaction; transaction != nil {
+		p.section(0, "active transaction")
+		p.kv(1, "service", identityName(transaction.Identity))
+		p.kv(1, "run id", transaction.RunID)
+		p.kv(1, "phase", transaction.Phase)
+		p.kv(1, "started at", transaction.StartedAt)
+		p.kv(1, "phase started at", transaction.PhaseStartedAt)
+		p.kv(1, "interrupted", boolText(transaction.Interrupted))
+		if started, err := time.Parse(time.RFC3339Nano, transaction.PhaseStartedAt); err == nil && !transaction.Interrupted && !p.at.Before(started) {
+			p.kv(1, "phase elapsed", p.at.Sub(started).Truncate(time.Second).String())
+		}
+	}
+	if len(status.Checks) > 0 {
+		p.section(0, "stack checks")
+		for _, check := range status.Checks {
+			p.section(1, identityName(check.Identity))
+			p.kv(2, "started at", check.StartedAt)
+			p.kv(2, "completed at", orNone(check.CompletedAt))
+			p.kv(2, "outcome", check.Outcome)
+		}
+	}
+	if len(status.Evaluations) > 0 {
+		p.section(0, "service evaluations")
+		for _, evaluation := range status.Evaluations {
+			p.section(1, identityName(evaluation.Identity))
+			p.kv(2, "evaluated at", evaluation.EvaluatedAt)
+			p.kv(2, "result", evaluation.Result)
+			p.kv(2, "detail", evaluation.Detail)
+		}
+	}
 }
 
 func prettyServices(p *printer, services []response.Service) {
@@ -108,6 +151,9 @@ func prettyEffectivePolicy(p *printer, policy response.EffectivePolicy) {
 	p.kv(1, "verification timeout", seconds(policy.VerificationTimeoutSeconds))
 	p.kv(1, "lease ttl", seconds(policy.LeaseTTLSeconds))
 	p.kv(1, "check interval", seconds(policy.CheckIntervalSeconds))
+	if policy.ObservationConcurrency > 0 {
+		p.kv(1, "observation concurrency", strconv.Itoa(policy.ObservationConcurrency))
+	}
 	p.kv(1, "state file", policy.StateFile)
 	p.kv(1, "backends", joinWords(policy.Backends))
 	p.kv(1, "stacks", strconv.Itoa(policy.StackCount))

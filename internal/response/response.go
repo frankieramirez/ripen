@@ -186,6 +186,7 @@ type EffectivePolicy struct {
 	VerificationTimeoutSeconds int      `json:"verification_timeout_seconds"`
 	LeaseTTLSeconds            int      `json:"lease_ttl_seconds"`
 	CheckIntervalSeconds       int      `json:"check_interval_seconds"`
+	ObservationConcurrency     int      `json:"observation_concurrency"`
 	StateFile                  string   `json:"state_file"`
 	Backends                   []string `json:"backends"`
 	StackCount                 int      `json:"stack_count"`
@@ -210,12 +211,51 @@ type NotifyTest struct {
 
 // Status is the answer to `ripen status`.
 type Status struct {
-	Breaker         Breaker         `json:"breaker"`
-	Lease           Lease           `json:"lease"`
-	Notifier        NotifierHealth  `json:"notifier"`
-	Services        []Service       `json:"services"`
-	Versions        Versions        `json:"versions"`
-	EffectivePolicy EffectivePolicy `json:"effective_policy"`
+	Checks            []StackCheck         `json:"checks"`
+	Evaluations       []Evaluation         `json:"evaluations"`
+	Scheduler         Scheduler            `json:"scheduler"`
+	ActiveTransaction *TransactionProgress `json:"active_transaction"`
+	Breaker           Breaker              `json:"breaker"`
+	Lease             Lease                `json:"lease"`
+	Notifier          NotifierHealth       `json:"notifier"`
+	Services          []Service            `json:"services"`
+	Versions          Versions             `json:"versions"`
+	EffectivePolicy   EffectivePolicy      `json:"effective_policy"`
+}
+
+// StackCheck exposes observation progress independently of Candidate age.
+type StackCheck struct {
+	Identity
+	RunID       string  `json:"run_id"`
+	StartedAt   string  `json:"started_at"`
+	CompletedAt *string `json:"completed_at"`
+	Outcome     string  `json:"outcome"`
+}
+
+// Evaluation is the most recent service evaluation, including refusals.
+type Evaluation struct {
+	Identity
+	RunID       string `json:"run_id"`
+	Result      string `json:"result"`
+	Detail      string `json:"detail"`
+	EvaluatedAt string `json:"evaluated_at"`
+}
+
+// Scheduler exposes persisted scheduling timestamps without asserting liveness.
+type Scheduler struct {
+	LastCompletedAt *string `json:"last_completed_at"`
+	NextTickAt      *string `json:"next_tick_at"`
+	Stale           bool    `json:"stale"`
+}
+
+// TransactionProgress identifies unfinished work without exposing ownership tokens.
+type TransactionProgress struct {
+	Identity
+	RunID          string `json:"run_id"`
+	Phase          string `json:"phase"`
+	StartedAt      string `json:"started_at"`
+	PhaseStartedAt string `json:"phase_started_at"`
+	Interrupted    bool   `json:"interrupted"`
 }
 
 // Candidate is one observed Candidate with its identity.

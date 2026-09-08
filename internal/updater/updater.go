@@ -284,12 +284,7 @@ func (u *Updater) RunContext(ctx context.Context, mode domain.Mode) (Report, err
 		return Report{}, u.failed(report, err)
 	}
 	report.BreakerOpen = final.BreakerOpen
-	u.emit(event.RunFinished, event.Subject{RunID: report.RunID}, event.Data{
-		Mode:           string(mode),
-		UpdatesApplied: report.UpdatesApplied,
-		BreakerOpen:    report.BreakerOpen,
-		ResultCount:    len(report.Results),
-	})
+	u.finishReport(report, nil)
 	return report, nil
 }
 
