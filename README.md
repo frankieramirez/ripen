@@ -1,5 +1,7 @@
 # Ripen
 
+![Ripen — a pixel-art peach beside golden lettering](docs/assets/ripen-banner.svg)
+
 [![CI](https://github.com/frankieramirez/ripen/actions/workflows/ci.yaml/badge.svg)](https://github.com/frankieramirez/ripen/actions/workflows/ci.yaml)
 [![Latest release](https://img.shields.io/github/v/release/frankieramirez/ripen)](https://github.com/frankieramirez/ripen/releases)
 [![License](https://img.shields.io/github/license/frankieramirez/ripen)](LICENSE)
