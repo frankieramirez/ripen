@@ -20,7 +20,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -34,7 +33,6 @@ import (
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/mcpserver"
 	"github.com/frankieramirez/ripen/internal/response"
-	"github.com/frankieramirez/ripen/internal/state"
 	"github.com/frankieramirez/ripen/internal/updater"
 	"github.com/frankieramirez/ripen/internal/webui"
 )
@@ -157,7 +155,7 @@ type verbOptions struct {
 	pretty    bool
 	mode      string
 	reason    string
-	limit     int
+	limit     string
 	cursor    string
 	runID     string
 	stack     string
@@ -176,7 +174,7 @@ func registerFlags(command string, flags *flag.FlagSet) *verbOptions {
 	case "run":
 		flags.StringVar(&options.mode, "mode", "", "monitor or apply; defaults to the configured mode")
 	case "audit":
-		flags.IntVar(&options.limit, "limit", 50, "maximum attempts to return")
+		flags.StringVar(&options.limit, "limit", "", "maximum attempts to return; defaults to 50")
 		flags.StringVar(&options.cursor, "cursor", "", "continue from a previous page's next_cursor")
 		flags.StringVar(&options.runID, "run", "", "only attempts from one run")
 		flags.StringVar(&options.stack, "stack", "", "only attempts for one stack")
@@ -229,23 +227,15 @@ func read(_ *app.App, command string, build func() (any, error)) (response.Envel
 }
 
 func auditVerb(loaded *app.App, options *verbOptions) (response.Envelope, int) {
-	filter := state.AuditFilter{
+	audit, err := loaded.Audit(app.AuditRequest{
 		Limit:   options.limit,
+		Cursor:  options.cursor,
 		RunID:   options.runID,
-		Backend: domain.Backend(options.backend),
+		Backend: options.backend,
 		Stack:   options.stack,
 		Service: options.service,
-		Result:  domain.ResultCode(options.result),
-	}
-	if options.cursor != "" {
-		cursor, err := strconv.ParseInt(options.cursor, 10, 64)
-		if err != nil {
-			return response.Fail("audit", now(), response.CodeUsage,
-				"cursor must be a value from a previous page's next_cursor"), ExitUsage
-		}
-		filter.Cursor = cursor
-	}
-	audit, err := loaded.Audit(filter)
+		Result:  options.result,
+	})
 	if err != nil {
 		return failure("audit", err)
 	}
@@ -552,6 +542,9 @@ func argument(command string, options *verbOptions, message string) (string, res
 }
 
 func failure(command string, err error) (response.Envelope, int) {
+	if errors.Is(err, app.ErrInvalidAuditRequest) {
+		return response.Fail(command, now(), response.CodeUsage, err.Error()), ExitUsage
+	}
 	var engine *backend.EngineUnavailableError
 	switch {
 	case errors.As(err, &engine):
