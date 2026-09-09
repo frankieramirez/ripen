@@ -1,5 +1,3 @@
-# Ripen
-
 ![Ripen — a pixel-art peach beside golden lettering](docs/assets/ripen-banner.svg)
 
 [![CI](https://github.com/frankieramirez/ripen/actions/workflows/ci.yaml/badge.svg)](https://github.com/frankieramirez/ripen/actions/workflows/ci.yaml)
