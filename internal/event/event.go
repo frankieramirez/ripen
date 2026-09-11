@@ -9,8 +9,11 @@
 package event
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -159,17 +162,25 @@ type Subject struct {
 
 // Stream fans one Event out to every sink, in order.
 type Stream struct {
-	actor domain.Actor
-	sinks []Sink
-	clock func() time.Time
-	mutex sync.Mutex
+	actor      domain.Actor
+	sinks      []Sink
+	clock      func() time.Time
+	mutex      sync.Mutex
+	structured *WriterSink
 }
 
 // NewStream builds a stream for one surface. The actor is the surface
 // itself and is stamped on every Event; it is never a parameter a caller
 // can supply.
 func NewStream(actor domain.Actor, sinks ...Sink) *Stream {
-	return &Stream{actor: actor, sinks: sinks, clock: func() time.Time { return time.Now().UTC() }}
+	stream := &Stream{actor: actor, sinks: sinks, clock: func() time.Time { return time.Now().UTC() }}
+	for _, sink := range sinks {
+		if structured, ok := sink.(*WriterSink); ok {
+			stream.structured = structured
+			break
+		}
+	}
+	return stream
 }
 
 // WithClock replaces the stream's clock, for tests.
@@ -211,26 +222,103 @@ func (s *Stream) Add(sink Sink) {
 	s.sinks = append(s.sinks, sink)
 }
 
+// AddSuccessReport attaches the human-readable success report to the
+// structured Event sink's synchronized writer.
+func (s *Stream) AddSuccessReport() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.structured != nil {
+		s.sinks = append(s.sinks, NewSuccessReportSink(s.structured.writer))
+	}
+}
+
 // WriterSink writes every Event as one line of JSON. This is the sink
 // that is always on: on stderr, so stdout stays the Response envelope's
 // alone.
 type WriterSink struct {
+	writer *synchronizedWriter
+}
+
+type synchronizedWriter struct {
 	writer io.Writer
 	mutex  sync.Mutex
 }
 
+func (w *synchronizedWriter) Write(data []byte) (int, error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	return w.writer.Write(data)
+}
+
 // NewWriterSink builds the structured stream sink.
 func NewWriterSink(writer io.Writer) *WriterSink {
-	return &WriterSink{writer: writer}
+	return &WriterSink{writer: &synchronizedWriter{writer: writer}}
 }
 
 // Emit writes one Event.
 func (w *WriterSink) Emit(envelope Envelope) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
 	encoder := json.NewEncoder(w.writer)
 	encoder.SetEscapeHTML(false)
 	_ = encoder.Encode(envelope)
+}
+
+// SuccessReportSink writes a human-readable report for each successful
+// Transaction.
+type SuccessReportSink struct {
+	writer io.Writer
+	mutex  sync.Mutex
+}
+
+// NewSuccessReportSink builds a sink for human-readable daemon reports.
+func NewSuccessReportSink(writer io.Writer) *SuccessReportSink {
+	return &SuccessReportSink{writer: writer}
+}
+
+// Emit writes a report only for a successful Transaction.
+func (s *SuccessReportSink) Emit(envelope Envelope) {
+	if envelope.Event != string(TransactionSucceeded) {
+		return
+	}
+
+	var report bytes.Buffer
+	fmt.Fprintln(&report, "========= RIPEN UPDATE SUCCEEDED =========")
+	fmt.Fprintf(&report, "  stack: %s\n", escape(pointerValue(envelope.Stack)))
+	fmt.Fprintf(&report, "  service: %s\n", escape(pointerValue(envelope.Service)))
+	fmt.Fprintf(&report, "  time: %s\n", escape(envelope.OccurredAt))
+	fmt.Fprintf(&report, "  run: %s\n", escape(pointerValue(envelope.RunID)))
+	fmt.Fprintf(&report, "  backend: %s\n", escape(pointerValue(envelope.Backend)))
+	if envelope.Data.OldDigest != "" || envelope.Data.NewDigest != "" {
+		fmt.Fprintf(&report, "  digest: %s -> %s\n", escape(envelope.Data.OldDigest), escape(envelope.Data.NewDigest))
+	}
+	if envelope.Data.Detail != "" {
+		fmt.Fprintf(&report, "  detail: %s\n", escape(envelope.Data.Detail))
+	}
+	fmt.Fprintln(&report, "===========================================")
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	_, _ = s.writer.Write(report.Bytes())
+}
+
+func pointerValue(value *string) string {
+	if value == nil {
+		return "unknown"
+	}
+	return *value
+}
+
+func escape(value string) string {
+	var escaped strings.Builder
+	for _, character := range value {
+		switch {
+		case character == '\\':
+			escaped.WriteString(`\\`)
+		case character < 0x20 || character == 0x7f:
+			fmt.Fprintf(&escaped, `\x%02x`, character)
+		default:
+			escaped.WriteRune(character)
+		}
+	}
+	return escaped.String()
 }
 
 func optional(value string) *string {

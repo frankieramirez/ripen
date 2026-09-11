@@ -31,7 +31,9 @@ import (
 	"github.com/frankieramirez/ripen/internal/backend"
 	"github.com/frankieramirez/ripen/internal/daemon"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/mcpserver"
+	"github.com/frankieramirez/ripen/internal/notifier"
 	"github.com/frankieramirez/ripen/internal/response"
 	"github.com/frankieramirez/ripen/internal/state"
 	"github.com/frankieramirez/ripen/internal/updater"
@@ -407,6 +409,8 @@ func daemonVerb(args []string, stream io.Writer) int {
 	configPath := flags.String("config", defaultConfigPath(), "path to the policy file")
 	mode := flags.String("mode", "", "monitor or apply; defaults to the configured mode")
 	once := flags.Bool("once", false, "run one cycle and exit")
+	successReports := flags.Bool("success-reports", true,
+		"write a plain-text report to stderr after each successful update")
 	if err := flags.Parse(args); err != nil {
 		fmt.Fprintf(stream, "ripen: usage: %v\n", err)
 		return ExitUsage
@@ -429,7 +433,7 @@ func daemonVerb(args []string, stream io.Writer) int {
 		selected = parsed
 	}
 
-	events, webhook, err := loaded.Events(domain.ActorDaemon, stream)
+	events, webhook, err := daemonEvents(loaded, stream, *successReports)
 	if err != nil {
 		fmt.Fprintf(stream, "ripen: %v\n", err)
 		return ExitOperation
@@ -485,6 +489,17 @@ func daemonVerb(args []string, stream io.Writer) int {
 		return ExitOperation
 	}
 	return ExitOK
+}
+
+func daemonEvents(loaded *app.App, stream io.Writer, successReports bool) (*event.Stream, *notifier.Webhook, error) {
+	events, webhook, err := loaded.Events(domain.ActorDaemon, stream)
+	if err != nil {
+		return nil, nil, err
+	}
+	if successReports {
+		events.AddSuccessReport()
+	}
+	return events, webhook, nil
 }
 
 func mcpVerb(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -594,7 +609,7 @@ func usage(writer io.Writer) {
 	fmt.Fprintln(writer, "  clear-proposal <stack> --reason <why>")
 	fmt.Fprintln(writer, "  clear-breaker --reason <why>")
 	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "  daemon [--once]             run on the configured interval")
+	fmt.Fprintln(writer, "  daemon [--once] [--success-reports=false]  run on the configured interval")
 	fmt.Fprintln(writer, "  notify test                 send a real event through the webhook")
 	fmt.Fprintln(writer, "  mcp [--enable-writes]       serve the agent surface over stdio")
 	fmt.Fprintln(writer, "")

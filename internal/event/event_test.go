@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,115 @@ import (
 var secretMarkers = []string{
 	"secret", "token", "password", "passwd", "credential",
 	"authorization", "auth", "bearer", "cookie", "api_key", "apikey", "private",
+}
+
+func TestSuccessReportSinkOnlyReportsSuccessfulTransactions(t *testing.T) {
+	var output bytes.Buffer
+	sink := NewSuccessReportSink(&output)
+	sink.Emit(Envelope{Event: string(TransactionRolledBack)})
+	sink.Emit(Envelope{
+		Event:      string(TransactionSucceeded),
+		OccurredAt: "2026-09-11T15:04:05Z",
+		RunID:      stringPointer("run-7"),
+		Backend:    stringPointer("portainer"),
+		Stack:      stringPointer("media"),
+		Service:    stringPointer("web"),
+		Data:       Data{OldDigest: "sha256:old", NewDigest: "sha256:new", Detail: "updated and healthy"},
+	})
+
+	want := "========= RIPEN UPDATE SUCCEEDED =========\n  stack: media\n  service: web\n  time: 2026-09-11T15:04:05Z\n  run: run-7\n  backend: portainer\n  digest: sha256:old -> sha256:new\n  detail: updated and healthy\n===========================================\n"
+	if output.String() != want {
+		t.Fatalf("output = %q, want %q", output.String(), want)
+	}
+	t.Logf("sample output:\n%s", output.String())
+}
+
+func TestSuccessReportSinkEscapesControlCharactersAndKeepsReportsIntact(t *testing.T) {
+	var output bytes.Buffer
+	sink := NewSuccessReportSink(&output)
+	var workers sync.WaitGroup
+	for index := 0; index < 20; index++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			sink.Emit(Envelope{
+				Event:      string(TransactionSucceeded),
+				OccurredAt: "2026-09-11T15:04:05Z",
+				Stack:      stringPointer("media\nstack"),
+				Data:       Data{Detail: "healthy\r\nready"},
+			})
+		}()
+	}
+	workers.Wait()
+
+	text := output.String()
+	if strings.Count(text, "========= RIPEN UPDATE SUCCEEDED =========\n") != 20 {
+		t.Fatalf("report count = %d, want 20; output = %q", strings.Count(text, "========= RIPEN UPDATE SUCCEEDED =========\n"), text)
+	}
+	if strings.Contains(text, "media\nstack") || strings.Contains(text, "healthy\r\nready") {
+		t.Fatalf("control characters were not escaped: %q", text)
+	}
+	if !strings.Contains(text, `stack: media\x0astack`) || !strings.Contains(text, `detail: healthy\x0d\x0aready`) {
+		t.Fatalf("escaped values missing: %q", text)
+	}
+}
+
+func stringPointer(value string) *string { return &value }
+
+func TestStreamKeepsStructuredEventsAndSuccessReportsAsWholeRecords(t *testing.T) {
+	var output bytes.Buffer
+	stream := NewStream(domain.ActorDaemon, NewWriterSink(&output))
+	stream.AddSuccessReport()
+	var workers sync.WaitGroup
+	for index := 0; index < 20; index++ {
+		workers.Add(1)
+		go func(index int) {
+			defer workers.Done()
+			stream.Emit(TransactionSucceeded, Subject{RunID: "run", Stack: "stack", Service: "service"}, Data{Detail: strings.Repeat("x", index+1)})
+			stream.Emit(TransactionRolledBack, Subject{RunID: "run"}, Data{})
+		}(index)
+	}
+	workers.Wait()
+
+	lines := strings.Split(output.String(), "\n")
+	inReport := false
+	structured := 0
+	for _, line := range lines {
+		if line == "========= RIPEN UPDATE SUCCEEDED =========" {
+			if inReport {
+				t.Fatal("a report started inside another report")
+			}
+			inReport = true
+			continue
+		}
+		if line == "===========================================" {
+			if !inReport {
+				t.Fatal("a report ended without a header")
+			}
+			inReport = false
+			continue
+		}
+		if inReport {
+			if !strings.HasPrefix(line, "  ") {
+				t.Fatalf("another record interrupted a report: %q", line)
+			}
+			continue
+		}
+		if line == "" {
+			continue
+		}
+		var envelope Envelope
+		if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+			t.Fatalf("interleaved structured line %q: %v", line, err)
+		}
+		structured++
+	}
+	if inReport || structured != 40 {
+		t.Fatalf("incomplete output: inReport=%v structured=%d", inReport, structured)
+	}
+	if strings.Count(output.String(), "========= RIPEN UPDATE SUCCEEDED =========\n") != 20 {
+		t.Fatalf("success reports = %d, want 20", strings.Count(output.String(), "========= RIPEN UPDATE SUCCEEDED =========\n"))
+	}
 }
 
 func TestNoEventPayloadFieldCanCarryASecret(t *testing.T) {

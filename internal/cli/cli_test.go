@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/frankieramirez/ripen/internal/app"
 	"github.com/frankieramirez/ripen/internal/domain"
+	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/response"
 	"github.com/frankieramirez/ripen/internal/state"
 )
@@ -615,6 +617,75 @@ func TestDaemonOnceReportsATransientErrorAsAnEventAndExitsOne(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "goroutine") {
 		t.Error("a transient error must not print a traceback")
+	}
+}
+
+func TestDaemonSuccessReportsCanBeDisabledForStructuredOutput(t *testing.T) {
+	configPath := unreachablePortainerPolicy(t)
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"daemon", "--once", "--success-reports=false", "--config", configPath}, &stdout, &stderr)
+
+	if code != ExitOperation {
+		t.Fatalf("exit = %d, want %d", code, ExitOperation)
+	}
+	if strings.Contains(stderr.String(), "RIPEN UPDATE SUCCEEDED") {
+		t.Fatalf("structured-only daemon emitted a success report: %q", stderr.String())
+	}
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		var envelope map[string]any
+		if strings.HasPrefix(line, "{") {
+			if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+				t.Fatalf("stderr line is not structured JSON: %q", line)
+			}
+		}
+	}
+}
+
+func TestDaemonEventWiringReportsSuccessAndCanDisableIt(t *testing.T) {
+	configPath, _ := policyFile(t)
+	loaded, err := app.Open(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = loaded.Close() }()
+
+	for _, test := range []struct {
+		name          string
+		successReport bool
+		wantReport    bool
+	}{
+		{name: "default", successReport: true, wantReport: true},
+		{name: "disabled", successReport: false, wantReport: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			stream, webhook, err := daemonEvents(loaded, &output, test.successReport)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if webhook != nil {
+				defer func() { _ = webhook.Close() }()
+			}
+			stream.Emit(event.TransactionSucceeded, event.Subject{
+				RunID: "run-7", Backend: domain.BackendDockerCompose, Stack: "media", Service: "web",
+			}, event.Data{OldDigest: "sha256:old", NewDigest: "sha256:new"})
+
+			if got := strings.Contains(output.String(), "RIPEN UPDATE SUCCEEDED"); got != test.wantReport {
+				t.Fatalf("success report present = %v, want %v; output = %q", got, test.wantReport, output.String())
+			}
+			structured, _, _ := strings.Cut(output.String(), "\n")
+			if !test.wantReport {
+				structured = output.String()
+			}
+			var envelope event.Envelope
+			if err := json.Unmarshal([]byte(structured), &envelope); err != nil {
+				t.Fatalf("structured Event was not preserved: %v", err)
+			}
+			if envelope.Event != string(event.TransactionSucceeded) || envelope.Actor != string(domain.ActorDaemon) {
+				t.Fatalf("unexpected structured Event: %+v", envelope)
+			}
+		})
 	}
 }
 
