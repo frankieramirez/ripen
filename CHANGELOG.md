@@ -10,6 +10,28 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-11
+
+### Added
+
+- Successful updates print a framed, plain-text report in daemon stderr with
+  the Stack, Service, completion time, run ID, backend, and digest transition.
+  Reports follow the durable `transaction.succeeded` Event and are enabled by
+  default. Consumers that require structured-only Event output should pass
+  `--success-reports=false`. Each report is written as one block alongside the
+  existing structured Events.
+
+### Fixed
+
+- Opening an already-current state database no longer rewrites its schema,
+  removing a source of SQLite contention from concurrent `ripen status`
+  health checks.
+- SQLite busy errors while saving scheduler progress pause work and retry on
+  a later tick instead of terminating the daemon. Queued observations and
+  new Transaction admissions are cancelled during the pause. An active
+  Transaction keeps its lease and finishes before another can begin. Lease
+  loss and other scheduler progress errors still stop the daemon.
+
 ## [1.2.0] - 2026-09-08
 
 ### Added
@@ -105,7 +127,8 @@ Each release's section here is what GitHub shows as the release notes.
   user-owned private repositories, so a release is now refused before it
   publishes anything rather than after.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/frankieramirez/ripen/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/frankieramirez/ripen/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/frankieramirez/ripen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/frankieramirez/ripen/releases/tag/v1.0.0
