@@ -15,7 +15,8 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite" // pure-Go driver, keeps CGO_ENABLED=0 builds working
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/frankieramirez/ripen/internal/domain"
 )
@@ -211,6 +212,12 @@ func Open(path string) (*Store, error) {
 // Close releases the underlying database handle.
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+// IsBusy reports contention with another SQLite connection, including extended busy codes.
+func IsBusy(err error) bool {
+	var sqliteErr *sqlite.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == sqlite3.SQLITE_BUSY
 }
 
 // AcceptedDigest returns the accepted Baseline digest for a Key.

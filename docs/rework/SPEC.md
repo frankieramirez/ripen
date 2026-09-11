@@ -114,6 +114,13 @@ place and preserves existing state. Back up before upgrading; older binaries
 must not open or share the migrated database. Downgrading requires restoring
 the pre-upgrade backup. Response and Event schema versions are independent.
 
+Opening a current Go database reads its version without rewriting the schema,
+so status health checks can read committed state while the daemon is writing.
+If a scheduler progress write encounters SQLite contention, the daemon cancels
+queued observations, drains active work, and retries with a fresh lease on a
+later tick. It admits no new Transaction during that pause. Other progress
+errors and lease loss still stop the daemon.
+
 ## Migration plan
 
 [Plan the rework migration](https://github.com/frankieramirez/ripen/issues/16) — full runbook on the ticket.
@@ -240,6 +247,8 @@ Extracted from the Python test suite (2026-08-18). **This list gated the Python-
 - [x] Deployment admission preserves policy order and waits for the cooldown. Go: `updater.TestDeploymentAdmissionPreservesPolicyOrderAndWaitsForCooldown`.
 - [x] A breaker opened during observation prevents subsequent deployment admission. Go: `updater.TestBreakerOpeningDuringObservationPreventsSubsequentDeployment`.
 - [x] Cancellation drains observation workers; lease loss cancels observation and stops queued admissions. Go: `updater.TestSchedulerCancellationDrainsBlockedObservationWorkers`, `updater.TestLeaseLossCancelsObservationAndStopsQueuedAdmissions`.
+- [x] SQLite contention while saving scheduler progress pauses work and retries on a later tick; queued observations and admissions are discarded, and other progress errors are fatal. Go: `updater.TestSchedulerRetriesBusyProgressOnTheNextTickWithoutStartingWork`, `updater.TestBusyProgressDrainsObservationsAndDiscardsQueuedAdmissionsBeforeRetry`, `updater.TestBusyCompletionProgressDiscardsCandidatesBeforeApplyAdmission`, `updater.TestSchedulerStillStopsWhenProgressCannotBeSavedForANonBusyError`.
+- [x] An active Transaction retains ownership and finishes before contention recovery admits another Transaction. Go: `updater.TestBusyProgressLetsAnActiveTransactionFinishBeforeRetrying`.
 - [x] Finite checks refresh drift and ineligibility independently of Candidate history. Go: `updater.TestFiniteChecksRefreshDriftAndIneligibilityWithoutChangingCandidateHistory`.
 - [x] Explicit reconciliation records a healthy accepted Baseline and clears interrupted ownership; unproven digests, unhealthy stacks, active leases, and uncertain Proposals refuse recovery. Go: `updater.TestExplicitReconciliationRecordsHealthyBaselineAndClearsInterruptedMarker`, `updater.TestExplicitReconciliationRefusesAnUnprovenRunningDigest`, `updater.TestExplicitReconciliationRefusesAnUnhealthyStack`, `updater.TestExplicitReconciliationRefusesAnActiveLease`, `updater.TestExplicitReconciliationCannotClearAnUncertainProposal`.
 
@@ -248,6 +257,7 @@ Extracted from the Python test suite (2026-08-18). **This list gated the Python-
 - [x] An interrupted Transaction survives lease expiry and prevents competing deployment. Go: `state.TestInterruptedTransactionSurvivesExpiredLeaseAndBlocksNewDeployment`.
 - [x] Proposal reconciliation cannot restore a Proposal cleared by an operator. Go: `state.TestProposalReconciliationCannotUndoConcurrentOperatorClear`.
 - [x] State migration preserves v1 data and refuses newer database versions. Go: `state.TestMigrationPreservesVersionOneStateAndRefusesNewerDatabases`.
+- [x] Opening current state reads the committed Baseline without competing with an active writer. Go: `state.TestOpeningCurrentStateDoesNotCompeteWithAnActiveWriter`.
 - [x] Check outcomes persist independently of Candidate history, and status distinguishes interrupted work. Go: `state.TestCheckProgressPersistsRefusalsWithoutChangingCandidateHistory`, `cli.TestStatusSeparatesEvaluationTimeFromCandidateHistoryAndMarksInterruptedWork`.
 - [x] Pretty status derives elapsed phase time from the response timestamp and suppresses live elapsed time for interrupted ownership. Go: `cli.TestPrettyProgressDerivesElapsedFromTheResponseTime`.
 
