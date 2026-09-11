@@ -132,7 +132,7 @@ they fixed is the point of the gate.
 
 | Verb | Does |
 | --- | --- |
-| `ripen daemon [--once]` | Run on the configured interval. Writes nothing to stdout. |
+| `ripen daemon [--once] [--success-reports=false]` | Run on the configured interval. Writes nothing to stdout. Successful updates also print a plain-text report to stderr by default; disable it for structured-only consumers. |
 | `ripen mcp [--enable-writes]` | Serve MCP over stdio. |
 | `ripen notify test` | Send a real `notifier.test` through the real webhook path. |
 | `ripen schema` | The JSON Schema for every response. |

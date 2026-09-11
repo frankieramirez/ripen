@@ -317,6 +317,7 @@ Extracted from the Python test suite (2026-08-18). **This list gated the Python-
 ### Event sink / Notifier
 
 - [x] The stderr Event sink emits structured JSON and no Event payload carries secret material — in Go this becomes the typed-payload test from the notifications design, replacing the Python key-marker scrubber (test_adapters.py::test_json_notifier_redacts_secret_like_fields) — Go: `event.TestNoEventPayloadFieldCanCarryASecret`, `event.TestEachEventIsOneLineOfJSON`
+- [x] The daemon prints a plain-text report for `transaction.succeeded`, serialized with structured Events; `--success-reports=false` disables reports. Go: `event.TestSuccessReportSinkOnlyReportsSuccessfulTransactions`, `event.TestStreamKeepsStructuredEventsAndSuccessReportsAsWholeRecords`, `cli.TestDaemonEventWiringReportsSuccessAndCanDisableIt`. Success durability remains covered by `updater.TestEveryPagingEventFollowsADurableStateChange`.
 
 ### CLI
 
