@@ -43,6 +43,9 @@ func migrate(db *sql.DB) error {
 	if version > domain.StateSchemaVersion {
 		return fmt.Errorf("state schema version %d is newer than supported version %d", version, domain.StateSchemaVersion)
 	}
+	if version == domain.StateSchemaVersion {
+		return tx.Commit()
+	}
 	if _, err := tx.Exec(schema); err != nil {
 		return err
 	}

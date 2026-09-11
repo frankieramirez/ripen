@@ -59,6 +59,7 @@ type scheduleBackend struct {
 	active      atomic.Int32
 	peak        atomic.Int32
 	requests    atomic.Int64
+	preflight   func() error
 }
 type schedulePort struct {
 	*scheduleBackend
@@ -66,7 +67,12 @@ type schedulePort struct {
 }
 
 func (b *scheduleBackend) WithContext(ctx context.Context) backend.Port { return &schedulePort{b, ctx} }
-func (b *scheduleBackend) Preflight() error                             { return nil }
+func (b *scheduleBackend) Preflight() error {
+	if b.preflight != nil {
+		return b.preflight()
+	}
+	return nil
+}
 func (b *scheduleBackend) Observe(s config.StackPolicy) (backend.StackState, error) {
 	return b.WithContext(context.Background()).Observe(s)
 }
@@ -142,7 +148,8 @@ func (b *scheduleBackend) count(name string) int {
 
 func scheduleFixture(t testing.TB, n, concurrency int) (*Updater, *scheduleBackend, *scheduleClock, scheduleSink) {
 	t.Helper()
-	store, err := state.Open(filepath.Join(t.TempDir(), "state.db"))
+	path := filepath.Join(t.TempDir(), "state.db")
+	store, err := state.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,6 +169,7 @@ func scheduleFixture(t testing.TB, n, concurrency int) (*Updater, *scheduleBacke
 		}
 	}
 	policy := policyFor(stacks...)
+	policy.StateFile = path
 	policy.ObservationConcurrency = concurrency
 	policy.CandidateMinAgeSeconds = 1
 	sink := make(scheduleSink, 10000)

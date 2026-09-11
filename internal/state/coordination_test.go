@@ -3,10 +3,72 @@ package state
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestOpeningCurrentStateDoesNotCompeteWithAnActiveWriter(t *testing.T) {
+	dir := t.TempDir()
+	writer := open(t, dir)
+	if err := writer.SetAcceptedDigest(exampleApp, oldDigest, now); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := writer.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec("UPDATE accepted_digests SET digest=?", newDigest); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := Open(filepath.Join(dir, "state", "updater.db"))
+	if err != nil {
+		t.Fatalf("opening current state competed with writer: %v", err)
+	}
+	defer func() { _ = reader.Close() }()
+	digest, found, err := reader.AcceptedDigest(exampleApp)
+
+	if err != nil || !found || digest != oldDigest {
+		t.Fatalf("read did not preserve committed baseline: digest=%q found=%v err=%v", digest, found, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	digest, found, err = reader.AcceptedDigest(exampleApp)
+	if err != nil || !found || digest != newDigest {
+		t.Fatalf("writer could not complete: digest=%q found=%v err=%v", digest, found, err)
+	}
+}
+
+func TestBusyClassificationRecognizesWrappedContentionAndRejectsOtherErrors(t *testing.T) {
+	dir := t.TempDir()
+	writer := open(t, dir)
+	reader := open(t, dir)
+	token, acquired, err := reader.AcquireLease(now, 30)
+	if err != nil || !acquired {
+		t.Fatalf("acquire lease: %v %v", acquired, err)
+	}
+	tx, err := writer.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec("PRAGMA user_version=2"); err != nil {
+		t.Fatal(err)
+	}
+
+	err = reader.SetSchedulerProgress(token, SchedulerProgress{}, now)
+
+	if !IsBusy(fmt.Errorf("save scheduler progress: %w", err)) {
+		t.Fatalf("contention was not classified as busy: %v", err)
+	}
+	if IsBusy(nil) || IsBusy(ErrLeaseLost) || IsBusy(errors.New("database is locked (5) (SQLITE_BUSY)")) {
+		t.Fatal("a non-SQLite error was classified as contention")
+	}
+}
 
 func TestMigrationPreservesVersionOneStateAndRefusesNewerDatabases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")

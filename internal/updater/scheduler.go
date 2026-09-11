@@ -50,6 +50,7 @@ type coordinator struct {
 	nextTick      time.Time
 	progress      state.SchedulerProgress
 	stopping      bool
+	paused        bool
 	failure       error
 }
 
@@ -74,6 +75,10 @@ func (u *Updater) schedule(ctx context.Context, mode domain.Mode, interval time.
 		if c.owner != nil && c.observations == 0 && !c.applying && len(c.queue) == 0 {
 			c.release()
 			c.owner = nil
+			if c.paused {
+				clear(c.latest)
+			}
+			c.paused = false
 		}
 		if c.stopping && c.owner == nil {
 			return c.failure
@@ -131,13 +136,14 @@ func (c *coordinator) acquire(ctx context.Context) bool {
 }
 
 func (c *coordinator) startPass(ctx context.Context, mode domain.Mode) {
-	if !c.acquire(ctx) {
+	if c.paused || !c.acquire(ctx) {
 		return
 	}
 	pass := &observationPass{report: Report{RunID: newRunID(), Mode: domain.ModeMonitor, Actor: c.root.actor, Started: c.root.clock.Now()}}
 	c.progress.NextTickAt = &c.nextTick
 	if err := c.owner.state.SetSchedulerProgress(c.owner.token, c.progress, c.root.clock.Now()); err != nil {
-		c.stop(err)
+		c.failProgress(err)
+		_ = c.root.failed(pass.report, err)
 		return
 	}
 	marker, err := c.owner.state.ActiveTransaction()
@@ -185,7 +191,7 @@ func (c *coordinator) dispatch() {
 	if limit < 1 {
 		limit = 1
 	}
-	for !c.stopping && c.observations < limit && len(c.queue) > 0 {
+	for !c.stopping && !c.paused && c.observations < limit && len(c.queue) > 0 {
 		work := c.queue[0]
 		c.queue = c.queue[1:]
 		c.observations++
@@ -227,7 +233,7 @@ func (c *coordinator) complete(mode domain.Mode, done stackCompletion) {
 	if !c.stopping {
 		c.admit(mode)
 	}
-	if c.due[index] && !c.stopping && !c.busy[index] {
+	if c.due[index] && !c.stopping && !c.paused && !c.busy[index] {
 		c.due[index] = false
 		c.busy[index] = true
 		next := &observationPass{report: Report{RunID: newRunID(), Mode: domain.ModeMonitor, Actor: c.root.actor, Started: c.root.clock.Now()}, remaining: 1}
@@ -239,11 +245,26 @@ func (c *coordinator) finishPass(pass *observationPass) {
 	now := c.root.clock.Now()
 	c.progress.LastCompletedAt = &now
 	err := c.owner.state.SetSchedulerProgress(c.owner.token, c.progress, now)
+	if err != nil {
+		c.failProgress(err)
+	}
 	c.owner.finishReport(pass.report, errors.Join(pass.failure, err))
 }
 
+func (c *coordinator) failProgress(err error) {
+	if !state.IsBusy(err) {
+		c.stop(err)
+		return
+	}
+	c.paused = true
+	c.owner.stopReads()
+	clear(c.latest)
+	clear(c.due)
+	c.cancelQueued()
+}
+
 func (c *coordinator) admit(mode domain.Mode) {
-	if mode != domain.ModeApply || c.applying || c.owner == nil || c.stopping || c.root.clock.Now().Before(c.cooldown) {
+	if mode != domain.ModeApply || c.applying || c.owner == nil || c.stopping || c.paused || c.root.clock.Now().Before(c.cooldown) {
 		return
 	}
 	for index, stack := range c.root.policy.Stacks {
@@ -306,6 +327,10 @@ func (c *coordinator) stop(err error) {
 		c.owner.stopReads()
 	}
 	c.failure = err
+	c.cancelQueued()
+}
+
+func (c *coordinator) cancelQueued() {
 	for _, work := range c.queue {
 		c.busy[work.index] = false
 		work.pass.remaining--
