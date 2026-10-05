@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/event"
+	"github.com/frankieramirez/ripen/internal/proposal"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/state"
 )
@@ -56,6 +58,7 @@ type scheduleBackend struct {
 	delay       time.Duration
 	stackGates  map[string]<-chan struct{}
 	transform   func(backend.StackState) backend.StackState
+	running     map[string]string
 	active      atomic.Int32
 	peak        atomic.Int32
 	requests    atomic.Int64
@@ -77,7 +80,7 @@ func (b *scheduleBackend) Observe(s config.StackPolicy) (backend.StackState, err
 	return b.WithContext(context.Background()).Observe(s)
 }
 func (b *scheduleBackend) RunningDigests(backend.StackState) (map[string]string, error) {
-	return nil, nil
+	return maps.Clone(b.running), nil
 }
 func (b *scheduleBackend) ServicesRunning(backend.StackState) (bool, string, error) {
 	return true, "", nil
@@ -335,6 +338,36 @@ func TestDeploymentAdmissionPreservesPolicyOrderAndWaitsForCooldown(t *testing.T
 	}
 	waitScheduleEvent(t, sink, event.RunFinished, "apply")
 	finishSchedule(t, cancel, done)
+}
+
+func TestAPendingProposalDoesNotStarveTheNextStackOfAdmission(t *testing.T) {
+	u, port, _, sink := scheduleFixture(t, 2, 2)
+	port.running = map[string]string{"web": baseDigest}
+	port.transform = func(observed backend.StackState) backend.StackState {
+		observed.GitBacked = true
+		observed.RunningDigests = map[string]string{"web": baseDigest}
+		return observed
+	}
+	for i := range u.policy.Stacks {
+		u.policy.Stacks[i].GitPath = "stacks/" + u.policy.Stacks[i].Name + "/compose.yaml"
+	}
+	proposals := &fakeProposals{result: proposal.Result{URL: "https://github.com/x/y/pull/2", Created: true}}
+	u.proposals = proposals
+	first := state.Key{Backend: domain.BackendPortainer, Stack: "stack-00"}
+	if err := u.state.SetPendingProposal(first, newDigest, "https://github.com/x/y/pull/1", u.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	_, cancel, done := startSchedule(t, u, domain.ModeApply)
+
+	opened := waitScheduleEvent(t, sink, event.ProposalCreated, "")
+	finishSchedule(t, cancel, done)
+
+	if opened.subject.Stack != "stack-01" {
+		t.Fatalf("proposal opened for %s, want stack-01", opened.subject.Stack)
+	}
+	if len(proposals.changes) != 1 || proposals.changes[0].Label != "stack-01" {
+		t.Fatalf("proposals = %+v, want exactly one for stack-01", proposals.changes)
+	}
 }
 
 func BenchmarkObservationPass(b *testing.B) {

@@ -10,6 +10,13 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A Stack whose Proposal is pending review no longer reports `candidate`. The
+  daemon kept admitting it first in policy order, found the Proposal already
+  open, and started the cooldown, so no Stack after it could ever be updated
+  or proposed.
+
 ## [1.3.1] - 2026-10-05
 
 ### Fixed
