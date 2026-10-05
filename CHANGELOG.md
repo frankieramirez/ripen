@@ -10,6 +10,8 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-05
+
 ### Fixed
 
 - Accepting a merged Proposal now waits up to `verification_timeout_seconds`
@@ -154,7 +156,8 @@ Each release's section here is what GitHub shows as the release notes.
   user-owned private repositories, so a release is now refused before it
   publishes anything rather than after.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/frankieramirez/ripen/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/frankieramirez/ripen/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/frankieramirez/ripen/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/frankieramirez/ripen/compare/v1.2.0...v1.3.0
