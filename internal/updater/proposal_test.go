@@ -168,6 +168,29 @@ func TestAPinnedButUnhealthyGitDeploymentOpensTheBreakerWithoutAccepting(t *test
 	}
 }
 
+func TestAGitDeploymentStillStartingIsAcceptedOnceItBecomesHealthy(t *testing.T) {
+	engine := gitBackend()
+	harness := singleHarness(t, gitStack(), engine)
+	ripen(harness, engine, newDigest)
+	harness.expect(harness.run(domain.ModeApply), "", domain.ResultProposed)
+
+	engine.compose = proposedCompose
+	engine.running["web"] = newDigest
+	starting := len(harness.health.checks)
+	harness.health.answer = func(_ config.HealthPolicy, call int) (bool, error) {
+		return call > starting+3, nil
+	}
+	report := harness.run(domain.ModeMonitor)
+
+	harness.expect(report, "", domain.ResultUpdated)
+	if got := harness.accepted(key(domain.BackendPortainer, "")); got != newDigest {
+		t.Errorf("accepted digest = %q, want %q", got, newDigest)
+	}
+	if harness.status().BreakerOpen {
+		t.Error("a deployment that becomes healthy within the verification timeout must not open the breaker")
+	}
+}
+
 func TestAnOperatorCanClearAReviewedStaleProposal(t *testing.T) {
 	engine := gitBackend()
 	harness := singleHarness(t, gitStack(), engine)
