@@ -64,11 +64,28 @@ func TestApplyRedeploysASingleServiceStackWithOneRepull(t *testing.T) {
 	if !engine.lastDeployment().repull {
 		t.Error("a stack observed only through image status must be redeployed with a repull")
 	}
+	if deployed := engine.lastDeployment().compose; deployed != pinnedSingleCompose(newDigest) {
+		t.Errorf("the redeploy must pin the new digest:\n%s", deployed)
+	}
 	if got := harness.accepted(key(domain.BackendPortainer, "")); got != newDigest {
 		t.Errorf("accepted digest = %q, want %q", got, newDigest)
 	}
 	if harness.status().BreakerOpen {
 		t.Error("a successful transaction must leave the breaker closed")
+	}
+}
+
+func TestASingleServiceApplyReplacesThePinAnEarlierRollbackLeftBehind(t *testing.T) {
+	engine := newBackend(domain.BackendPortainer, pinnedSingleCompose(baseDigest))
+	engine.imageStatus = "updated"
+	harness := singleHarness(t, singleStack("media", domain.BackendPortainer), engine)
+	ripen(harness, engine, newDigest)
+
+	report := harness.run(domain.ModeApply)
+
+	harness.expect(report, "", domain.ResultUpdated)
+	if deployed := engine.lastDeployment().compose; deployed != pinnedSingleCompose(newDigest) {
+		t.Errorf("deployed compose kept the stale pin:\n%s", deployed)
 	}
 }
 

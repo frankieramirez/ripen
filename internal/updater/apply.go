@@ -42,9 +42,12 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 		return t.propose(observed, fresh, accepted)
 	}
 
-	deployCompose := fresh.Compose
-	repull := true
-	if observed.runningDigest != "" {
+	deployCompose, err := t.pin(fresh, observed, observed.remoteDigest)
+	if err != nil {
+		return t.failure(observed.key, err), false
+	}
+	repull := observed.runningDigest == ""
+	if !repull {
 		running, err := t.port().RunningDigests(fresh)
 		if err != nil {
 			return t.failure(observed.key, err), false
@@ -56,10 +59,6 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 				Detail: "the running service digest changed before apply",
 			}, false
 		}
-		if deployCompose, err = t.pin(fresh, observed, observed.remoteDigest); err != nil {
-			return t.failure(observed.key, err), false
-		}
-		repull = false
 		if !t.healthyOnce(fresh) {
 			return Result{
 				Key:    observed.key,

@@ -10,6 +10,15 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A single-service Portainer Stack now redeploys with the new digest pinned.
+  Previously the apply redeployed the Compose document unchanged, so a pin
+  written by an earlier rollback turned every later update into a redeploy of
+  the old image that Ripen still recorded as `updated`.
+- A single-service Stack whose declared image pin differs from the accepted
+  Baseline is reported `drifted` instead of being treated as current.
+
 ## [1.3.0] - 2026-09-11
 
 ### Added
