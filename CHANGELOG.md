@@ -10,6 +10,8 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-05
+
 ### Fixed
 
 - A single-service Portainer Stack now redeploys with the new digest pinned.
@@ -136,7 +138,8 @@ Each release's section here is what GitHub shows as the release notes.
   user-owned private repositories, so a release is now refused before it
   publishes anything rather than after.
 
-[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/frankieramirez/ripen/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/frankieramirez/ripen/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/frankieramirez/ripen/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/frankieramirez/ripen/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/frankieramirez/ripen/compare/v1.0.0...v1.1.0
