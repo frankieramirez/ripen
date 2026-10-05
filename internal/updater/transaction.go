@@ -190,11 +190,15 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 		return t.failure(observed.key, err), false
 	}
 
-	if pending != nil && pending.Digest != observed.remoteDigest {
+	if pending != nil {
+		detail := "a proposal is already pending review"
+		if pending.Digest != observed.remoteDigest {
+			detail = "a different proposal is still pending review"
+		}
 		return Result{
 			Key:    observed.key,
 			Code:   domain.ResultIneligible,
-			Detail: "a different proposal is still pending review",
+			Detail: detail,
 			Digest: pending.Digest,
 		}, false
 	}
