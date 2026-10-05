@@ -59,6 +59,9 @@ var (
 	// ErrNotProposable means the stack exists but has no proposal path:
 	// no git_path, or no forge configured.
 	ErrNotProposable = errors.New("this stack has no proposal configuration")
+	// ErrRebaselineRefused means the running digest could not be proven,
+	// the stack was not healthy, or the request named nothing to rebaseline.
+	ErrRebaselineRefused = errors.New("cannot rebaseline")
 )
 
 // Result is one Service's outcome in a run.

@@ -116,7 +116,7 @@ func dispatch(command string, args []string, stream io.Writer) (response.Envelop
 				"the only notify subcommand is `notify test`"), ExitUsage, false
 		}
 		return withApp("notify-test", args[1:], stream)
-	case "status", "candidates", "audit", "explain", "run", "propose", "clear-proposal", "clear-breaker":
+	case "status", "candidates", "audit", "explain", "run", "propose", "clear-proposal", "clear-breaker", "rebaseline":
 		return withApp(command, args, stream)
 	default:
 		return response.Fail(command, now(), response.CodeUsage,
@@ -190,6 +190,9 @@ func registerFlags(command string, flags *flag.FlagSet) *verbOptions {
 		flags.StringVar(&options.result, "result", "", "only attempts with one result code")
 	case "clear-breaker", "clear-proposal":
 		flags.StringVar(&options.reason, "reason", "", "why this is being cleared; recorded")
+	case "rebaseline":
+		flags.StringVar(&options.service, "service", "", "the service to rebaseline in a multi-service stack")
+		flags.StringVar(&options.reason, "reason", "", "why the running digest should stand; recorded")
 	}
 	return options
 }
@@ -204,7 +207,7 @@ func execute(loaded *app.App, command string, options *verbOptions,
 	case "audit":
 		return auditVerb(loaded, options)
 	case "explain":
-		stack, envelope, ok := argument(command, options, "a stack name is required")
+		stack, envelope, ok := stackArgument(command, options)
 		if !ok {
 			return envelope, ExitUsage
 		}
@@ -217,6 +220,8 @@ func execute(loaded *app.App, command string, options *verbOptions,
 		return clearProposalVerb(loaded, options, stream)
 	case "clear-breaker":
 		return clearBreakerVerb(loaded, options, stream)
+	case "rebaseline":
+		return rebaselineVerb(loaded, options, stream)
 	case "notify-test":
 		return notifyTestVerb(loaded, stream)
 	default:
@@ -276,7 +281,7 @@ func runVerb(loaded *app.App, options *verbOptions, stream io.Writer) (response.
 }
 
 func proposeVerb(loaded *app.App, options *verbOptions, stream io.Writer) (response.Envelope, int) {
-	stack, envelope, ok := argument("propose", options, "a stack name is required")
+	stack, envelope, ok := stackArgument("propose", options)
 	if !ok {
 		return envelope, ExitUsage
 	}
@@ -305,7 +310,7 @@ func proposeVerb(loaded *app.App, options *verbOptions, stream io.Writer) (respo
 
 func clearProposalVerb(loaded *app.App, options *verbOptions,
 	stream io.Writer) (response.Envelope, int) {
-	stack, envelope, ok := argument("clear-proposal", options, "a stack name is required")
+	stack, envelope, ok := stackArgument("clear-proposal", options)
 	if !ok {
 		return envelope, ExitUsage
 	}
@@ -355,6 +360,37 @@ func clearBreakerVerb(loaded *app.App, options *verbOptions,
 		Reason:  options.reason,
 		Breaker: response.Breaker{Open: status.BreakerOpen, Reason: response.Optional(status.BreakerReason)},
 		Detail:  "the circuit breaker is closed",
+	}), ExitOK
+}
+
+func rebaselineVerb(loaded *app.App, options *verbOptions,
+	stream io.Writer) (response.Envelope, int) {
+	stack, envelope, ok := stackArgument("rebaseline", options)
+	if !ok {
+		return envelope, ExitUsage
+	}
+	if strings.TrimSpace(options.reason) == "" {
+		return response.Fail("rebaseline", now(), response.CodeUsage,
+			"--reason is required: accepting a change made outside Ripen is a decision, and it is recorded"), ExitUsage
+	}
+	engine, drain, err := engineFor(loaded, stream)
+	if err != nil {
+		return failure("rebaseline", err)
+	}
+	defer drain()
+	result, err := engine.Rebaseline(stack, options.service, options.reason)
+	if err != nil {
+		return failure("rebaseline", err)
+	}
+	status, err := engine.Status()
+	if err != nil {
+		return failure("rebaseline", err)
+	}
+	return response.Succeed("rebaseline", now(), response.Acknowledged{
+		Changed: result.Code == domain.ResultBaselined,
+		Reason:  options.reason,
+		Breaker: response.Breaker{Open: status.BreakerOpen, Reason: response.Optional(status.BreakerReason)},
+		Detail:  fmt.Sprintf("%s: %s", result.Detail, result.Digest),
 	}), ExitOK
 }
 
@@ -559,9 +595,9 @@ type nopCloser struct {
 
 func (nopCloser) Close() error { return nil }
 
-func argument(command string, options *verbOptions, message string) (string, response.Envelope, bool) {
+func stackArgument(command string, options *verbOptions) (string, response.Envelope, bool) {
 	if len(options.arguments) != 1 || options.arguments[0] == "" {
-		return "", response.Fail(command, now(), response.CodeUsage, message), false
+		return "", response.Fail(command, now(), response.CodeUsage, "a stack name is required"), false
 	}
 	return options.arguments[0], response.Envelope{}, true
 }
@@ -576,7 +612,7 @@ func failure(command string, err error) (response.Envelope, int) {
 		return response.Fail(command, now(), response.CodeBackendUnavailable, err.Error()), ExitOperation
 	case errors.Is(err, updater.ErrUnknownStack):
 		return response.Fail(command, now(), response.CodeNotFound, err.Error()), ExitOperation
-	case errors.Is(err, updater.ErrNotProposable):
+	case errors.Is(err, updater.ErrNotProposable), errors.Is(err, updater.ErrRebaselineRefused):
 		return response.Fail(command, now(), response.CodePreconditionFailed, err.Error()), ExitOperation
 	default:
 		return response.Fail(command, now(), response.CodeInternal, err.Error()), ExitOperation
@@ -608,6 +644,7 @@ func usage(writer io.Writer) {
 	fmt.Fprintln(writer, "  propose <stack>             open a digest-pin proposal")
 	fmt.Fprintln(writer, "  clear-proposal <stack> --reason <why>")
 	fmt.Fprintln(writer, "  clear-breaker --reason <why>")
+	fmt.Fprintln(writer, "  rebaseline <stack> [--service name] --reason <why>  accept the proven running digest")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "  daemon [--once] [--success-reports=false]  run on the configured interval")
 	fmt.Fprintln(writer, "  notify test                 send a real event through the webhook")

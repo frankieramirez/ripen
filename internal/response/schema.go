@@ -12,7 +12,7 @@ const dialect = "https://json-schema.org/draft/2020-12/schema"
 // order the documentation lists them.
 var Commands = []string{
 	"status", "candidates", "audit", "explain",
-	"run", "propose", "clear-proposal", "clear-breaker",
+	"run", "propose", "clear-proposal", "clear-breaker", "rebaseline",
 	"notify-test", "schema", "version",
 }
 
@@ -26,6 +26,7 @@ func payloads() map[string]reflect.Type {
 		"propose":        reflect.TypeOf(Proposed{}),
 		"clear-proposal": reflect.TypeOf(Acknowledged{}),
 		"clear-breaker":  reflect.TypeOf(Acknowledged{}),
+		"rebaseline":     reflect.TypeOf(Acknowledged{}),
 		"notify-test":    reflect.TypeOf(NotifyTest{}),
 		"schema":         reflect.TypeOf(SchemaSet{}),
 		"version":        reflect.TypeOf(Version{}),

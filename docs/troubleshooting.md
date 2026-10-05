@@ -26,7 +26,7 @@ Each per-Service result in a run report is one of these.
 | `rolled_back` | Verification failed; the Baseline was restored; the breaker is open. | Find out why health failed, fix it, then clear the breaker with a reason. |
 | `rollback_failed` | The rollback did not verify either. | Attend to it now. The Service may be down. |
 | `breaker_open` | The breaker is open, so nothing outbound happened. | Clear it once the cause is fixed. |
-| `drifted` | Something changed between planning and applying, or outside Ripen. | Look at what changed. Ripen will re-baseline only what it can prove. |
+| `drifted` | Something changed between planning and applying, or outside Ripen. | Look at what changed. If it should stand, run `ripen rebaseline` (below). |
 | `ineligible` | The stack does not match the reviewed policy, or a precondition failed. | Read the detail; it says which. |
 | `not_visible` | The policy names a stack the backend cannot see. | Check the automation user's access, or the stack name. |
 | `engine_unavailable` | The backend could not be reached at all. | Fix the engine or the connection. No stack fault, no breaker. |
@@ -51,6 +51,22 @@ ripen clear-breaker --reason "restored the previous image by hand; jellyfin is s
 The reason is mandatory and recorded. There is no button for this in the Web UI,
 and no MCP tool: a breaker was opened because something needed a person, so a
 person clears it.
+
+## A Service drifted and the change should stand
+
+`drifted` means the Service is running a digest Ripen did not deploy, usually a
+pin someone changed by hand. Ripen will not act on that Service until it has a
+Baseline it can trust. When you have decided the running digest is the one you
+want:
+
+```bash
+ripen rebaseline arr --service radarr --reason "pinned by hand in a reviewed pull request"
+```
+
+Leave out `--service` for a single-service stack. Ripen records the running
+digest only when the backend proves what every expected Service is running and
+every health check passes, and it refuses while a Proposal for that Service is
+pending or a Transaction is interrupted. Like the breaker, this is CLI-only.
 
 ## Nothing ever becomes mature
 

@@ -413,6 +413,20 @@ func TestClearBreakerRequiresAReasonAndThenClosesIt(t *testing.T) {
 	}
 }
 
+func TestRebaselineRequiresAReasonAndReportsAnUnknownStackAsNotFound(t *testing.T) {
+	configPath, _ := policyFile(t)
+
+	refused := invoke(t, configPath, "rebaseline", "media")
+	unknown := invoke(t, configPath, "rebaseline", "nope", "--reason", "pinned by hand")
+
+	if refused.code != ExitUsage || refused.envelope.Error.Code != response.CodeUsage {
+		t.Errorf("rebaselining without a reason = %d %+v, want a usage error", refused.code, refused.envelope.Error)
+	}
+	if unknown.code != ExitOperation || unknown.envelope.Error.Code != response.CodeNotFound {
+		t.Errorf("rebaselining an unknown stack = %d %+v, want not_found", unknown.code, unknown.envelope.Error)
+	}
+}
+
 func TestAnOpenBreakerMakesAnApplyRunAskForAHuman(t *testing.T) {
 	configPath, statePath := policyFile(t)
 	store := openStore(t, statePath)

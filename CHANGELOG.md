@@ -10,6 +10,15 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- `ripen rebaseline <stack> [--service name] --reason "…"` accepts a drifted
+  Service's running digest as its Baseline. It refuses unless the backend
+  proves what every expected Service is running and every health check
+  passes, and while a Proposal for that Service is pending or a Transaction is
+  interrupted. The reason is recorded in the audit trail. Like
+  `clear-breaker`, it is CLI-only: there is no MCP tool and no Web UI action.
+
 ## [1.3.3] - 2026-10-05
 
 ### Fixed

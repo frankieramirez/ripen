@@ -124,9 +124,11 @@ them:
 | `ripen propose <stack>` | Open the Proposal for a matured Candidate. |
 | `ripen clear-proposal <stack> --reason "…"` | Drop a reviewed, stale Proposal. |
 | `ripen clear-breaker --reason "…"` | Close the Circuit breaker. |
+| `ripen rebaseline <stack> [--service name] --reason "…"` | Accept a drifted Service's proven running digest as its Baseline. |
 
-Both `clear-` verbs require a reason, and it is recorded. An operator saying what
-they fixed is the point of the gate.
+The `clear-` verbs and `rebaseline` require a reason, and it is recorded. An
+operator saying what they fixed, or why a change should stand, is the point of
+the gate.
 
 ### Process verbs
 

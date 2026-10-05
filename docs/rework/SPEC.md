@@ -71,7 +71,7 @@ A Go rewrite of the existing Python updater, keeping its fail-closed Transaction
 [Design the agent surface](https://github.com/frankieramirez/ripen/issues/17) — full resolution on the ticket. Skeleton:
 
 - **The spine**: MCP is a strict subset of the CLI — every MCP tool maps to a CLI verb with the same name, guard, parameters, and payload. `clear_breaker` and Apply mode are absent from MCP *by construction*.
-- **Verbs**: `status`, `candidates`, `audit`, `explain <stack>` (reads); `run --mode monitor`, `propose <stack>` (new), `clear-proposal` (writes); `run --mode apply`, `clear-breaker`, `daemon`, `notify test`, `mcp`, `schema` (CLI-only).
+- **Verbs**: `status`, `candidates`, `audit`, `explain <stack>` (reads); `run --mode monitor`, `propose <stack>` (new), `clear-proposal` (writes); `run --mode apply`, `clear-breaker`, `rebaseline`, `daemon`, `notify test`, `mcp`, `schema` (CLI-only).
 - **Response envelope**: JSON by default (no `--json` flag); `--pretty` is an explicit rendering of the same payload on the four read verbs, never TTY-detected. `schema_version`/`command`/`occurred_at`/`ok`/`data`, failures in the same envelope with a typed `error` (closed code set, each with `retryable`).
 - **Exit codes**: 0 success, 1 operational, 2 config/usage, **3 human attention required** (breaker open or `rollback_failed`; read narrowly). Ungated.
 - **Identity**: every read emits `backend`/`stack`/`service` (`service` nullable); `state_key` never appears in JSON. `backend` enum has three values from v1.
@@ -257,6 +257,7 @@ Extracted from the Python test suite (2026-08-18). **This list gated the Python-
 - [x] Observation concurrency defaults to two and accepts only integers from one through eight. Go: `config.TestObservationConcurrencyDefaultsToTwo`, `config.TestObservationConcurrencyAcceptsOneThroughEight`, `config.TestObservationConcurrencyRefusesInvalidLimits`.
 - [x] Renewal cannot revive expired or superseded ownership; reconciliation writes refuse a lost lease. Go: `state.TestLeaseRenewalCannotReviveExpiredOrSupersededOwnership`, `state.TestGuardedReconciliationWritesRefuseLostOwnership`.
 - [x] An interrupted Transaction survives lease expiry and prevents competing deployment. Go: `state.TestInterruptedTransactionSurvivesExpiredLeaseAndBlocksNewDeployment`.
+- [x] An operator can rebaseline a drifted Service to its proven running digest with a recorded reason; it refuses without proof, health, or a reason, and while a Proposal is pending. Go: `updater.TestRebaselineAcceptsTheProvenRunningDigestOfADriftedService`, `updater.TestRebaselineRefusesAnUnhealthyStackAndKeepsTheBaseline`, `updater.TestRebaselineRefusesWhatItCannotProveOrWasNotAskedToDecide`, `updater.TestRebaselineRefusesADigestTheBackendCannotProve`, `cli.TestRebaselineRequiresAReasonAndReportsAnUnknownStackAsNotFound`.
 - [x] Proposal reconciliation cannot restore a Proposal cleared by an operator. Go: `state.TestProposalReconciliationCannotUndoConcurrentOperatorClear`.
 - [x] State migration preserves v1 data and refuses newer database versions. Go: `state.TestMigrationPreservesVersionOneStateAndRefusesNewerDatabases`.
 - [x] Opening current state reads the committed Baseline without competing with an active writer. Go: `state.TestOpeningCurrentStateDoesNotCompeteWithAnActiveWriter`.
