@@ -177,6 +177,14 @@ func (t *transaction) evaluate(observed observation, slotAvailable bool) (Result
 			Digest: observed.runningDigest,
 		}, false
 	}
+	if pin := observed.image.PinnedDigest; observed.runningDigest == "" && pin != "" && pin != accepted {
+		return Result{
+			Key:    observed.key,
+			Code:   domain.ResultDrifted,
+			Detail: "the declared image pin differs from the accepted baseline",
+			Digest: pin,
+		}, false
+	}
 	t.recovered(observed, accepted, now)
 	if err := t.updater.checkOwnership(); err != nil {
 		return t.failure(observed.key, err), false

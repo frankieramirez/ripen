@@ -122,6 +122,29 @@ func TestMonitorReportsANewRegistryDigestAsACandidateWithoutRedeploying(t *testi
 	}
 }
 
+func TestASingleServicePinThatDisagreesWithTheBaselineIsDriftNotAnUpdate(t *testing.T) {
+	engine := newBackend(domain.BackendPortainer, pinnedSingleCompose(newDigest))
+	engine.imageStatus = "updated"
+	harness := singleHarness(t, singleStack("media", domain.BackendPortainer), engine)
+	harness.registry.digests[webImage] = newDigest
+	harness.run(domain.ModeMonitor)
+	engine.compose = pinnedSingleCompose(baseDigest)
+	engine.imageStatus = "outdated"
+
+	report := harness.run(domain.ModeApply)
+
+	result := harness.expect(report, "", domain.ResultDrifted)
+	if result.Digest != baseDigest {
+		t.Errorf("drift digest = %q, want the declared pin %q", result.Digest, baseDigest)
+	}
+	if got := harness.accepted(key(domain.BackendPortainer, "")); got != newDigest {
+		t.Errorf("accepted digest = %q, want the baseline untouched", got)
+	}
+	if len(engine.deployments) != 0 {
+		t.Errorf("deployments = %d, want none", len(engine.deployments))
+	}
+}
+
 func TestAStackTheBackendCannotSeeIsReportedNotVisible(t *testing.T) {
 	engine := newBackend(domain.BackendPortainer, singleCompose)
 	engine.observeErr = backend.NotVisible("media")

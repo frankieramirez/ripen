@@ -33,6 +33,10 @@ const (
 		"\n  sidecar:\n    image: " + sidecarImage + "\n"
 )
 
+func pinnedSingleCompose(digest string) string {
+	return "services:\n  web:\n    image: \"" + webImage + "@" + digest + "\"\n"
+}
+
 type deployment struct {
 	compose string
 	repull  bool
