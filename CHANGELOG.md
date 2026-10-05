@@ -10,6 +10,13 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Accepting a merged Proposal now waits up to `verification_timeout_seconds`
+  for the deployed Stack to become healthy, as a direct apply does. It used to
+  check health once, so a Stack observed while still starting opened the
+  breaker.
+
 ## [1.3.2] - 2026-10-05
 
 ### Fixed

@@ -297,7 +297,7 @@ func (t *transaction) baseline(observed observation, now time.Time) (Result, boo
 
 func (t *transaction) acceptGitDeployment(observed observation, accepted string, pending state.PendingProposal,
 	now time.Time) (Result, bool) {
-	healthy := t.healthyOnce(observed.stack)
+	healthy := t.waitForHealth(observed.stack)
 	if err := t.updater.checkOwnership(); err != nil {
 		return t.failure(observed.key, err), false
 	}
