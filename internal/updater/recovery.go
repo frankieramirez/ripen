@@ -36,7 +36,7 @@ func (u *Updater) ReconcileTransaction(reason string) (state.Status, error) {
 		return state.Status{}, errors.New("no interrupted transaction requires reconciliation")
 	}
 	if marker.Phase == "proposing" {
-		return state.Status{}, errors.New("cannot reconcile an interrupted proposal without proving the external proposal request has settled")
+		return u.settleProposal(owner, token, *marker, reason)
 	}
 	var stack *config.StackPolicy
 	for i := range u.policy.Stacks {
@@ -97,6 +97,32 @@ func (u *Updater) ReconcileTransaction(reason string) (state.Status, error) {
 	}
 	attempt := state.Attempt{Key: marker.Key, RunID: marker.RunID, Actor: u.actor, OldDigest: accepted, NewDigest: accepted, Result: domain.ResultUpToDate, Detail: "explicitly reconciled the healthy accepted baseline after the backend request finished: " + reason}
 	if err := owner.state.ReconcileTransaction(token, attempt, reason, u.clock.Now()); err != nil {
+		return state.Status{}, err
+	}
+	u.emit(event.BreakerCleared, event.Subject{}, event.Data{Reason: reason})
+	return u.Status()
+}
+
+func (u *Updater) settleProposal(owner *Updater, token string, marker state.TransactionProgress,
+	reason string) (state.Status, error) {
+	if owner.proposals == nil {
+		return state.Status{}, errors.New("cannot reconcile an interrupted proposal: no forge is configured to prove it settled")
+	}
+	exists, err := owner.proposals.BranchExists(label(marker.Key))
+	if err != nil {
+		return state.Status{}, err
+	}
+	if exists {
+		return state.Status{}, errors.New("cannot reconcile an interrupted proposal: a proposal branch for it is on the forge; " +
+			"review it, then merge it or close it and delete the branch")
+	}
+	accepted, _, err := owner.state.AcceptedDigest(marker.Key)
+	if err != nil {
+		return state.Status{}, err
+	}
+	attempt := state.Attempt{Key: marker.Key, RunID: marker.RunID, Actor: u.actor, OldDigest: accepted, NewDigest: accepted,
+		Result: domain.ResultIneligible, Detail: "explicitly reconciled an interrupted proposal that left no branch on the forge: " + reason}
+	if err := owner.state.SettleProposal(token, attempt, reason, u.clock.Now()); err != nil {
 		return state.Status{}, err
 	}
 	u.emit(event.BreakerCleared, event.Subject{}, event.Data{Reason: reason})

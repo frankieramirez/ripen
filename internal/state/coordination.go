@@ -431,6 +431,18 @@ func (s *Store) CompleteTransaction(token string, attempt Attempt, acceptedDiges
 
 // ReconcileTransaction records an explicitly verified interrupted Transaction and clears its breaker atomically.
 func (s *Store) ReconcileTransaction(token string, attempt Attempt, reason string, now time.Time) error {
+	return s.reconcile(token, attempt, reason, now,
+		"DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase!='proposing'")
+}
+
+// SettleProposal records an interrupted Proposal request proven to have left
+// nothing on the forge, and clears its breaker atomically.
+func (s *Store) SettleProposal(token string, attempt Attempt, reason string, now time.Time) error {
+	return s.reconcile(token, attempt, reason, now,
+		"DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase='proposing'")
+}
+
+func (s *Store) reconcile(token string, attempt Attempt, reason string, now time.Time, removeMarker string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -439,7 +451,7 @@ func (s *Store) ReconcileTransaction(token string, attempt Attempt, reason strin
 	if err := checkLease(tx, token, now); err != nil {
 		return err
 	}
-	result, err := tx.Exec("DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase!='proposing'", attempt.RunID, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service)
+	result, err := tx.Exec(removeMarker, attempt.RunID, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service)
 	if err := requireOwner(result, err); err != nil {
 		return err
 	}

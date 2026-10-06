@@ -109,6 +109,7 @@ func TestExplicitReconciliationCannotClearAnUncertainProposal(t *testing.T) {
 	if err := h.store.SetTransactionPhase(marker.OwnerToken, "proposing", h.clock.Now()); err != nil {
 		t.Fatal(err)
 	}
+	h.proposals.branchExists = true
 
 	_, err = h.updater.ReconcileTransaction("backend request finished")
 
@@ -117,5 +118,34 @@ func TestExplicitReconciliationCannotClearAnUncertainProposal(t *testing.T) {
 	}
 	if engine.observations != 0 {
 		t.Fatal("proposal reconciliation read the backend")
+	}
+}
+
+func TestExplicitReconciliationSettlesAProposalThatLeftNoBranch(t *testing.T) {
+	h, engine, key := recoveryHarness(t)
+	marker, err := h.store.ActiveTransaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.SetTransactionPhase(marker.OwnerToken, "proposing", h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := h.updater.ReconcileTransaction("checked the forge: no proposal branch exists")
+
+	if err != nil || status.BreakerOpen {
+		t.Fatalf("status = %+v, err = %v; want the breaker closed", status, err)
+	}
+	if marker, _ := h.store.ActiveTransaction(); marker != nil {
+		t.Errorf("marker = %+v, want the settled proposal cleared", marker)
+	}
+	if got := h.accepted(key); got != baseDigest {
+		t.Errorf("accepted digest = %q, want the baseline untouched", got)
+	}
+	if len(h.proposals.branchChecks) != 1 || h.proposals.branchChecks[0] != "media" {
+		t.Errorf("branch checks = %v, want one for the interrupted service", h.proposals.branchChecks)
+	}
+	if engine.observations != 0 {
+		t.Error("settling a proposal must not read the backend")
 	}
 }

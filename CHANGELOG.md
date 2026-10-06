@@ -10,6 +10,17 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A Proposal the forge refuses before writing anything, such as a repository
+  file that differs from the live Compose file, no longer leaves an
+  interrupted Transaction behind. That marker blocked every apply and
+  Proposal, and nothing could clear it. The Service now reports `ineligible`
+  with the forge's reason.
+- `clear-breaker --reconcile` can settle an interrupted `proposing` phase once
+  the forge shows no Ripen branch for that Service. It still refuses while a
+  branch exists.
+
 ## [1.4.0] - 2026-10-05
 
 ### Added

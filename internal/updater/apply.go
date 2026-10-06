@@ -252,6 +252,12 @@ func (t *transaction) propose(observed observation, fresh backend.StackState, ac
 		ProposedContent: proposed,
 		Digest:          observed.remoteDigest,
 	})
+	if errors.Is(err, proposal.ErrNothingWritten) {
+		if finishErr := t.updater.state.FinishTransaction(t.updater.token); finishErr != nil {
+			return t.failure(observed.key, finishErr), false
+		}
+		return Result{Key: observed.key, Code: domain.ResultIneligible, Detail: err.Error()}, false
+	}
 	if err != nil {
 		return t.failure(observed.key, err), false
 	}
