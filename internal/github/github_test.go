@@ -3,6 +3,7 @@ package github
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -213,8 +214,29 @@ func TestProposingRefusesWhenTheRepositorySourceHasDrifted(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "differs from the live") {
 		t.Errorf("error = %v, want the source-drift refusal", err)
 	}
+	if !errors.Is(err, proposal.ErrNothingWritten) {
+		t.Errorf("error = %v, want it marked as having written nothing", err)
+	}
 	if forge.called(http.MethodPut) || forge.called(http.MethodPost) {
 		t.Error("a drifted source must not be written to")
+	}
+}
+
+func TestAProposalBranchIsFoundByItsServiceLabel(t *testing.T) {
+	matching := repo + "/git/matching-refs/heads/ripen/media-web-"
+	present := &fakeForge{routes: map[string]any{
+		"GET " + matching: []any{map[string]any{"ref": "refs/heads/ripen/media-web-111111111111"}},
+	}}
+	absent := &fakeForge{routes: map[string]any{"GET " + matching: []any{}}}
+
+	found, err := adapterFor(t, present).BranchExists("media/web")
+	missing, missingErr := adapterFor(t, absent).BranchExists("media/web")
+
+	if err != nil || !found {
+		t.Errorf("present branch = %v, %v; want found", found, err)
+	}
+	if missingErr != nil || missing {
+		t.Errorf("absent branch = %v, %v; want not found", missing, missingErr)
 	}
 }
 

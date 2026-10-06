@@ -206,9 +206,16 @@ func (f *fakeHealth) checksFor(target string) int {
 }
 
 type fakeProposals struct {
-	changes []proposal.Change
-	result  proposal.Result
-	err     error
+	changes      []proposal.Change
+	result       proposal.Result
+	err          error
+	branchExists bool
+	branchChecks []string
+}
+
+func (f *fakeProposals) BranchExists(label string) (bool, error) {
+	f.branchChecks = append(f.branchChecks, label)
+	return f.branchExists, nil
 }
 
 func (f *fakeProposals) Propose(change proposal.Change) (proposal.Result, error) {

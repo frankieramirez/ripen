@@ -109,31 +109,31 @@ func New(options Options) (*Adapter, error) {
 // Propose opens (or finds) the digest-pin pull request for one change.
 func (a *Adapter) Propose(change proposal.Change) (proposal.Result, error) {
 	if !digestPattern.MatchString(change.Digest) {
-		return proposal.Result{}, errors.New("a proposal digest must be a sha256 digest")
+		return proposal.Result{}, unwritten(errors.New("a proposal digest must be a sha256 digest"))
 	}
 	if err := validRepositoryPath(change.RepositoryPath); err != nil {
-		return proposal.Result{}, err
+		return proposal.Result{}, unwritten(err)
 	}
 	filePath := escapePath(change.RepositoryPath)
 	baseRef := url.QueryEscape(a.baseBranch)
 
 	basePayload, err := a.request(http.MethodGet, "/contents/"+filePath+"?ref="+baseRef, nil, false)
 	if err != nil {
-		return proposal.Result{}, err
+		return proposal.Result{}, unwritten(err)
 	}
 	baseContent, baseFileSHA, err := repositoryFile(basePayload)
 	if err != nil {
-		return proposal.Result{}, err
+		return proposal.Result{}, unwritten(err)
 	}
 	if subtle.ConstantTimeCompare([]byte(baseContent), []byte(change.ExpectedContent)) != 1 {
-		return proposal.Result{}, errors.New(
-			"the repository source differs from the live reviewed compose file")
+		return proposal.Result{}, unwritten(errors.New(
+			"the repository source differs from the live reviewed compose file"))
 	}
 
 	short := strings.TrimPrefix(change.Digest, "sha256:")[:12]
 	branch, err := branchName(change.Label, short)
 	if err != nil {
-		return proposal.Result{}, err
+		return proposal.Result{}, unwritten(err)
 	}
 	encodedBranch := url.QueryEscape(branch)
 
@@ -341,6 +341,28 @@ func pullURL(payload any) (string, bool) {
 	}
 	url, ok := mapped["html_url"].(string)
 	return url, ok && url != ""
+}
+
+// BranchExists reports whether any Proposal branch for the label is on the
+// forge, whatever digest it pins.
+func (a *Adapter) BranchExists(label string) (bool, error) {
+	prefix, err := branchName(label, "")
+	if err != nil {
+		return false, err
+	}
+	payload, err := a.request(http.MethodGet, "/git/matching-refs/heads/"+escapePath(prefix), nil, false)
+	if err != nil {
+		return false, err
+	}
+	refs, ok := payload.([]any)
+	if !ok {
+		return false, errors.New("GitHub returned an unreadable branch list")
+	}
+	return len(refs) > 0, nil
+}
+
+func unwritten(err error) error {
+	return fmt.Errorf("%w (%w)", err, proposal.ErrNothingWritten)
 }
 
 func branchName(label, shortDigest string) (string, error) {

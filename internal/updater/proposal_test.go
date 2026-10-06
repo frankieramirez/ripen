@@ -1,12 +1,15 @@
 package updater
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/event"
+	"github.com/frankieramirez/ripen/internal/proposal"
 )
 
 func gitStack() config.StackPolicy {
@@ -81,6 +84,42 @@ func TestApplyRefusesToDetachAGitBackedStackWithNoProposalConfiguration(t *testi
 	}
 	if harness.status().BreakerOpen {
 		t.Error("refusing to act is not a failure; the breaker must stay closed")
+	}
+}
+
+func TestAProposalRefusedBeforeAnyWriteLeavesNoInterruptedTransaction(t *testing.T) {
+	engine := gitBackend()
+	harness := singleHarness(t, gitStack(), engine)
+	ripen(harness, engine, newDigest)
+	harness.proposals.err = fmt.Errorf("the repository source differs from the live reviewed compose file (%w)",
+		proposal.ErrNothingWritten)
+
+	refused := harness.run(domain.ModeApply)
+	marker, err := harness.store.ActiveTransaction()
+	harness.proposals.err = nil
+	retried := harness.run(domain.ModeApply)
+
+	result := harness.expect(refused, "", domain.ResultIneligible)
+	if !strings.Contains(result.Detail, "differs from the live") {
+		t.Errorf("detail = %q, want the forge's refusal", result.Detail)
+	}
+	if err != nil || marker != nil {
+		t.Fatalf("marker = %+v, %v; want none after a refusal that wrote nothing", marker, err)
+	}
+	harness.expect(retried, "", domain.ResultProposed)
+}
+
+func TestAProposalThatMayHaveWrittenKeepsItsInterruptedTransaction(t *testing.T) {
+	engine := gitBackend()
+	harness := singleHarness(t, gitStack(), engine)
+	ripen(harness, engine, newDigest)
+	harness.proposals.err = errors.New("GitHub HTTP 502: bad gateway")
+
+	harness.run(domain.ModeApply)
+	marker, err := harness.store.ActiveTransaction()
+
+	if err != nil || marker == nil || marker.Phase != "proposing" {
+		t.Fatalf("marker = %+v, %v; want the uncertain proposal kept", marker, err)
 	}
 }
 

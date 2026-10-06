@@ -83,10 +83,16 @@ removes the interrupted marker, and clears the breaker. It refuses an active
 lease, missing Baseline, or unproven recovery. It does not deploy or roll back
 the stack for you.
 
-An interrupted `proposing` phase remains blocked: this command cannot prove
-whether the external Proposal request created a pull request. Inspect the
-external repository and resolve that uncertainty before seeking recovery;
-healthy containers alone cannot reconcile a Proposal request.
+An interrupted `proposing` phase is settled differently: healthy containers
+cannot prove whether the Proposal request created a pull request, so Ripen asks
+the forge instead. If no Ripen branch for that Service exists, `--reconcile`
+records the reason, removes the interrupted marker, and clears the breaker
+without reading the backend. If a branch exists, it refuses: review that pull
+request, then merge it or close it and delete the branch, and run it again.
+
+A Proposal the forge refuses before anything is written, such as a repository
+file that no longer matches the live Compose file, never leaves a marker. The
+Service reports `ineligible` with the forge's reason instead.
 
 ## Stacks
 

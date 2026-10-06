@@ -4,6 +4,12 @@
 // merges it, and the next Monitor run confirms what the forge deployed.
 package proposal
 
+import "errors"
+
+// ErrNothingWritten marks a Propose failure that happened before the forge
+// was asked to write anything, so no Proposal can exist because of it.
+var ErrNothingWritten = errors.New("nothing was written to the forge")
+
 // Change is one digest-pin Proposal to open.
 type Change struct {
 	// Label names the Service the pin belongs to, as an operator reads
@@ -32,4 +38,7 @@ type Result struct {
 // Port opens digest-pin Proposals on a forge.
 type Port interface {
 	Propose(change Change) (Result, error)
+	// BranchExists reports whether any Proposal branch for the label is on
+	// the forge, so an interrupted Proposal request can be proven settled.
+	BranchExists(label string) (bool, error)
 }
