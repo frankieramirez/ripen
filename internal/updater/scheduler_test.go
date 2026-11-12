@@ -15,6 +15,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/event"
+	"github.com/frankieramirez/ripen/internal/health"
 	"github.com/frankieramirez/ripen/internal/proposal"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/state"
@@ -45,7 +46,9 @@ func (scheduleRegistry) ResolvePlatformDigest(domain.ImageReference, registry.Pl
 
 type scheduleHealth struct{}
 
-func (scheduleHealth) Check(config.HealthPolicy) (bool, error) { return true, nil }
+func (scheduleHealth) Check(config.HealthPolicy) (health.Answer, error) {
+	return health.Answer{Healthy: true, Status: 200}, nil
+}
 
 type scheduleBackend struct {
 	mu          sync.Mutex

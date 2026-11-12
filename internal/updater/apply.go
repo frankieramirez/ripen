@@ -87,19 +87,21 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 		if err := t.phase("verifying"); err != nil {
 			return t.failure(observed.key, err), true
 		}
-		if t.waitForHealth(fresh) && t.runningDigestIs(observed, observed.remoteDigest) {
+		failure = t.unverified(fresh, observed, observed.remoteDigest)
+		if failure == "" {
 			return t.succeed(observed, accepted, "updated and passed functional health verification")
 		}
-		failure = "the functional health check timed out"
 	case isTimeout(err):
 		if err := t.phase("verifying"); err != nil {
 			return t.failure(observed.key, err), true
 		}
-		if t.waitForConfirmation(observed, fresh) {
+		unproven := t.awaitConfirmation(observed, fresh)
+		if unproven == "" {
 			return t.succeed(observed, accepted,
 				"the deploy response timed out, but image status and health proved success")
 		}
-		failure = fmt.Sprintf("the deploy response timed out and could not be proven: %v", err)
+		failure = fmt.Sprintf("the deploy response timed out and could not be proven: %v; at the last check %s",
+			err, unproven)
 	default:
 		failure = fmt.Sprintf("the deploy failed: %v", err)
 	}
@@ -151,10 +153,13 @@ func (t *transaction) rollback(observed observation, accepted, failure string) (
 	}
 
 	healthy := false
+	unrestored := "rollback health verification failed"
 	if err := t.port().Deploy(observed.stack, rollbackCompose, observed.runningDigest == ""); err != nil {
 		reason = fmt.Sprintf("%s; the rollback request failed: %v", reason, err)
+	} else if unverified := t.unverified(observed.stack, observed, accepted); unverified != "" {
+		unrestored = fmt.Sprintf("%s: %s", unrestored, unverified)
 	} else {
-		healthy = t.waitForHealth(observed.stack) && t.runningDigestIs(observed, accepted)
+		healthy = true
 	}
 
 	now := t.updater.clock.Now()
@@ -162,7 +167,7 @@ func (t *transaction) rollback(observed observation, accepted, failure string) (
 	detail := failure + "; restored the accepted baseline and opened the breaker"
 	if !healthy {
 		code = domain.ResultRollbackFailed
-		detail = failure + "; rollback health verification failed; the breaker is open"
+		detail = fmt.Sprintf("%s; %s; the breaker is open", failure, unrestored)
 	}
 	if err := t.complete(observed, accepted, code, detail, "", reason, healthy, now); err != nil {
 		return t.failure(observed.key, err), true
@@ -284,78 +289,127 @@ func (t *transaction) propose(observed observation, fresh backend.StackState, ac
 	}, false
 }
 
-func (t *transaction) healthPolicies() []config.HealthPolicy {
+type healthCheck struct {
+	service string
+	policy  config.HealthPolicy
+}
+
+func (c healthCheck) target() string {
+	if c.service == "" {
+		return "the health target"
+	}
+	return fmt.Sprintf("the health target for service %q", c.service)
+}
+
+func (t *transaction) healthChecks() []healthCheck {
 	if len(t.stack.Services) > 0 {
-		policies := make([]config.HealthPolicy, 0, len(t.stack.Services))
+		checks := make([]healthCheck, 0, len(t.stack.Services))
 		for _, service := range t.stack.Services {
-			policies = append(policies, service.Health)
+			checks = append(checks, healthCheck{service: service.Name, policy: service.Health})
 		}
-		return policies
+		return checks
 	}
 	if t.stack.Health == nil {
 		return nil
 	}
-	return []config.HealthPolicy{*t.stack.Health}
+	return []healthCheck{{policy: *t.stack.Health}}
 }
 
 func (t *transaction) healthyOnce(stackState backend.StackState) bool {
-	running, _, err := t.port().ServicesRunning(stackState)
-	if err != nil || !running {
-		return false
+	return t.unhealthy(stackState) == ""
+}
+
+func (t *transaction) unhealthy(stackState backend.StackState) string {
+	running, stopped, err := t.port().ServicesRunning(stackState)
+	switch {
+	case err != nil:
+		return fmt.Sprintf("the backend could not report its services: %v", err)
+	case !running && stopped == "":
+		return "a service was not running"
+	case !running:
+		return stopped
 	}
-	for _, policy := range t.healthPolicies() {
-		healthy, err := t.updater.health.Check(policy)
-		if err != nil || !healthy {
-			return false
+	for _, check := range t.healthChecks() {
+		answer, err := t.updater.health.Check(check.policy)
+		switch {
+		case err != nil:
+			return check.target() + " could not be checked"
+		case answer.Healthy:
+		case answer.Status == 0:
+			return check.target() + " gave no answer"
+		default:
+			return fmt.Sprintf("%s answered %d, which is not an accepted status", check.target(), answer.Status)
 		}
 	}
-	return true
+	return ""
 }
 
-func (t *transaction) waitForHealth(stackState backend.StackState) bool {
-	return t.waitUntil(func() bool { return t.healthyOnce(stackState) })
+func (t *transaction) unverified(stackState backend.StackState, observed observation, digest string) string {
+	if unhealthy := t.awaitHealth(stackState); unhealthy != "" {
+		return "the functional health check timed out: at the last check " + unhealthy
+	}
+	if wrong := t.wrongDigest(observed, digest); wrong != "" {
+		return "the stack passed its health checks, but " + wrong
+	}
+	return ""
 }
 
-func (t *transaction) waitForConfirmation(observed observation, fresh backend.StackState) bool {
-	return t.waitUntil(func() bool {
-		if !t.healthyOnce(fresh) {
-			return false
+func (t *transaction) awaitHealth(stackState backend.StackState) string {
+	return t.waitUntil(func() string { return t.unhealthy(stackState) })
+}
+
+func (t *transaction) awaitConfirmation(observed observation, fresh backend.StackState) string {
+	return t.waitUntil(func() string {
+		if unhealthy := t.unhealthy(fresh); unhealthy != "" {
+			return unhealthy
 		}
 		if observed.runningDigest != "" {
-			return t.runningDigestIs(observed, observed.remoteDigest)
+			return t.wrongDigest(observed, observed.remoteDigest)
 		}
 		current, err := t.port().Observe(t.stack)
-		return err == nil && current.ImageStatus == "updated"
+		switch {
+		case err != nil:
+			return fmt.Sprintf("the stack could not be observed: %v", err)
+		case current.ImageStatus != "updated":
+			return fmt.Sprintf("the backend reported image status %q", current.ImageStatus)
+		}
+		return ""
 	})
 }
 
-func (t *transaction) waitUntil(condition func() bool) bool {
+func (t *transaction) waitUntil(unmet func() string) string {
 	deadline := t.updater.clock.Now().
 		Add(time.Duration(t.updater.policy.VerificationTimeoutSeconds) * time.Second)
 	for {
 		if t.updater.checkOwnership() != nil {
-			return false
+			return "this run no longer owned the transaction"
 		}
-		if condition() {
-			return true
+		found := unmet()
+		if found == "" {
+			return ""
 		}
 		remaining := deadline.Sub(t.updater.clock.Now())
 		if remaining <= 0 {
-			return false
+			return found
 		}
 		t.updater.clock.Sleep(min(maximumPollInterval, remaining))
 	}
 }
 
-func (t *transaction) runningDigestIs(observed observation, expected string) bool {
+func (t *transaction) wrongDigest(observed observation, expected string) string {
 	if observed.runningDigest == "" {
-		return true
+		return ""
 	}
 	running, err := t.port().RunningDigests(observed.stack)
-	if err != nil {
-		return false
+	switch {
+	case err != nil:
+		return fmt.Sprintf("the running digest could not be read: %v", err)
+	case running[observed.service] == "":
+		return "the backend reported no running digest for the service"
+	case running[observed.service] != expected:
+		return fmt.Sprintf("the running digest was %s, not %s", running[observed.service], expected)
 	}
-	return running[observed.service] == expected
+	return ""
 }
 
 func isTimeout(err error) bool {

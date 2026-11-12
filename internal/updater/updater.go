@@ -22,6 +22,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/event"
+	"github.com/frankieramirez/ripen/internal/health"
 	"github.com/frankieramirez/ripen/internal/proposal"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/state"
@@ -35,7 +36,7 @@ type Registry interface {
 
 // Health runs one functional health check.
 type Health interface {
-	Check(policy config.HealthPolicy) (bool, error)
+	Check(policy config.HealthPolicy) (health.Answer, error)
 }
 
 // Clock is the engine's view of time, faked in tests.

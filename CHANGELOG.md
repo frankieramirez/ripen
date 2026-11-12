@@ -10,6 +10,15 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- A failed verification now says what its last check saw. The result detail
+  and the breaker reason name a health target that gave no answer, the status
+  it answered with, or the service the backend found not running, so a boot
+  loop and a wrong status no longer read the same.
+- A stack that passed its health checks on the wrong running digest is
+  reported as that, with both digests, instead of as a health check timeout.
+
 ## [1.4.1] - 2026-10-06
 
 ### Fixed

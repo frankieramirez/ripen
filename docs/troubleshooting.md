@@ -42,6 +42,20 @@ ripen status | jq .data.breaker
 The reason names the Service and what failed. Ripen will not apply anything or
 open any Proposal while it is open; Monitor and reads carry on.
 
+When verification failed, the reason ends with what the last check saw:
+
+| The reason says | What it means |
+| --- | --- |
+| `the health target gave no answer` | Nothing was listening: the Service never came up, is restarting in a loop, or cannot be reached from Ripen. Read the Service's own logs. |
+| `the health target answered 503, which is not an accepted status` | The Service is up and unhappy, or the policy's `accepted_status` does not cover what it normally answers. |
+| `service "web" is restarting` | The backend saw a container that was not running or not healthy. |
+| `the health target could not be checked` | Ripen could not run the check at all. Look at the `health` block in the policy. |
+| `the stack passed its health checks, but the running digest was …` | The Service is healthy on an image Ripen did not ask for. Something else deployed, or the deploy did not take. |
+
+A timeout only tells you about the last check. A Service that needs longer than
+`verification_timeout_seconds` to start looks the same as one that never
+starts, so compare the Service's startup time before raising the timeout.
+
 Once you have fixed the cause and confirmed the Service is healthy:
 
 ```bash

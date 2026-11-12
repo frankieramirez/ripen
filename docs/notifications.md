@@ -13,7 +13,7 @@ Every Event is one line of JSON on stderr:
 ```json
 {"schema_version":1,"event":"breaker.opened","occurred_at":"2026-08-19T09:14:22Z",
  "run_id":"01920e2f-…","backend":"docker-compose","stack":"media","service":"web",
- "actor":"daemon","data":{"reason":"media/web: the functional health check timed out"}}
+ "actor":"daemon","data":{"reason":"media/web: the functional health check timed out: at the last check the health target for service \"web\" gave no answer"}}
 ```
 
 `stack` and `service` are null when an Event is not about one. `actor` is the
