@@ -37,17 +37,24 @@ func New(options ...Option) *Checker {
 	return checker
 }
 
+// Answer is what one check saw. Status is the HTTP status the target
+// answered with, and zero when it gave no answer at all.
+type Answer struct {
+	Healthy bool
+	Status  int
+}
+
 // Check reports whether the target answers with an accepted status. A
 // connection failure or timeout is an unhealthy answer, not an error:
 // the check did its job. Only a policy Ripen cannot execute at all —
 // an unsupported type, an unusable target — is an error.
-func (c *Checker) Check(policy config.HealthPolicy) (bool, error) {
+func (c *Checker) Check(policy config.HealthPolicy) (Answer, error) {
 	if policy.Type != "" && policy.Type != "http" {
-		return false, fmt.Errorf("unsupported health check type %q", policy.Type)
+		return Answer{}, fmt.Errorf("unsupported health check type %q", policy.Type)
 	}
 	target, err := url.Parse(policy.Target)
 	if err != nil || (target.Scheme != "http" && target.Scheme != "https") || target.Host == "" {
-		return false, fmt.Errorf("health target %q must be an http or https URL", policy.Target)
+		return Answer{}, fmt.Errorf("health target %q must be an http or https URL", policy.Target)
 	}
 
 	timeout := time.Duration(policy.TimeoutSeconds * float64(time.Second))
@@ -59,14 +66,14 @@ func (c *Checker) Check(policy config.HealthPolicy) (bool, error) {
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
-		return false, err
+		return Answer{}, err
 	}
 	response, err := c.client.Do(request)
 	if err != nil {
 		if c.ctx.Err() != nil {
-			return false, c.ctx.Err()
+			return Answer{}, c.ctx.Err()
 		}
-		return false, nil
+		return Answer{}, nil
 	}
 	defer func() { _ = response.Body.Close() }()
 
@@ -74,7 +81,7 @@ func (c *Checker) Check(policy config.HealthPolicy) (bool, error) {
 	if len(accepted) == 0 {
 		accepted = []int{http.StatusOK}
 	}
-	return slices.Contains(accepted, response.StatusCode), nil
+	return Answer{Healthy: slices.Contains(accepted, response.StatusCode), Status: response.StatusCode}, nil
 }
 
 // WithContext returns a copy bound to the caller lifetime.

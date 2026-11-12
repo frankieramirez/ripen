@@ -12,6 +12,7 @@ import (
 	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/event"
+	"github.com/frankieramirez/ripen/internal/health"
 	"github.com/frankieramirez/ripen/internal/proposal"
 	"github.com/frankieramirez/ripen/internal/registry"
 	"github.com/frankieramirez/ripen/internal/state"
@@ -183,16 +184,21 @@ func (f *fakeRegistry) ResolvePlatformDigest(image domain.ImageReference, _ regi
 }
 
 type fakeHealth struct {
-	answer func(policy config.HealthPolicy, call int) (bool, error)
-	checks []config.HealthPolicy
+	answer          func(policy config.HealthPolicy, call int) (bool, error)
+	unhealthyStatus int
+	checks          []config.HealthPolicy
 }
 
-func (f *fakeHealth) Check(policy config.HealthPolicy) (bool, error) {
+func (f *fakeHealth) Check(policy config.HealthPolicy) (health.Answer, error) {
 	f.checks = append(f.checks, policy)
 	if f.answer == nil {
-		return true, nil
+		return health.Answer{Healthy: true, Status: 200}, nil
 	}
-	return f.answer(policy, len(f.checks))
+	healthy, err := f.answer(policy, len(f.checks))
+	if healthy {
+		return health.Answer{Healthy: true, Status: 200}, err
+	}
+	return health.Answer{Status: f.unhealthyStatus}, err
 }
 
 func (f *fakeHealth) checksFor(target string) int {

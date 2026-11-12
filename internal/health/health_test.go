@@ -25,12 +25,12 @@ func TestAnAcceptedStatusIsHealthy(t *testing.T) {
 	policy := config.HealthPolicy{Type: "http", Target: serving(t, http.StatusFound),
 		AcceptedStatus: []int{200, 302}, TimeoutSeconds: 2}
 
-	healthy, err := New().Check(policy)
+	answer, err := New().Check(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !healthy {
+	if !answer.Healthy {
 		t.Error("a 302 must be healthy when the policy accepts it")
 	}
 }
@@ -39,13 +39,27 @@ func TestAStatusOutsideThePolicyIsUnhealthy(t *testing.T) {
 	policy := config.HealthPolicy{Type: "http", Target: serving(t, http.StatusInternalServerError),
 		AcceptedStatus: []int{200}, TimeoutSeconds: 2}
 
-	healthy, err := New().Check(policy)
+	answer, err := New().Check(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if healthy {
+	if answer.Healthy {
 		t.Error("a 500 must be unhealthy")
+	}
+}
+
+func TestAnUnhealthyAnswerCarriesTheStatusTheTargetGave(t *testing.T) {
+	policy := config.HealthPolicy{Type: "http", Target: serving(t, http.StatusServiceUnavailable),
+		AcceptedStatus: []int{200}, TimeoutSeconds: 2}
+
+	answer, err := New().Check(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if answer.Status != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want the 503 the target answered with", answer.Status)
 	}
 }
 
@@ -53,13 +67,16 @@ func TestAnUnreachableTargetIsUnhealthyRatherThanAnError(t *testing.T) {
 	policy := config.HealthPolicy{Type: "http", Target: "http://127.0.0.1:1",
 		AcceptedStatus: []int{200}, TimeoutSeconds: 2}
 
-	healthy, err := New().Check(policy)
+	answer, err := New().Check(policy)
 
 	if err != nil {
 		t.Fatalf("error = %v, want an unreachable service to answer the question, not raise", err)
 	}
-	if healthy {
+	if answer.Healthy {
 		t.Error("an unreachable service must be unhealthy")
+	}
+	if answer.Status != 0 {
+		t.Errorf("status = %d, want none from a target that never answered", answer.Status)
 	}
 }
 
@@ -72,12 +89,12 @@ func TestASlowTargetTimesOutAsUnhealthy(t *testing.T) {
 	policy := config.HealthPolicy{Type: "http", Target: server.URL,
 		AcceptedStatus: []int{200}, TimeoutSeconds: 0.01}
 
-	healthy, err := New().Check(policy)
+	answer, err := New().Check(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if healthy {
+	if answer.Healthy {
 		t.Error("a check that ran out of time must be unhealthy")
 	}
 }
@@ -108,13 +125,13 @@ func TestCallerCancellationDoesNotCancelTheOriginalChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	healthy, err := checker.WithContext(ctx).Check(policy)
+	answer, err := checker.WithContext(ctx).Check(policy)
 
-	if healthy || !errors.Is(err, context.Canceled) {
-		t.Fatalf("healthy=%v err=%v", healthy, err)
+	if answer.Healthy || !errors.Is(err, context.Canceled) {
+		t.Fatalf("healthy=%v err=%v", answer.Healthy, err)
 	}
-	healthy, err = checker.Check(policy)
-	if !healthy || err != nil {
-		t.Fatalf("original healthy=%v err=%v", healthy, err)
+	answer, err = checker.Check(policy)
+	if !answer.Healthy || err != nil {
+		t.Fatalf("original healthy=%v err=%v", answer.Healthy, err)
 	}
 }
