@@ -9,45 +9,20 @@
 # standard-library patches, permanently and by roughly a fortnight. See #69.
 #
 # Why they are accepted rather than fixed: every entry below is denial of
-# service or self-XSS, none yields code execution, and none can produce a
-# fail-open update. Pinning a newer Go by hand would be obsolete within the
+# service, none yields code execution, and none can produce a fail-open
+# update. Pinning a newer Go by hand would be obsolete within the
 # fortnight and would then silently hold the channel *behind* nixpkgs.
 #
 # How to change this file: entries come out when a scan stops finding them.
 # Nothing goes in without the reachability judgement that the ones below got.
 #
-# last confirmed: 2026-08-19
+# last confirmed: 2026-11-12
 
-# Reached through http.Client redirect handling, so it needs a registry you
-# already trust to answer with a malicious Location header. Burns CPU.
-GO-2026-6218
-
-# Rendered data reaches html/template from the state DB, originating in
-# Compose files and registry responses. Every route is behind `guard`, the
-# bind defaults to 127.0.0.1:7476, and the UI is read-only -- so the worst
-# case is XSS in the operator's own browser.
-GO-2026-6091
-
-# Needs Ripen to be a TLS *server*. It never is: the Web UI serves plain HTTP
-# by design and all TLS is client-side. No primitive.
-GO-2026-6090
-
-# Needs unencrypted HTTP/2. The Web UI enables no such thing and already sets
-# ReadHeaderTimeout. No primitive.
-GO-2026-6089
-
-# encoding/xml is not imported anywhere in the tree. Unreachable.
-GO-2026-6088
-
-# The sharpest of the eight: crypto/x509 parses the peer's DER before the pin
-# and CA checks in internal/portainer, so a hostile chain crashes the process.
-# The peer is the Portainer host the operator configured.
-GO-2026-5972
-
-# Affected symbol is net.LookupCNAME, which Ripen never calls, and it does no
-# DNS parsing of its own.
-GO-2026-5942
-
-# The hostname checks it would bypass all fail closed against a Punycode
-# label, and every hostname is operator-supplied policy. No bypass primitive.
-GO-2026-5026
+# Needs an HTTP/1 server that wraps a request body in MaxBytesReader or
+# MaxBytesHandler and reads it while writing response headers. The only server
+# Ripen runs is the Web UI, which calls neither. Its one body read is the
+# sign-in form, which ParseForm bounds with a LimitReader and finishes before
+# any header is written. The MCP library's HTTP transport does use
+# MaxBytesReader, and Ripen serves MCP over stdio only. No primitive. Fixed in
+# Go 1.27.4.
+GO-2026-6859

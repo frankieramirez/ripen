@@ -89,8 +89,8 @@ func TestScheduledShutdownWaitsForCoordinatorDrain(t *testing.T) {
 
 	cancel()
 	select {
-	case <-done:
-		t.Fatal("daemon returned before coordinator drained")
+	case err := <-done:
+		t.Fatalf("daemon returned before coordinator drained: %v", err)
 	default:
 	}
 	close(drain)
