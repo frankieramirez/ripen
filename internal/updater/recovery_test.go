@@ -2,12 +2,23 @@ package updater
 
 import (
 	"testing"
+	"time"
 
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/state"
 )
 
 func recoveryHarness(t *testing.T) (*harness, *fakeBackend, state.Key) {
+	t.Helper()
+	return interruptedHarness(t, (*state.Store).BeginTransaction)
+}
+
+func proposalRecoveryHarness(t *testing.T) (*harness, *fakeBackend, state.Key) {
+	t.Helper()
+	return interruptedHarness(t, (*state.Store).BeginProposal)
+}
+
+func interruptedHarness(t *testing.T, reserve func(*state.Store, string, state.Key, string, time.Time) error) (*harness, *fakeBackend, state.Key) {
 	t.Helper()
 	engine := newBackend(domain.BackendPortainer, singleCompose)
 	engine.running = map[string]string{"web": baseDigest}
@@ -20,7 +31,7 @@ func recoveryHarness(t *testing.T) (*harness, *fakeBackend, state.Key) {
 	if err != nil || !ok {
 		t.Fatal(err)
 	}
-	if err := h.store.BeginTransaction(token, key, "interrupted", h.clock.Now()); err != nil {
+	if err := reserve(h.store, token, key, "interrupted", h.clock.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.store.OpenBreaker("interrupted", h.clock.Now()); err != nil {
@@ -101,17 +112,10 @@ func TestExplicitReconciliationRefusesAnActiveLease(t *testing.T) {
 }
 
 func TestExplicitReconciliationCannotClearAnUncertainProposal(t *testing.T) {
-	h, engine, _ := recoveryHarness(t)
-	marker, err := h.store.ActiveTransaction()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := h.store.SetTransactionPhase(marker.OwnerToken, "proposing", h.clock.Now()); err != nil {
-		t.Fatal(err)
-	}
+	h, engine, _ := proposalRecoveryHarness(t)
 	h.proposals.branchExists = true
 
-	_, err = h.updater.ReconcileTransaction("backend request finished")
+	_, err := h.updater.ReconcileTransaction("backend request finished")
 
 	if err == nil {
 		t.Fatal("uncertain proposal reconciled from baseline health")
@@ -122,14 +126,7 @@ func TestExplicitReconciliationCannotClearAnUncertainProposal(t *testing.T) {
 }
 
 func TestExplicitReconciliationSettlesAProposalThatLeftNoBranch(t *testing.T) {
-	h, engine, key := recoveryHarness(t)
-	marker, err := h.store.ActiveTransaction()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := h.store.SetTransactionPhase(marker.OwnerToken, "proposing", h.clock.Now()); err != nil {
-		t.Fatal(err)
-	}
+	h, engine, key := proposalRecoveryHarness(t)
 
 	status, err := h.updater.ReconcileTransaction("checked the forge: no proposal branch exists")
 

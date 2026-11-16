@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/frankieramirez/ripen/internal/domain"
 )
 
 func TestOpeningCurrentStateDoesNotCompeteWithAnActiveWriter(t *testing.T) {
@@ -455,5 +457,89 @@ func TestStackCheckRetainsItsOwnerWhenAnotherLeaseIsAcquired(t *testing.T) {
 	checks, err := store.StackChecks()
 	if err != nil || len(checks) != 1 || checks[0].OwnerToken != token {
 		t.Fatalf("checks: %v %v", checks, err)
+	}
+}
+
+func TestATransactionPhaseThatSkipsOrGoesBackIsRefusedAndTheMarkerKeepsItsPhase(t *testing.T) {
+	store := open(t, t.TempDir())
+	token, _, _ := store.AcquireLease(now, 30)
+	if err := store.BeginTransaction(token, exampleApp, "run", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetTransactionPhase(token, domain.PhaseVerifying, now); err != nil {
+		t.Fatalf("deploying could not become verifying: %v", err)
+	}
+
+	for _, refused := range []domain.Phase{domain.PhaseDeploying, domain.PhaseVerifying, domain.PhaseProposing, "paused"} {
+		err := store.SetTransactionPhase(token, refused, now.Add(time.Second))
+
+		if err == nil || errors.Is(err, ErrLeaseLost) {
+			t.Errorf("verifying became %q: %v; want a refusal that is not a lost lease", refused, err)
+		}
+	}
+	marker, err := store.ActiveTransaction()
+	if err != nil || marker == nil || marker.Phase != domain.PhaseVerifying || !marker.PhaseStartedAt.Equal(now) {
+		t.Fatalf("marker = %+v, %v; want it still verifying since %v", marker, err, now)
+	}
+	if err := store.SetTransactionPhase(token, domain.PhaseRollingBack, now); err != nil {
+		t.Fatalf("verifying could not become rolling back: %v", err)
+	}
+}
+
+func TestAFailedDeployMayRollBackWithoutVerifying(t *testing.T) {
+	store := open(t, t.TempDir())
+	token, _, _ := store.AcquireLease(now, 30)
+	if err := store.BeginTransaction(token, exampleApp, "run", now); err != nil {
+		t.Fatal(err)
+	}
+
+	err := store.SetTransactionPhase(token, domain.PhaseRollingBack, now)
+
+	if err != nil {
+		t.Fatalf("deploying could not become rolling back: %v", err)
+	}
+}
+
+func TestAProposalIsReservedInItsProposingPhaseFromItsFirstWrite(t *testing.T) {
+	store := open(t, t.TempDir())
+	token, _, _ := store.AcquireLease(now, 30)
+
+	err := store.BeginProposal(token, exampleApp, "run", now)
+
+	marker, readErr := store.ActiveTransaction()
+	if err != nil || readErr != nil || marker == nil || marker.Phase != domain.PhaseProposing {
+		t.Fatalf("marker = %+v, %v, %v; want one reserved as proposing", marker, err, readErr)
+	}
+	if err := store.SetTransactionPhase(token, domain.PhaseVerifying, now); err == nil {
+		t.Error("a proposal moved into a deployment phase")
+	}
+}
+
+func TestAnOpenBreakerOrAnUnfinishedTransactionRefusesAProposalReservation(t *testing.T) {
+	blocked := open(t, t.TempDir())
+	blockedToken, _, _ := blocked.AcquireLease(now, 30)
+	if err := blocked.OpenBreaker("failed", now); err != nil {
+		t.Fatal(err)
+	}
+	occupied := open(t, t.TempDir())
+	occupiedToken, _, _ := occupied.AcquireLease(now, 30)
+	if err := occupied.BeginTransaction(occupiedToken, radarr, "run-old", now); err != nil {
+		t.Fatal(err)
+	}
+
+	breakerErr := blocked.BeginProposal(blockedToken, exampleApp, "run", now)
+	unfinishedErr := occupied.BeginProposal(occupiedToken, exampleApp, "run", now)
+
+	if breakerErr == nil {
+		t.Error("an open breaker admitted a proposal")
+	}
+	if marker, _ := blocked.ActiveTransaction(); marker != nil {
+		t.Errorf("marker = %+v, want none behind an open breaker", marker)
+	}
+	if unfinishedErr == nil {
+		t.Error("a proposal was reserved over an unfinished transaction")
+	}
+	if marker, _ := occupied.ActiveTransaction(); marker == nil || marker.RunID != "run-old" {
+		t.Errorf("marker = %+v, want the unfinished transaction untouched", marker)
 	}
 }

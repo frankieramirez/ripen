@@ -35,7 +35,7 @@ func (u *Updater) ReconcileTransaction(reason string) (state.Status, error) {
 	if marker == nil {
 		return state.Status{}, errors.New("no interrupted transaction requires reconciliation")
 	}
-	if marker.Phase == "proposing" {
+	if marker.Phase == domain.PhaseProposing {
 		return u.settleProposal(owner, token, *marker, reason)
 	}
 	var stack *config.StackPolicy

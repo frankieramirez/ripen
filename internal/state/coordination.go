@@ -113,13 +113,24 @@ type TransactionProgress struct {
 	OwnerToken     string
 	Key            Key
 	RunID          string
-	Phase          string
+	Phase          domain.Phase
 	StartedAt      time.Time
 	PhaseStartedAt time.Time
 }
 
 // BeginTransaction reserves deployment ownership while the breaker is closed.
 func (s *Store) BeginTransaction(token string, key Key, runID string, now time.Time) error {
+	return s.reserve(token, key, runID, domain.PhaseDeploying, now)
+}
+
+// BeginProposal reserves a Proposal request while the breaker is closed.
+// The marker is proposing from its first write, so an interruption can
+// never be mistaken for a deployment.
+func (s *Store) BeginProposal(token string, key Key, runID string, now time.Time) error {
+	return s.reserve(token, key, runID, domain.PhaseProposing, now)
+}
+
+func (s *Store) reserve(token string, key Key, runID string, phase domain.Phase, now time.Time) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -135,15 +146,27 @@ func (s *Store) BeginTransaction(token string, key Key, runID string, now time.T
 	if blocked != 0 {
 		return errors.New("deployment refused: breaker open or an unfinished transaction requires reconciliation")
 	}
-	if _, err := tx.Exec("INSERT INTO active_transaction VALUES(1,?,?,?,?,?,?,?,?)", token, key.Backend, key.Stack, key.Service, runID, "deploying", stamp(now), stamp(now)); err != nil {
+	if _, err := tx.Exec("INSERT INTO active_transaction VALUES(1,?,?,?,?,?,?,?,?)", token, key.Backend, key.Stack, key.Service, runID, phase, stamp(now), stamp(now)); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-// SetTransactionPhase persists the owner's current Transaction phase.
-func (s *Store) SetTransactionPhase(token, phase string, now time.Time) error {
-	r, err := s.db.Exec("UPDATE active_transaction SET phase=?,phase_started_at=? WHERE singleton=1 AND owner_token=?", phase, stamp(now), token)
+// SetTransactionPhase moves the owner's Transaction to its next phase and
+// refuses a move the phase does not allow.
+func (s *Store) SetTransactionPhase(token string, phase domain.Phase, now time.Time) error {
+	var current domain.Phase
+	err := s.db.QueryRow("SELECT phase FROM active_transaction WHERE singleton=1 AND owner_token=?", token).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrLeaseLost
+	}
+	if err != nil {
+		return err
+	}
+	if !current.MayBecome(phase) {
+		return fmt.Errorf("transaction phase refused: %q cannot become %q", current, phase)
+	}
+	r, err := s.db.Exec("UPDATE active_transaction SET phase=?,phase_started_at=? WHERE singleton=1 AND owner_token=? AND phase=?", phase, stamp(now), token, current)
 	return requireOwner(r, err)
 }
 
@@ -170,8 +193,8 @@ func (s *Store) FinishTransaction(token string) error {
 // ActiveTransaction returns the unfinished Transaction, even after lease expiry.
 func (s *Store) ActiveTransaction() (*TransactionProgress, error) {
 	var p TransactionProgress
-	var start, phase string
-	err := s.db.QueryRow("SELECT owner_token,backend,stack,service,run_id,phase,started_at,phase_started_at FROM active_transaction WHERE singleton=1").Scan(&p.OwnerToken, &p.Key.Backend, &p.Key.Stack, &p.Key.Service, &p.RunID, &p.Phase, &start, &phase)
+	var start, phaseStart string
+	err := s.db.QueryRow("SELECT owner_token,backend,stack,service,run_id,phase,started_at,phase_started_at FROM active_transaction WHERE singleton=1").Scan(&p.OwnerToken, &p.Key.Backend, &p.Key.Stack, &p.Key.Service, &p.RunID, &p.Phase, &start, &phaseStart)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -182,7 +205,7 @@ func (s *Store) ActiveTransaction() (*TransactionProgress, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.PhaseStartedAt, err = parseStamp(phase)
+	p.PhaseStartedAt, err = parseStamp(phaseStart)
 	return &p, err
 }
 
@@ -432,14 +455,14 @@ func (s *Store) CompleteTransaction(token string, attempt Attempt, acceptedDiges
 // ReconcileTransaction records an explicitly verified interrupted Transaction and clears its breaker atomically.
 func (s *Store) ReconcileTransaction(token string, attempt Attempt, reason string, now time.Time) error {
 	return s.reconcile(token, attempt, reason, now,
-		"DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase!='proposing'")
+		"DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase!=?")
 }
 
 // SettleProposal records an interrupted Proposal request proven to have left
 // nothing on the forge, and clears its breaker atomically.
 func (s *Store) SettleProposal(token string, attempt Attempt, reason string, now time.Time) error {
 	return s.reconcile(token, attempt, reason, now,
-		"DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase='proposing'")
+		"DELETE FROM active_transaction WHERE singleton=1 AND run_id=? AND backend=? AND stack=? AND service=? AND phase=?")
 }
 
 func (s *Store) reconcile(token string, attempt Attempt, reason string, now time.Time, removeMarker string) error {
@@ -451,7 +474,7 @@ func (s *Store) reconcile(token string, attempt Attempt, reason string, now time
 	if err := checkLease(tx, token, now); err != nil {
 		return err
 	}
-	result, err := tx.Exec(removeMarker, attempt.RunID, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service)
+	result, err := tx.Exec(removeMarker, attempt.RunID, attempt.Key.Backend, attempt.Key.Stack, attempt.Key.Service, domain.PhaseProposing)
 	if err := requireOwner(result, err); err != nil {
 		return err
 	}

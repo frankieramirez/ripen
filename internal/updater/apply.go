@@ -75,7 +75,7 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 		return t.failure(observed.key, err), false
 	}
 	t.updater = t.updater.withContext(t.updater.leaseCtx)
-	if err := t.phase("deploying"); err != nil {
+	if err := t.begun(); err != nil {
 		return t.failure(observed.key, err), true
 	}
 	t.updater.emit(event.TransactionStarted, t.subject(observed.key),
@@ -84,7 +84,7 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 	var failure string
 	switch err := t.port().Deploy(fresh, deployCompose, repull); {
 	case err == nil:
-		if err := t.phase("verifying"); err != nil {
+		if err := t.advance(domain.PhaseVerifying); err != nil {
 			return t.failure(observed.key, err), true
 		}
 		failure = t.unverified(fresh, observed, observed.remoteDigest)
@@ -92,7 +92,7 @@ func (t *transaction) apply(observed observation, accepted string) (Result, bool
 			return t.succeed(observed, accepted, "updated and passed functional health verification")
 		}
 	case isTimeout(err):
-		if err := t.phase("verifying"); err != nil {
+		if err := t.advance(domain.PhaseVerifying); err != nil {
 			return t.failure(observed.key, err), true
 		}
 		unproven := t.awaitConfirmation(observed, fresh)
@@ -141,7 +141,7 @@ func (t *transaction) succeed(observed observation, accepted, detail string) (Re
 }
 
 func (t *transaction) rollback(observed observation, accepted, failure string) (Result, bool) {
-	if err := t.phase("rolling_back"); err != nil {
+	if err := t.advance(domain.PhaseRollingBack); err != nil {
 		return t.failure(observed.key, err), true
 	}
 	reason := fmt.Sprintf("%s: %s", label(observed.key), failure)
@@ -244,10 +244,10 @@ func (t *transaction) propose(observed observation, fresh backend.StackState, ac
 	if err := t.updater.checkOwnership(); err != nil {
 		return t.failure(observed.key, err), false
 	}
-	if err := t.updater.state.BeginTransaction(t.updater.token, observed.key, t.runID, t.updater.clock.Now()); err != nil {
+	if err := t.updater.state.BeginProposal(t.updater.token, observed.key, t.runID, t.updater.clock.Now()); err != nil {
 		return t.failure(observed.key, err), false
 	}
-	if err := t.phase("proposing"); err != nil {
+	if err := t.begun(); err != nil {
 		return t.failure(observed.key, err), false
 	}
 	result, err := t.updater.proposals.Propose(proposal.Change{
@@ -420,13 +420,24 @@ func isTimeout(err error) bool {
 	return errors.As(err, &timeout) && timeout.Timeout()
 }
 
-func (t *transaction) phase(phase string) error {
+func (t *transaction) advance(next domain.Phase) error {
 	if err := t.updater.checkOwnership(); err != nil {
 		return err
 	}
-	if err := t.updater.state.SetTransactionPhase(t.updater.token, phase, t.updater.clock.Now()); err != nil {
+	if err := t.updater.state.SetTransactionPhase(t.updater.token, next, t.updater.clock.Now()); err != nil {
 		return err
 	}
+	return t.progress()
+}
+
+func (t *transaction) begun() error {
+	if err := t.updater.checkOwnership(); err != nil {
+		return err
+	}
+	return t.progress()
+}
+
+func (t *transaction) progress() error {
 	marker, err := t.updater.state.ActiveTransaction()
 	if err != nil {
 		return err
@@ -434,7 +445,7 @@ func (t *transaction) phase(phase string) error {
 	if marker == nil {
 		return errors.New("transaction progress lost its durable marker")
 	}
-	t.updater.emit(event.TransactionProgress, t.subject(marker.Key), event.Data{Phase: event.Phase(phase)})
+	t.updater.emit(event.TransactionProgress, t.subject(marker.Key), event.Data{Phase: marker.Phase})
 	return nil
 }
 

@@ -10,6 +10,24 @@ Each release's section here is what GitHub shows as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- `explain` names an unfinished Transaction as a blocker. It used to answer
+  `blockers: none` while an interrupted Transaction refused every apply and
+  every Proposal on every stack. The blocker carries the Service and its
+  phase, and says when the Transaction is interrupted and needs
+  `clear-breaker --reconcile`. The same answer reaches the MCP `explain` tool.
+- A Proposal's Transaction is recorded as `proposing` from its first write.
+  It used to be recorded as `deploying` for an instant, so an interruption in
+  that instant read as a deployment that never happened.
+
+### Changed
+
+- The state store refuses a Transaction phase that skips or goes back. A phase
+  moves `deploying` to `verifying` or `rolling_back`, and `verifying` to
+  `rolling_back`; nothing else is written. The phase names, the status
+  payload, and the `transaction.progress` Events are unchanged.
+
 ## [1.4.2] - 2026-11-12
 
 ### Changed

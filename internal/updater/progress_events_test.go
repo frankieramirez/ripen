@@ -2,8 +2,10 @@ package updater
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
+	"github.com/frankieramirez/ripen/internal/config"
 	"github.com/frankieramirez/ripen/internal/domain"
 	"github.com/frankieramirez/ripen/internal/event"
 	"github.com/frankieramirez/ripen/internal/state"
@@ -14,7 +16,7 @@ func TestTransactionProgressIsDurableBeforeTheSinkReceivesItsPhase(t *testing.T)
 	engine.running = map[string]string{"web": baseDigest, "sidecar": sidecarDigest}
 	h := singleHarness(t, multiStack(), engine)
 	ripen(h, engine, newDigest)
-	phases := []event.Phase{}
+	phases := []domain.Phase{}
 	h.events.onEmit = func(recorded recordedEvent) {
 		if recorded.name != event.TransactionProgress {
 			return
@@ -23,7 +25,7 @@ func TestTransactionProgressIsDurableBeforeTheSinkReceivesItsPhase(t *testing.T)
 		if err != nil || marker == nil {
 			t.Fatalf("progress has no persisted marker: %v", err)
 		}
-		if marker.Phase != string(recorded.data.Phase) || marker.RunID != recorded.subject.RunID || marker.Key.Service != recorded.subject.Service {
+		if marker.Phase != recorded.data.Phase || marker.RunID != recorded.subject.RunID || marker.Key.Service != recorded.subject.Service {
 			t.Fatalf("marker=%+v event=%+v", marker, recorded)
 		}
 		phases = append(phases, recorded.data.Phase)
@@ -31,8 +33,76 @@ func TestTransactionProgressIsDurableBeforeTheSinkReceivesItsPhase(t *testing.T)
 
 	h.run(domain.ModeApply)
 
-	if len(phases) != 2 || phases[0] != event.PhaseDeploying || phases[1] != event.PhaseVerifying {
+	if len(phases) != 2 || phases[0] != domain.PhaseDeploying || phases[1] != domain.PhaseVerifying {
 		t.Fatalf("phases=%v", phases)
+	}
+}
+
+func announcedPhases(t *testing.T, h *harness) *[]domain.Phase {
+	t.Helper()
+	phases := &[]domain.Phase{}
+	h.events.onEmit = func(recorded recordedEvent) {
+		if recorded.name != event.TransactionProgress {
+			return
+		}
+		marker, err := h.store.ActiveTransaction()
+		if err != nil || marker == nil || marker.Phase != recorded.data.Phase {
+			t.Fatalf("marker=%+v err=%v event=%+v", marker, err, recorded)
+		}
+		*phases = append(*phases, recorded.data.Phase)
+	}
+	return phases
+}
+
+func TestAProposalAnnouncesOnlyItsProposingPhaseFromADurableMarker(t *testing.T) {
+	engine := gitBackend()
+	h := singleHarness(t, gitStack(), engine)
+	ripen(h, engine, newDigest)
+	phases := announcedPhases(t, h)
+
+	h.expect(h.run(domain.ModeApply), "", domain.ResultProposed)
+
+	if !slices.Equal(*phases, []domain.Phase{domain.PhaseProposing}) {
+		t.Fatalf("phases = %v, want only proposing", *phases)
+	}
+}
+
+func TestAFailedVerificationAnnouncesEveryPhaseItPassedThroughInOrder(t *testing.T) {
+	engine := newBackend(domain.BackendDockerCompose, multiCompose)
+	engine.running = map[string]string{"web": baseDigest, "sidecar": sidecarDigest}
+	h := singleHarness(t, multiStack(), engine)
+	ripen(h, engine, newDigest)
+	h.health.answer = func(_ config.HealthPolicy, _ int) (bool, error) {
+		return len(engine.deployments) != 1, nil
+	}
+	phases := announcedPhases(t, h)
+
+	h.expect(h.run(domain.ModeApply), "web", domain.ResultRolledBack)
+
+	want := []domain.Phase{domain.PhaseDeploying, domain.PhaseVerifying, domain.PhaseRollingBack}
+	if !slices.Equal(*phases, want) {
+		t.Fatalf("phases = %v, want %v", *phases, want)
+	}
+}
+
+func TestAFailedDeployAnnouncesItsRollbackWithoutEverVerifying(t *testing.T) {
+	engine := newBackend(domain.BackendDockerCompose, multiCompose)
+	engine.running = map[string]string{"web": baseDigest, "sidecar": sidecarDigest}
+	h := singleHarness(t, multiStack(), engine)
+	ripen(h, engine, newDigest)
+	engine.deployErr = func(attempt int) error {
+		if attempt == 1 {
+			return errors.New("the engine refused the request")
+		}
+		return nil
+	}
+	phases := announcedPhases(t, h)
+
+	h.expect(h.run(domain.ModeApply), "web", domain.ResultRolledBack)
+
+	want := []domain.Phase{domain.PhaseDeploying, domain.PhaseRollingBack}
+	if !slices.Equal(*phases, want) {
+		t.Fatalf("phases = %v, want %v", *phases, want)
 	}
 }
 

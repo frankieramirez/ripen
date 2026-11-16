@@ -1,5 +1,5 @@
 // Package domain holds the core vocabulary of Ripen: modes, backends,
-// actors, result codes, and image references. Capitalized terms in the
+// actors, Transaction phases, result codes, and image references. Capitalized terms in the
 // documentation (Transaction, Baseline, Candidate, ...) are defined in
 // CONTEXT.md; the types here are their code form.
 package domain

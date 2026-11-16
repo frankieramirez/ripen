@@ -99,38 +99,27 @@ func Known(name Name) bool {
 	return false
 }
 
-// Phase names a persisted Transaction phase.
-type Phase string
-
-// Persisted Transaction phases.
-const (
-	PhaseDeploying   Phase = "deploying"
-	PhaseVerifying   Phase = "verifying"
-	PhaseRollingBack Phase = "rolling_back"
-	PhaseProposing   Phase = "proposing"
-)
-
 // Data is every field any Event payload may carry. One closed struct,
 // deliberately: an Event cannot carry a field nobody reviewed, so no
 // secret can travel in one.
 type Data struct {
-	Phase          Phase  `json:"phase,omitempty"`
-	SkippedStacks  int    `json:"skipped_stacks,omitempty"`
-	Mode           string `json:"mode,omitempty"`
-	Result         string `json:"result,omitempty"`
-	Digest         string `json:"digest,omitempty"`
-	OldDigest      string `json:"old_digest,omitempty"`
-	NewDigest      string `json:"new_digest,omitempty"`
-	Detail         string `json:"detail,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	ProposalURL    string `json:"proposal_url,omitempty"`
-	Observations   int    `json:"observations,omitempty"`
-	UpdatesApplied int    `json:"updates_applied,omitempty"`
-	ResultCount    int    `json:"result_count,omitempty"`
-	BreakerOpen    bool   `json:"breaker_open,omitempty"`
-	Created        bool   `json:"created,omitempty"`
-	Attempts       int    `json:"attempts,omitempty"`
-	Dropped        int    `json:"dropped,omitempty"`
+	Phase          domain.Phase `json:"phase,omitempty"`
+	SkippedStacks  int          `json:"skipped_stacks,omitempty"`
+	Mode           string       `json:"mode,omitempty"`
+	Result         string       `json:"result,omitempty"`
+	Digest         string       `json:"digest,omitempty"`
+	OldDigest      string       `json:"old_digest,omitempty"`
+	NewDigest      string       `json:"new_digest,omitempty"`
+	Detail         string       `json:"detail,omitempty"`
+	Reason         string       `json:"reason,omitempty"`
+	ProposalURL    string       `json:"proposal_url,omitempty"`
+	Observations   int          `json:"observations,omitempty"`
+	UpdatesApplied int          `json:"updates_applied,omitempty"`
+	ResultCount    int          `json:"result_count,omitempty"`
+	BreakerOpen    bool         `json:"breaker_open,omitempty"`
+	Created        bool         `json:"created,omitempty"`
+	Attempts       int          `json:"attempts,omitempty"`
+	Dropped        int          `json:"dropped,omitempty"`
 }
 
 // Envelope is one Event on the wire.
