@@ -372,16 +372,20 @@ func (a *App) statusProgress(status *response.Status, now time.Time) error {
 	for _, evaluation := range evaluations {
 		status.Evaluations = append(status.Evaluations, response.Evaluation{Identity: identity(evaluation.Key), RunID: evaluation.RunID, Result: string(evaluation.Result), Detail: evaluation.Detail, EvaluatedAt: response.Stamp(evaluation.EvaluatedAt)})
 	}
+	status.ActiveTransaction, err = a.unfinishedTransaction(now)
+	return err
+}
+
+func (a *App) unfinishedTransaction(now time.Time) (*response.TransactionProgress, error) {
 	transaction, err := a.Store.ActiveTransaction()
 	if err != nil || transaction == nil {
-		return err
+		return nil, err
 	}
 	err = a.Store.CheckLease(transaction.OwnerToken, now)
 	if err != nil && !errors.Is(err, state.ErrLeaseLost) {
-		return err
+		return nil, err
 	}
-	status.ActiveTransaction = &response.TransactionProgress{Identity: identity(transaction.Key), RunID: transaction.RunID, Phase: transaction.Phase, StartedAt: response.Stamp(transaction.StartedAt), PhaseStartedAt: response.Stamp(transaction.PhaseStartedAt), Interrupted: errors.Is(err, state.ErrLeaseLost)}
-	return nil
+	return &response.TransactionProgress{Identity: identity(transaction.Key), RunID: transaction.RunID, Phase: string(transaction.Phase), StartedAt: response.Stamp(transaction.StartedAt), PhaseStartedAt: response.Stamp(transaction.PhaseStartedAt), Interrupted: errors.Is(err, state.ErrLeaseLost)}, nil
 }
 
 // Candidates answers `ripen candidates`: every Candidate under
@@ -415,6 +419,10 @@ func (a *App) Explain(stack string) (response.Explain, error) {
 	policy := a.Policy.Stacks[index]
 	now := a.Clock.Now()
 	stored, err := a.Store.Status(now)
+	if err != nil {
+		return response.Explain{}, err
+	}
+	unfinished, err := a.unfinishedTransaction(now)
 	if err != nil {
 		return response.Explain{}, err
 	}
@@ -457,13 +465,14 @@ func (a *App) Explain(stack string) (response.Explain, error) {
 		if service.PendingProposal, err = a.proposal(ref.Key); err != nil {
 			return response.Explain{}, err
 		}
-		service.Blockers = a.blockers(explain, service)
+		service.Blockers = a.blockers(explain, service, unfinished)
 		explain.Services = append(explain.Services, service)
 	}
 	return explain, nil
 }
 
-func (a *App) blockers(explain response.Explain, service response.ExplainService) []string {
+func (a *App) blockers(explain response.Explain, service response.ExplainService,
+	unfinished *response.TransactionProgress) []string {
 	blockers := []string{}
 	if !explain.Enabled {
 		blockers = append(blockers, "the stack is not enabled")
@@ -473,6 +482,9 @@ func (a *App) blockers(explain response.Explain, service response.ExplainService
 	}
 	if explain.Breaker.Open {
 		blockers = append(blockers, "the circuit breaker is open")
+	}
+	if unfinished != nil {
+		blockers = append(blockers, transactionBlocker(*unfinished))
 	}
 	if explain.Mode != string(domain.ModeApply) {
 		blockers = append(blockers, "the configured mode is monitor")
@@ -494,6 +506,18 @@ func (a *App) blockers(explain response.Explain, service response.ExplainService
 		blockers = append(blockers, "the candidate matures at "+service.Candidate.MatureAt)
 	}
 	return blockers
+}
+
+func transactionBlocker(transaction response.TransactionProgress) string {
+	name := transaction.Stack
+	if transaction.Service != nil {
+		name += "/" + *transaction.Service
+	}
+	if transaction.Interrupted {
+		return fmt.Sprintf("an interrupted transaction on %s (phase %s) must be reconciled with clear-breaker --reconcile",
+			name, transaction.Phase)
+	}
+	return fmt.Sprintf("a transaction on %s is in progress (phase %s)", name, transaction.Phase)
 }
 
 // Versions reports every independently moving version.

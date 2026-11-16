@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -323,6 +324,63 @@ func TestExplainNamesEverythingBlockingAnApply(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Errorf("blockers = %q, want it to name %q", text, want)
 		}
+	}
+}
+
+func explainBlockers(t *testing.T, configPath string) []string {
+	t.Helper()
+	result := invoke(t, configPath, "explain", "media")
+	if result.code != ExitOK {
+		t.Fatalf("exit = %d (%s)", result.code, result.stderr)
+	}
+	var blockers []string
+	for _, blocker := range result.data["services"].([]any)[0].(map[string]any)["blockers"].([]any) {
+		blockers = append(blockers, blocker.(string))
+	}
+	return blockers
+}
+
+func TestExplainNamesAnInterruptedTransactionOnAnotherStackAsABlocker(t *testing.T) {
+	configPath, statePath := policyFile(t)
+	store := openStore(t, statePath)
+	expired := time.Now().UTC().Add(-time.Hour)
+	token, acquired, err := store.AcquireLease(expired, 30)
+	if err != nil || !acquired {
+		t.Fatalf("lease: %v %v", acquired, err)
+	}
+	interrupted := state.Key{Backend: domain.BackendDockerCompose, Stack: "arr", Service: "radarr"}
+	if err := store.BeginTransaction(token, interrupted, "run", expired); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetTransactionPhase(token, domain.PhaseRollingBack, expired); err != nil {
+		t.Fatal(err)
+	}
+
+	blockers := explainBlockers(t, configPath)
+
+	want := "an interrupted transaction on arr/radarr (phase rolling_back) must be reconciled with clear-breaker --reconcile"
+	if !slices.Contains(blockers, want) {
+		t.Errorf("blockers = %q, want %q", blockers, want)
+	}
+}
+
+func TestExplainNamesATransactionStillInProgressAsABlocker(t *testing.T) {
+	configPath, statePath := policyFile(t)
+	store := openStore(t, statePath)
+	started := time.Now().UTC()
+	token, acquired, err := store.AcquireLease(started, 600)
+	if err != nil || !acquired {
+		t.Fatalf("lease: %v %v", acquired, err)
+	}
+	if err := store.BeginProposal(token, mediaKey(), "run", started); err != nil {
+		t.Fatal(err)
+	}
+
+	blockers := explainBlockers(t, configPath)
+
+	want := "a transaction on media is in progress (phase proposing)"
+	if !slices.Contains(blockers, want) {
+		t.Errorf("blockers = %q, want %q", blockers, want)
 	}
 }
 

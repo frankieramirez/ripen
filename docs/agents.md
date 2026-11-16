@@ -115,6 +115,25 @@ them:
 {"blockers": ["the configured mode is monitor", "the candidate matures at 2026-08-20T09:14:22Z"]}
 ```
 
+An unfinished Transaction blocks every apply and every Proposal on every
+stack, so `explain` names it for each Service. `status` carries the same
+Transaction as `active_transaction`, in one of four phases:
+
+| Phase | The Transaction is |
+| --- | --- |
+| `deploying` | Sending the pinned Compose file to the backend. |
+| `verifying` | Waiting for health and the running digest to prove the deploy. |
+| `rolling_back` | Restoring the accepted Baseline after a failed deploy or a failed verification. |
+| `proposing` | Asking the forge to open a Proposal. Nothing is deployed. |
+
+A direct apply moves from `deploying` to `verifying` to `rolling_back`. It
+skips `verifying` when the deploy itself fails, and it never goes back. A
+Proposal is only ever `proposing`.
+
+`interrupted: true` means the run that owned the Transaction is gone. Nothing
+on the Agent surface can settle it: a person runs
+`ripen clear-breaker --reconcile --reason "…"` at a terminal.
+
 ### Writes
 
 | Verb | Does |
